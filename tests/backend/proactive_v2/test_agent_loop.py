@@ -25,9 +25,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 from shiori_sdk.prompting import is_context_frame
-from proactive_v2.context import AgentTickContext
-from proactive_v2.gateway import GatewayDeps, GatewayResult
-from proactive_v2.tools import ToolDeps
+from plugins.proactive.backend.context import AgentTickContext
+from plugins.proactive.backend.gateway import GatewayDeps, GatewayResult
+from plugins.proactive.backend.tools import ToolDeps
 from tests.backend.proactive_v2.conftest import (
     FakeLLM,
     cfg_with,

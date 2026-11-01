@@ -103,10 +103,8 @@ class PluginCoreInputs:
     is a directory directly under one, which is how crash reporting attributes
     a traceback frame to ``plugins/<directory>/...``. ``event_bus`` is the
     generation's event bus and ``rpc`` its plugin RPC registry, created over
-    that bus. ``scene_followup`` is ``[plugins.proactive].scene_followup``
-    (default on), the host strategy flag the scene plugin reads through
-    ``SCENE_HOST``. The proactive loop that consumes the follow-ups is still
-    host code, not a plugin.
+    that bus. Scene follow-up demand is the proactive plugin's
+    ``SCENE.request``, not a host flag.
 
     The rest back capabilities; when one is None (host tests), a plugin
     declaring a capability over it fails before setup:
@@ -139,7 +137,6 @@ class PluginCoreInputs:
     plugin_dirs: tuple[Path, ...]
     event_bus: EventBus
     rpc: PluginRpcRegistry[MethodPolicy]
-    scene_followup: bool = False
     # The same directory as ``PluginGenerationSettings.workspace``: there the
     # kernel's trust store, execution identity and KV root; here the
     # ``workspace``, ``memory`` and ``sessions`` capabilities.
@@ -254,7 +251,6 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
                     workspace=inputs.workspace,
                     roles=inputs.role_store,
                     sessions=inputs.session_manager,
-                    scene_followup=inputs.scene_followup,
                 ),
             )
 

@@ -7,7 +7,7 @@ source_paths:
   - apps/backend/bootstrap/
   - apps/backend/core/
   - apps/backend/agent/
-  - apps/backend/proactive_v2/
+  - plugins/proactive/
   - apps/backend/conversation/
   - apps/backend/session/
   - apps/backend/desktop_bridge/
@@ -33,8 +33,8 @@ related:
 | 记忆契约 | `packages/sdk/python/shiori_sdk/memory/`（`MemoryEngine`、`MemoryQuery`、`MemoryMutation`）、`apps/backend/core/memory/`（`MemoryRuntime`、Markdown 记忆、群环境、角色记忆路径） | Agent 检索与生命周期插件 |
 | 记忆整理 | `plugins/memory_optimizer/`（系统插件：整理循环、`MEMORY_OPTIMIZER`）、`apps/backend/core/memory/markdown/host.py`（`MARKDOWN_MEMORY`） | Markdown 记忆、角色模型、任务面板 |
 | 默认记忆引擎 | `plugins/default_memory/backend/`（`engine/` 查询与写入策略，`semantic/` 向量存储、召回、响应后写入；原 `memory2` 已并入此处） | 查询与提取策略、向量存储、召回与上下文注入、响应后写入 |
-| 主动行为 | `apps/backend/proactive_v2/`、`apps/backend/agent/proactive_host/`（`PROACTIVE_HOST`）、`apps/backend/agent/initiated_delivery.py`（`CONVERSATION`） | 传感、裁定、Agent tick、投递、状态持久化。循环仍在核心；tick 经 `PROACTIVE_HOST`：自然回复作用域与工具事实、补全、工具与宿主工具、目标选择、会话历史和投递。心情戳记读本代 `CONVERSATION.reply_state`，主动开关与配置读 `ROLES.plugin_settings` |
-| Drift | `apps/backend/agent/core/drift_turn.py`、`apps/backend/proactive_v2/drift_state.py`、`apps/backend/proactive_v2/drift_tools.py` | 特殊回合、工具、主动状态 |
+| 主动行为 | `plugins/proactive/`、`apps/backend/agent/proactive_host/`（`PROACTIVE_HOST`）、`apps/backend/agent/initiated_delivery.py`（`CONVERSATION`） | 传感、裁定、Agent tick、投递、状态持久化。循环在系统插件里，进程内一份，发布后按角色加减；tick 经 `PROACTIVE_HOST`。心情戳记读本代 `CONVERSATION.reply_state`，主动开关与配置读 `ROLES.plugin_settings` |
+| Drift | `plugins/proactive/backend/drift.py`、`drift_state.py`、`drift_tools.py` | 特殊回合、工具、主动状态 |
 | NovelAI | `plugins/novelai/backend/`（`service.py`、`client.py`、`store.py`、`tool.py`、`rpc.py`）、`plugins/novelai/ui/` | 手动图片生成、自动 CG、桌面图片面板 |
 | 自动 CG | `plugins/novelai/backend/auto_cg.py`、`plugins/novelai/backend/auto_cg_controller.py`，场景判断在 `plugins/scene/` | 场景判断、生成、消息推送、权威角色会话 |
 | 渠道 | `apps/backend/infra/channels/`、`apps/backend/bootstrap/channels.py`、`apps/backend/bootstrap/channel_host.py`（`ChannelHost`）、`apps/backend/core/channels/hub.py`、`apps/backend/core/common/channel_directory.py`；合约在 `shiori_sdk.channels`；外部渠道全部是插件：`plugins/telegram/`、`plugins/qq/`、`plugins/qqbot/`、`plugins/feishu/`、`plugins/grok_bot/`（Grok Bot 双向私聊） | 消息总线、会话定位、媒体发送、角色绑定 |

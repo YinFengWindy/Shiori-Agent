@@ -10,7 +10,7 @@ Shiori 不只是被动回复——它每 N 秒/分钟跑一轮 tick，检查你�
 
 Proactive 本质上是：
 
-1. **一套固定工具**（`proactive_v2/tools.py` 的 `TOOL_SCHEMAS`）：`get_alert_events`、`get_content_events`、`get_context_data`、`recall_memory`、`get_content`、`web_fetch`、`web_search`、`get_recent_chat`、`mark_interesting`、`mark_not_interesting`、`message_push`、`finish_turn`，外加共享的 `account_list` / `account_targets`
+1. **一套固定工具**（`plugins/proactive/backend/tools.py` 的 `TOOL_SCHEMAS`）：`get_alert_events`、`get_content_events`、`get_context_data`、`recall_memory`、`get_content`、`web_fetch`、`web_search`、`get_recent_chat`、`mark_interesting`、`mark_not_interesting`、`message_push`、`finish_turn`，外加共享的 `account_list` / `account_targets`
 2. **一段固定 system prompt**（角色身份 + 固定规则，在 `agent/core/proactive_turn/prompt_context.py` 的 `build_system_prompt()`）
 3. **一个 MCP 数据源池**：从你配置的 server 拉 alert / content / context
 
@@ -258,7 +258,7 @@ tick_interval_s0 = 600         # 不饿时 10 分钟
 tick_interval_s1 = 180         # 很饿时至少 3 分钟
 ```
 
-只允许白名单键（`proactive_v2/presets.py` 的 `ALLOWED_OVERRIDE_KEYS`）：`trigger` 下 `tick_interval_s0` / `tick_interval_s1` / `tick_jitter`，`gate` 下 `score_llm_threshold` / `judge_send_threshold` / `judge_balance_daily_max`，`safety` 下 `delivery_dedupe_hours` / `message_dedupe_recent_n`。阈值必须在 [0, 1]，`tick_interval_s0 ≥ tick_interval_s1 ≥ 1`。
+只允许白名单键（`plugins/proactive/backend/presets.py` 的 `ALLOWED_OVERRIDE_KEYS`）：`trigger` 下 `tick_interval_s0` / `tick_interval_s1` / `tick_jitter`，`gate` 下 `score_llm_threshold` / `judge_send_threshold` / `judge_balance_daily_max`，`safety` 下 `delivery_dedupe_hours` / `message_dedupe_recent_n`。阈值必须在 [0, 1]，`tick_interval_s0 ≥ tick_interval_s1 ≥ 1`。
 
 ---
 

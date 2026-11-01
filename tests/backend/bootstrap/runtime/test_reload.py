@@ -162,7 +162,7 @@ async def test_empty_application_hot_reload_preserves_shared_state_and_old_lease
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     lease = app.acquire()
@@ -201,7 +201,7 @@ async def test_persistence_failure_keeps_live_runtime(tmp_path, monkeypatch):
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     original = app.core
@@ -236,7 +236,7 @@ async def test_partial_candidate_construction_closes_new_provider_and_preserves_
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     original = app.core
@@ -297,7 +297,7 @@ async def test_scene_intake_starts_only_when_its_generation_is_published(
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     lease = app.acquire()
@@ -316,97 +316,6 @@ async def test_scene_intake_starts_only_when_its_generation_is_published(
         await app.publish(prepared)
 
         assert started == ["original", "prepared"]
-    finally:
-        await lease.release()
-        await app.shutdown()
-
-
-@pytest.mark.asyncio
-async def test_core_motives_follow_generation_publication_and_rollback(
-    tmp_path, monkeypatch
-):
-    from shiori_sdk.role_events import SceneObservationCommitted
-
-    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [])
-    config = Config(
-        provider="",
-        model="",
-        api_key="",
-        model_registrations=[],
-    )
-    app = AppRuntime(
-        config,
-        tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
-    )
-    await app.start()
-    lease = app.acquire()
-    original = lease.core
-
-    class _Affection:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        def apply_scene_decision(self, session_key, transition, scene_key) -> None:
-            self.calls += 1
-
-    original_affection = _Affection()
-    original.affection.bind(lambda: original_affection)
-    event = SceneObservationCommitted(
-        session_key="role:mira",
-        channel="desktop",
-        chat_id="role:mira",
-        role_id="mira",
-        source="passive",
-        transition="started",
-        scene_key="rain",
-        visual_description="雨夜车站的少女",
-    )
-    try:
-        assert [strategy.name for strategy in original.proactive_motives] == [
-            "relationship.scene_followup",
-            "relationship.loneliness",
-        ]
-        prepared = await app.prepare(replace(config, max_tokens=2048))
-        prepared_affection = _Affection()
-        prepared.core.affection.bind(lambda: prepared_affection)
-        await prepared.core.event_bus.fanout(event)
-        assert prepared_affection.calls == 0
-        assert original_affection.calls == 0
-        await original.event_bus.fanout(event)
-        assert original_affection.calls == 1
-        await app.publish(prepared)
-        await prepared.core.event_bus.fanout(event)
-        assert prepared_affection.calls == 1
-        assert original_affection.calls == 1
-        await original.event_bus.fanout(event)
-        assert original_affection.calls == 2
-        await lease.release()
-        await original.event_bus.fanout(event)
-        assert original_affection.calls == 2
-        failed = await app.prepare(replace(prepared.config, max_tokens=4096))
-        failed_affection = _Affection()
-        failed.core.affection.bind(lambda: failed_affection)
-        await app.discard(failed)
-        await failed.core.event_bus.fanout(event)
-        assert failed_affection.calls == 0
-        assert prepared_affection.calls == 1
-        assert original_affection.calls == 2
-        disabled = await app.prepare(
-            replace(
-                prepared.config,
-                plugins={
-                    **prepared.config.plugins,
-                    "proactive": {"scene_followup": False, "relationship": False},
-                },
-            )
-        )
-        assert disabled.core.proactive_motives == []
-        assert disabled.core.scene_followup_subscription is None
-        await app.publish(disabled)
-        await disabled.core.event_bus.fanout(event)
-        assert prepared_affection.calls == 1
-        assert original_affection.calls == 2
     finally:
         await lease.release()
         await app.shutdown()
@@ -436,7 +345,7 @@ async def test_publish_rechecks_hot_unload_before_handover_or_commit(
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     prepared = await app.prepare(replace(config, max_tokens=2048))
@@ -490,7 +399,7 @@ async def test_unpublished_unsafe_candidate_is_forcibly_reclaimed_on_failure(
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     captured = []

@@ -260,17 +260,21 @@ class InitiatedMessageCommitted:
     The host emits this after the message is committed, so ``message_id``
     names a stored message. Two publishers emit it:
 
-    - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, and
-      the host's own proactive loop until it moves into the plugin), once per
-      delivered reply. A natural sequence emits once for the delivered
+    - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``,
+      including the proactive plugin), once per delivered reply. A natural
+      sequence emits once for the delivered
       messages: ``message_id`` is the last one and ``assistant_response``
       their texts joined by a blank line. ``tools_used`` is
       ``("message_push",)``.
     - a host-owned push (the ``account_send`` tool reaching an external chat
       outside a live turn), once per push. ``tools_used`` names the tool.
 
-    ``thread_id`` is the conversation thread the message belongs to; a role's
-    session mixes threads, so subscribers read history with it.
+    ``thread_id`` is the conversation thread the message belongs to.
+
+    ``history`` is the recent window the publisher attached, oldest first.
+    ``None`` means the turn is external context, or the publisher did not
+    attach a window, and scene observation must not run. An empty tuple is a
+    real window with no earlier messages.
 
     ``source`` names who started the message: the ``InitiatedReply.source``
     a plugin passed (by convention its plugin id; the host's proactive loop
@@ -288,6 +292,7 @@ class InitiatedMessageCommitted:
     assistant_response: str = ""
     tools_used: tuple[str, ...] = ()
     message_id: str = ""
+    history: tuple[ConversationMessage, ...] | None = None
 
 
 def _freeze(mapping: Mapping[str, object]) -> Mapping[str, object]:

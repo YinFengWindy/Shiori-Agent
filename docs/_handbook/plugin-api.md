@@ -227,7 +227,7 @@ What one initiated delivery stored. ``message_ids`` are the committed messages, 
 
 #### `shiori_sdk.core.conversation.InitiatedMessageCommitted`
 
-A role message the user did not ask for was stored on the role session. The host emits this after the message is committed, so ``message_id`` names a stored message. Two publishers emit it: - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, and the host's own proactive loop until it moves into the plugin), once per delivered reply. A natural sequence emits once for the delivered messages: ``message_id`` is the last one and ``assistant_response`` their texts joined by a blank line. ``tools_used`` is ``("message_push",)``. - a host-owned push (the ``account_send`` tool reaching an external chat outside a live turn), once per push. ``tools_used`` names the tool. ``thread_id`` is the conversation thread the message belongs to; a role's session mixes threads, so subscribers read history with it. ``source`` names who started the message: the ``InitiatedReply.source`` a plugin passed (by convention its plugin id; the host's proactive loop and Drift use ``"proactive"``), or ``"push"`` for a host-owned push. Plugins watch it; they do not construct it.
+A role message the user did not ask for was stored on the role session. The host emits this after the message is committed, so ``message_id`` names a stored message. Two publishers emit it: - initiated delivery (``CONVERSATION`` / ``PROACTIVE_HOST.deliver``, including the proactive plugin), once per delivered reply. A natural sequence emits once for the delivered messages: ``message_id`` is the last one and ``assistant_response`` their texts joined by a blank line. ``tools_used`` is ``("message_push",)``. - a host-owned push (the ``account_send`` tool reaching an external chat outside a live turn), once per push. ``tools_used`` names the tool. ``thread_id`` is the conversation thread the message belongs to. ``history`` is the recent window the publisher attached, oldest first. ``None`` means the turn is external context, or the publisher did not attach a window, and scene observation must not run. An empty tuple is a real window with no earlier messages. ``source`` names who started the message: the ``InitiatedReply.source`` a plugin passed (by convention its plugin id; the host's proactive loop and Drift use ``"proactive"``), or ``"push"`` for a host-owned push. Plugins watch it; they do not construct it.
 
 - `session_key: str`
 - `channel: str`
@@ -238,6 +238,7 @@ A role message the user did not ask for was stored on the role session. The host
 - `assistant_response: str`
 - `tools_used: tuple[str, ...]`
 - `message_id: str`
+- `history: tuple[core.conversation.ConversationMessage, ...] | None`
 
 #### `shiori_sdk.core.conversation.InitiatedReply`
 
@@ -556,7 +557,7 @@ Runs a bounded chat request using the injected provider's routing.
 
 ## `shiori_sdk.core.proactive_host`
 
-``PROACTIVE_HOST``: host services a proactive tick calls (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. A tick whose role has natural chat on opens one reply scope for the whole tick. The scope, its invalidation, its tool facts and its delivery stay together: tool calls run through ``execute_tool`` are recorded on the open plan and committed before the scope ends, including when the plan is invalidated. Choosing a target reads candidate chats, the last user message on a thread and whether the user is at the desktop. Host tools run through ``run_host_tool``; their schemas and the connected MCP servers come from the generation's registry. Session history reads return the role session's recent user-context turns and recent proactive messages. The reply stamp (mood catalog and stored mood time) is ``CONVERSATION.reply_state``. This key and ``InitiatedReply`` may still gain or lose members until the proactive loop moves into its plugin (P6b-4b); they are fixed when SDK 4.0 is released.
+``PROACTIVE_HOST``: host services a proactive tick calls (P6b, #907). The port is process-wide. Calls that run or deliver work pin the currently published generation, the way an incoming message does, and wait while no generation admits work. A caller that already holds a lease keeps that lease. Reads use the current lease's generation when there is one, otherwise the published generation, and do not wait. A tick whose role has natural chat on opens one reply scope for the whole tick. The scope, its invalidation, its tool facts and its delivery stay together: tool calls run through ``execute_tool`` are recorded on the open plan and committed before the scope ends, including when the plan is invalidated. Choosing a target reads candidate chats, the last user message on a thread and whether the user is at the desktop. Host tools run through ``run_host_tool``; their schemas and the connected MCP servers come from the generation's registry. Session history reads return the role session's recent user-context turns and recent proactive messages. The reply stamp (mood catalog and stored mood time) is ``CONVERSATION.reply_state``. This key's method set is frozen by the proactive plugin move (P6b-4b). SDK 4.0 ships this set.
 
 ### `proactive_host`
 
@@ -674,6 +675,38 @@ Host services for a proactive tick. The host provides this.
 
   Complete one chat request on the published model. Inside ``run_tick`` the role's chat model snapshot answers and keeps its own reasoning effort. Outside a tick the generation's model answers through a provider that forces thinking off, or through the generation's own provider when no API key is configured; only that last case honors ``disable_thinking``. ``max_tokens`` defaults to the generation's configured cap. ``call_purpose="auxiliary"`` marks a short side request: it opts out of the configured reasoning and does not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or a tool-choice object. ``natural_draft`` turns the completion into the open natural plan's draft before returning: the ``message_push`` call's ``messages`` are validated, with at most one format correction, and the plan keeps the provider response (refusal, finish reason, provider fields). The returned completion carries that ``message_push`` call with the accepted messages, or unchanged business tool calls the model made instead. A completion that cannot become a draft raises ``ValueError``. No open plan raises ``RuntimeError``.
 
+- `builtin_skills_dir() -> str`
+
+  Directory of built-in skills (source tree or the installed resources). Drift reads ``SKILL.md`` from here. It does not write state beside those files.
+
+- `file_tool_schema(name: str) -> Mapping[str, object]`
+
+  OpenAI schema of the host file tool ``name`` (``read_file``, ``write_file``, ``edit_file``). An unknown name raises ``KeyError``.
+
+- `async run_restricted_file_tool(name: str, arguments: Mapping[str, object], *, root: str | None) -> str | tools.ToolResult`
+
+  Run file tool ``name`` confined to ``root``. ``root`` is None for an absolute read (no directory jail). Writes and edits pass the drift directory. An unknown tool returns the same missing-tool text the host registry does. A tool that raises becomes ``工具执行出错: ...``.
+
+- `web_fetch_available() -> bool`
+
+  Whether constructing the host web fetch tool succeeds.
+
+- `async fetch_url(url: str, *, format: str = 'text') -> str`
+
+  Fetch ``url`` and return the tool's JSON text. ``web_fetch_available`` is false when this cannot be constructed.
+
+- `open_mcp_session(name: str, command: Sequence[str], env: Mapping[str, str]) -> mcp.McpSession`
+
+  An unconnected stdio MCP session. The caller connects and disconnects it.
+
+- `tool_resource_scope() -> contextlib.AbstractAsyncContextManager[None]`
+
+  Host tool-turn scope for one drift run. Nested on the same task does not close twice. Computer-use tools see the current tool turn only inside this scope.
+
+- `configured_max_tokens() -> int`
+
+  The generation's configured completion cap. The current lease's generation when there is one, otherwise the published generation. Does not wait for admission.
+
 #### `shiori_sdk.core.proactive_host.CandidateChat`
 
 One chat that may receive the role's next proactive message. Desktop is first. The rest are private chats with the bound user through the role's online accounts, in binding order.
@@ -776,7 +809,7 @@ Prompt text for a selected natural-chat turn. ``passive_prompt`` is the system s
 
 ## `shiori_sdk.core.scene`
 
-``SCENE`` and ``SCENE_HOST``: demand-driven scene observation (P6a, D7). Observation is not on the turn's critical path, so it stays a plugin. The ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role identity, whether the host still wants a scene follow-up, and recent proactive history. ``None`` from ``get(SCENE)`` means observation is off; chat still runs. ``request`` returns a disposer. The caller effects it so demand leaves with the caller. The plugin starts intake through ``SceneHost.on_published``: at once when its setup runs in a published generation (an in-generation reload or enable), otherwise when the host publishes that generation. The host calls ``close`` before the generation is dropped.
+``SCENE`` and ``SCENE_HOST``: demand-driven scene observation (P6a, D7). Observation is not on the turn's critical path, so it stays a plugin. The ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role identity and publication. Demand is ``SCENE.request``. Recent history rides on ``InitiatedMessageCommitted.history``. ``None`` from ``get(SCENE)`` means observation is off; chat still runs. ``request`` returns a disposer. The caller effects it so demand leaves with the caller. The plugin starts intake through ``SceneHost.on_published``: at once when its setup runs in a published generation (an in-generation reload or enable), otherwise when the host publishes that generation. The host calls ``close`` before the generation is dropped.
 
 ### `scene`
 
@@ -805,14 +838,6 @@ Host facts the scene plugin cannot import.
 - `subject(session_key: str, role_id: str) -> core.scene.SceneSubject | None`
 
   The role of this turn, from ``role_id`` or the session. None if absent.
-
-- `followup_wanted(role_id: str) -> bool`
-
-  Whether the host's scene-follow-up strategy applies to this role. The proactive strategy flag stays on the host until proactive leaves. This is not a method on ``Roles``.
-
-- `proactive_history(*, session_key: str, role_id: str, thread_id: str, limit: int) -> tuple[core.scene.SceneHistoryMessage, ...] | None`
-
-  Recent messages for a proactive turn. ``None`` means the turn is external context and must not be observed.
 
 - `legacy_state_paths() -> tuple[pathlib.Path, ...]`
 

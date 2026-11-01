@@ -63,7 +63,6 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class RuntimeFeatures:
     enable_message_channels: bool = True
-    enable_proactive: bool = True
 
 
 SERVICE_RUNTIME_FEATURES = RuntimeFeatures()
@@ -87,7 +86,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
         self.channel_host: ChannelHost | None = None
         self.core: CoreRuntime | None = None
         self.event_bus: EventBus | None = None
-        self.proactive_loops = {}
         # Process-wide so it survives settings reloads; the desktop bridge writes
         # it and proactive delivery reads it to pick where to reach the user.
         self.desktop_presence = DesktopPresence()

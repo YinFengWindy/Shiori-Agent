@@ -17,9 +17,8 @@ generation's registry. Session history reads return the role session's recent
 user-context turns and recent proactive messages. The reply stamp (mood
 catalog and stored mood time) is ``CONVERSATION.reply_state``.
 
-This key and ``InitiatedReply`` may still gain or lose members until the
-proactive loop moves into its plugin (P6b-4b); they are fixed when SDK 4.0 is
-released.
+This key's method set is frozen by the proactive plugin move (P6b-4b). SDK
+4.0 ships this set.
 """
 
 from __future__ import annotations
@@ -33,6 +32,7 @@ from typing import Literal, Protocol
 
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from shiori_sdk.core.tools import ToolStatus
+from shiori_sdk.mcp import McpSession
 from shiori_sdk.tools import ToolResult
 from shiori_sdk.kernel import Key
 
@@ -478,6 +478,73 @@ class ProactiveHost(Protocol):
         accepted messages, or unchanged business tool calls the model made
         instead. A completion that cannot become a draft raises
         ``ValueError``. No open plan raises ``RuntimeError``.
+        """
+        ...
+
+    def builtin_skills_dir(self) -> str:
+        """Directory of built-in skills (source tree or the installed resources).
+
+        Drift reads ``SKILL.md`` from here. It does not write state beside those
+        files.
+        """
+        ...
+
+    def file_tool_schema(self, name: str) -> Mapping[str, object]:
+        """OpenAI schema of the host file tool ``name`` (``read_file``, ``write_file``, ``edit_file``).
+
+        An unknown name raises ``KeyError``.
+        """
+        ...
+
+    async def run_restricted_file_tool(
+        self,
+        name: str,
+        arguments: Mapping[str, object],
+        *,
+        root: str | None,
+    ) -> str | ToolResult:
+        """Run file tool ``name`` confined to ``root``.
+
+        ``root`` is None for an absolute read (no directory jail). Writes and
+        edits pass the drift directory. An unknown tool returns the same
+        missing-tool text the host registry does. A tool that raises becomes
+        ``工具执行出错: ...``.
+        """
+        ...
+
+    def web_fetch_available(self) -> bool:
+        """Whether constructing the host web fetch tool succeeds."""
+        ...
+
+    async def fetch_url(self, url: str, *, format: str = "text") -> str:
+        """Fetch ``url`` and return the tool's JSON text.
+
+        ``web_fetch_available`` is false when this cannot be constructed.
+        """
+        ...
+
+    def open_mcp_session(
+        self,
+        name: str,
+        command: Sequence[str],
+        env: Mapping[str, str],
+    ) -> McpSession:
+        """An unconnected stdio MCP session. The caller connects and disconnects it."""
+        ...
+
+    def tool_resource_scope(self) -> AbstractAsyncContextManager[None]:
+        """Host tool-turn scope for one drift run.
+
+        Nested on the same task does not close twice. Computer-use tools see
+        the current tool turn only inside this scope.
+        """
+        ...
+
+    def configured_max_tokens(self) -> int:
+        """The generation's configured completion cap.
+
+        The current lease's generation when there is one, otherwise the
+        published generation. Does not wait for admission.
         """
         ...
 

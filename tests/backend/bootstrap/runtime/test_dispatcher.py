@@ -52,8 +52,11 @@ async def proactive_task(
     from core.accounts.delivery_ledger import AccountDeliveryLedger
     from core.common.runtime_scope import bind_runtime
     from core.identity import UserIdentityStore
-    from proactive_v2.tools import ToolDeps
-    from tests.backend.proactive_v2.conftest import make_proactive_pipeline, FakeLLM
+    from plugins.proactive.backend.tools import ToolDeps
+    from tests.backend.proactive_v2.conftest import (
+        make_proactive_pipeline,
+        FakeLLM,
+    )
 
     sent, events = [], []
     event_bus = env.host.loop._event_bus
@@ -176,7 +179,10 @@ async def proactive_task(
     from agent.initiated_delivery import HostConversation
     from agent.proactive_host import HostProactiveRunner
     from agent.provider import LLMProvider
-    from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
+    from plugins.proactive.backend.agent_tick_factory import (
+        AgentTickDeps,
+        AgentTickFactory,
+    )
 
     class _Provider(LLMProvider):
         """The candidate's provider; every request goes to ``provider_chat``."""
@@ -1149,7 +1155,7 @@ async def test_background_result_runs_on_new_loop_and_releases_short_lease(
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     old_loop = app.core.loop

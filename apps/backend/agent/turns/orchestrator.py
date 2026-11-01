@@ -13,6 +13,7 @@ from agent.account_delivery import AccountDelivery
 from agent.turns.result import TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
+from conversation.initiated_history import initiated_history as _initiated_history
 from conversation.service import LegacySessionDescriptor, desktop_thread_id
 from shiori_sdk.channels.threads import network_thread_id
 from shiori_sdk.accounts.targets import AccountTarget
@@ -384,6 +385,14 @@ class TurnOrchestrator:
                         thread_id=source_metadata.get("thread_id", ""),
                         message_id=str(message["id"]),
                         source=source,
+                        history=_initiated_history(
+                            self._session.session_manager,
+                            session_key=session_key,
+                            role_id=str(
+                                getattr(session, "metadata", {}).get("role_id") or ""
+                            ).strip(),
+                            thread_id=source_metadata.get("thread_id", ""),
+                        ),
                     )
                 )
         else:
@@ -463,6 +472,14 @@ class TurnOrchestrator:
                             tools_used=("message_push",),
                             message_id=str(delivered[-1]["id"]),
                             source=source,
+                            history=_initiated_history(
+                                self._session.session_manager,
+                                session_key=session.key,
+                                role_id=role_id,
+                                thread_id=str(
+                                    plan.origin.metadata.get("thread_id") or ""
+                                ),
+                            ),
                         )
                     )
 

@@ -1,9 +1,7 @@
-"""Handoff of proactive scheduling between runtime versions.
+"""Publication of scene intake between runtime versions.
 
-Background loops only do work the next generation redoes on its own
-schedule (proactive ticks), so replacing a version
-interrupts their in-flight work instead of waiting for it: a model call stuck
-in retries must never hold a settings switch or shutdown.
+Proactive loops live in the proactive plugin. This group only publishes the
+scene host once the generation is the one plugins observe.
 """
 
 from __future__ import annotations
@@ -12,7 +10,6 @@ import asyncio
 from collections.abc import Coroutine
 from typing import Any, Protocol
 
-from bootstrap.proactive import build_proactive_runtime
 from bootstrap.runtime.generations import RuntimeCandidate
 from core.common.runtime_scope import bind_runtime
 from core.scene.host import HostSceneAdapter
@@ -28,7 +25,6 @@ class RuntimeBackground:
 
     def __init__(self, app, candidate: RuntimeCandidate) -> None:
         core = candidate.core
-        config = candidate.config
         self.candidate = candidate
         self._plugins = getattr(core, "plugin_manager", None)
         self._loops: list[_Stoppable] = []
@@ -36,25 +32,6 @@ class RuntimeBackground:
         self._tasks: list[asyncio.Task[None]] = []
         self._runner: asyncio.Task[None] | None = None
         self._stopped = False
-        self.proactive_loops = {}
-        if app.features.enable_proactive and config.model_registrations:
-            if core.plugin_manager is None:
-                # Proactive tool calls must pass this generation's core checks
-                # (workspace guard included); never fall back to a bare kernel.
-                raise RuntimeError("主动循环需要本代插件内核，但运行时没有插件内核")
-            tasks, self.proactive_loops = build_proactive_runtime(
-                config,
-                app.workspace,
-                session_manager=core.session_manager,
-                memory_store=core.memory_runtime,
-                presence=core.presence,
-                role_store=core.role_runtime_registry.repository.store,
-                proactive_motives=core.proactive_motives,
-                proactive_host=core.proactive_host,
-                conversation=core.conversation,
-            )
-            self._coroutines.extend(tasks)
-            self._loops.extend(self.proactive_loops.values())
 
     def start(self, previous: RuntimeBackground | None = None) -> None:
         """Transfers scheduling once the stopped previous group has unwound.
@@ -152,9 +129,6 @@ class RuntimeBackgroundMixin:
         if old_group is not None:
             old_group.stop()
         group = self._background_groups[candidate]
-        if candidate.core.scene_followup_subscription is not None:
-            candidate.core.scene_followup_subscription.start()
-        self.proactive_loops = group.proactive_loops
         group.start(old_group)
 
     def _discard_background(self, candidate: RuntimeCandidate) -> None:

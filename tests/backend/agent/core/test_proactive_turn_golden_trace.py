@@ -21,8 +21,9 @@ assertions stay as they are.
 
 from __future__ import annotations
 
+import asyncio
 import json
-from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager, nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -35,7 +36,7 @@ import pytest
 
 from agent.account_delivery import AccountDelivery
 from agent.config_models import Config
-from agent.core.proactive_turn.strategies import RelationshipStrategy
+from agent.core.prompt_block import build_role_affection_prompt
 from agent.core.turn_events import core_kernel
 from agent.initiated_delivery import HostConversation, orchestrator_for
 from agent.provider import LLMProvider, LLMResponse, ToolCall
@@ -44,7 +45,6 @@ from agent.tools.message_push import MessagePushTool
 from agent.tools.registry import ToolRegistry
 from agent.turns.channel_sequence import ChannelSequenceOwner
 from agent.proactive_host import HostProactiveRunner
-from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
 from bus.queue import MessageBus
@@ -56,10 +56,13 @@ from core.identity import IdentityChat
 from core.memory.group_environment import GroupEnvironment
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
 from core.roles.affection_access import AffectionGetter
-from core.roles.reply_policy import ReplyPolicyGetter
+from core.roles.plugin_capability import HostRoles
+from core.roles.reply_policy import ReplyPolicyGetter, natural_chat_draft_prompt
 from plugins.natural_chat.backend.plugin import NaturalChatPolicy
+from plugins.proactive.backend.loop import ProactiveLoop
+from plugins.proactive.backend.service import build_role_loops
+from plugins.proactive.backend.turn.strategies import RelationshipStrategy
 from shiori_sdk.core.affection import Affection
-from proactive_v2.loop import ProactiveLoop
 from session.manager import SessionManager
 from tests.support.generation_getters import turn_getters
 from tests.support.push import allow_every_role_target
@@ -82,13 +85,26 @@ class ScriptedProvider(LLMProvider):
         self.requests: list[dict[str, Any]] = []
         # Request index -> what happens in the world while the model answers it.
         self.meanwhile: dict[int, Callable[[], None]] = {}
+        # Set together with ``script_by_role`` so two roles' first calls overlap.
+        self.release: asyncio.Event | None = None
+        self.script_by_role: dict[str, list[LLMResponse]] = {}
+        self._roles_in_flight: set[str] = set()
 
     async def chat(self, **kwargs: Any) -> LLMResponse:  # type: ignore[override]
         self.requests.append(kwargs)
         happening = self.meanwhile.pop(len(self.requests) - 1, None)
         if happening is not None:
             happening()
-        return self.script.pop(0)
+        if self.release is None:
+            return self.script.pop(0)
+        blob = str(kwargs.get("messages", ""))
+        role = "nana" if "你是 Nana" in blob else "mira"
+        if role not in self._roles_in_flight:
+            self._roles_in_flight.add(role)
+            if {"mira", "nana"} <= self._roles_in_flight:
+                self.release.set()
+            await self.release.wait()
+        return self.script_by_role[role].pop(0)
 
     def offered(self, request: int) -> set[str]:
         """Names of the tools offered in request ``request``."""
@@ -149,6 +165,7 @@ class ProactiveHost:
     affection: RecordingAffection
     desktop_presence: DesktopPresence
     loop: ProactiveLoop
+    loops: dict[str, ProactiveLoop] = field(default_factory=dict)
     delivered: list[Delivered] = field(default_factory=list[Delivered])
     events: list[InitiatedMessageCommitted] = field(
         default_factory=list[InitiatedMessageCommitted]
@@ -188,6 +205,16 @@ class ProactiveHost:
             except Exception as error:
                 self.tick_errors.append(error)
 
+    async def tick_role(self, role_id: str) -> None:
+        """One role's tick. A failure propagates, so overlapping ticks stay visible."""
+        with (
+            turn_getters(affection=self.affection, policy=NaturalChatPolicy()),
+            ChannelSequenceOwner().bind(MessageBus()),
+        ):
+            _ = await self.loops[
+                role_id
+            ]._run_tick()  # pyright: ignore[reportPrivateUsage]
+
     def stored(self) -> list[dict[str, Any]]:
         """The role session's assistant messages as reloaded from disk."""
         session = SessionManager(self.workspace).get_or_create(SESSION_KEY)
@@ -203,23 +230,31 @@ class ProactiveHost:
         return SessionManager(self.workspace).presence.last_initiated_at(SESSION_KEY)
 
 
-def _seed_role(workspace: Path, *, natural: bool) -> RoleStore:
+def _seed_role(
+    workspace: Path,
+    *,
+    natural: bool,
+    also: tuple[tuple[str, str, str], ...] = (),
+) -> RoleStore:
     roles = RoleStore(workspace)
-    _ = roles.create_role(
-        role_id="mira",
-        name="Mira",
-        system_prompt=ROLE_PROMPT,
-        runtime_config={"natural_chat_enabled": natural},
-    )
-    _ = roles.update_role("mira", proactive={"enabled": True})
-    sessions = SessionManager(workspace)
-    sessions.save(
-        sessions.open_role_session(
-            "mira",
-            role_name="Mira",
-            role_runtime_config={"natural_chat_enabled": natural},
+    created = [("mira", "Mira", ROLE_PROMPT), *also]
+    for role_id, name, prompt in created:
+        _ = roles.create_role(
+            role_id=role_id,
+            name=name,
+            system_prompt=prompt,
+            runtime_config={"natural_chat_enabled": natural},
         )
-    )
+        _ = roles.update_role(role_id, proactive={"enabled": True})
+    sessions = SessionManager(workspace)
+    for role_id, name, _prompt in created:
+        sessions.save(
+            sessions.open_role_session(
+                role_id,
+                role_name=name,
+                role_runtime_config={"natural_chat_enabled": natural},
+            )
+        )
     return roles
 
 
@@ -245,7 +280,11 @@ def _bind_private_chat(roles: RoleStore) -> None:
 
 @asynccontextmanager
 async def proactive_host(
-    workspace: Path, monkeypatch: pytest.MonkeyPatch, *, natural: bool = False
+    workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    natural: bool = False,
+    also: tuple[tuple[str, str, str], ...] = (),
 ) -> AsyncGenerator[ProactiveHost]:
     """The production proactive runtime of one enabled role, ticked by hand.
 
@@ -253,7 +292,7 @@ async def proactive_host(
     sessions, presence, roles, accounts, identities, the proactive state
     store and the Drift state are real files under ``workspace``.
     """
-    roles = _seed_role(workspace, natural=natural)
+    roles = _seed_role(workspace, natural=natural, also=also)
     sessions = SessionManager(workspace)
     provider = ScriptedProvider()
     affection = RecordingAffection()
@@ -398,27 +437,27 @@ async def proactive_host(
         async def wait_for_admission(self) -> None:
             return None
 
-    tasks, loops = (  # pyright: ignore[reportUnknownVariableType]
-        build_proactive_runtime(
-            config,
-            workspace,
-            session_manager=sessions,
-            memory_store=None,
-            presence=presence,
-            role_store=roles,
-            proactive_motives=[RelationshipStrategy(affection_getter)],
-            proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
-            conversation=conversation,
-        )
+    loops = build_role_loops(
+        workspace,
+        sessions=sessions,
+        roles=HostRoles(roles),
+        proactive_host=HostProactiveRunner(lambda: _PublishedRuntime()),
+        conversation=conversation,
+        presence=presence,
+        motives=[RelationshipStrategy(affection_getter)],
+        max_tokens=config.max_tokens,
+        draft_prompt_fn=natural_chat_draft_prompt,
+        affection_prompt_for=lambda role_id: partial(
+            build_role_affection_prompt, role_id, roles
+        ),
     )
-    for task in cast(list[Coroutine[Any, Any, None]], tasks):
-        task.close()  # the loops are ticked by hand, never run
     host = ProactiveHost(
         workspace,
         provider,
         affection,
         desktop_presence,
         loops["mira"],
+        loops=loops,
         reply_sequences=reply_sequences,
     )
     holder["host"] = host
@@ -758,3 +797,44 @@ async def test_proactive_turn_golden_trace(
         await scenario(host)
         # A scenario that expects a failed tick clears what it checked.
         assert host.tick_errors == []
+
+
+async def test_overlapping_ticks_deliver_each_role_to_its_own_session(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two roles inside the model at once still store and announce their own text."""
+    nana_prompt = "你是 Nana，说话干脆。"
+    async with proactive_host(
+        tmp_path,
+        monkeypatch,
+        also=(("nana", "Nana", nana_prompt),),
+    ) as host:
+        host.provider.release = asyncio.Event()
+        host.provider.script_by_role = {
+            "mira": [_push("米拉想你了。"), _REPLY],
+            "nana": [_push("娜娜到了。"), _REPLY],
+        }
+        await asyncio.wait_for(
+            asyncio.gather(host.tick_role("mira"), host.tick_role("nana")),
+            timeout=5,
+        )
+
+    sessions = SessionManager(tmp_path)
+
+    def texts(role_id: str) -> list[str]:
+        session = sessions.get_or_create(f"role:{role_id}")
+        return [m["content"] for m in session.messages if m["role"] == "assistant"]
+
+    assert texts("mira") == ["米拉想你了。"]
+    assert texts("nana") == ["娜娜到了。"]
+    assert {
+        (event.role_id, event.session_key, event.assistant_response)
+        for event in host.events
+    } == {
+        ("mira", "role:mira", "米拉想你了。"),
+        ("nana", "role:nana", "娜娜到了。"),
+    }
+    assert {(item.chat_id, item.text) for item in host.delivered} == {
+        ("role:mira", "米拉想你了。"),
+        ("role:nana", "娜娜到了。"),
+    }

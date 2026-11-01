@@ -1,0 +1,24 @@
+api: 4
+sdk: ">=4.0.0"
+id: proactive
+display_name: 主动推送
+version: '0.1.0'
+desc: 按角色的主动开关定时发起主动消息与空闲活动
+category: system
+config_model: plugin_config:ProactivePluginConfig
+inject:
+  - proactive_host
+  - process_resources
+  - roles
+  - conversation
+  - sessions
+  - workspace
+  - config
+  - events
+  - markdown_memory
+optional_inject:
+  - scene
+  - affection
+  - reply_policy
+  - memory_engine
+  - main_model

@@ -5,20 +5,17 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from agent.core.passive_support import to_history_messages
 from bootstrap.paths import REPOSITORY_ROOT, resource_root
-from conversation.context_scope import history_filter, session_context_view
 from core.roles.store import RoleStore
 from session.manager import SessionManager
-from shiori_sdk.core.scene import SceneHistoryMessage, SceneSubject
+from shiori_sdk.core.scene import SceneSubject
 
 
 class HostSceneAdapter:
-    """Role identity, follow-up demand, recent proactive history, publication.
+    """Role identity and publication.
 
-    The proactive strategy flag stays on the host until proactive leaves.
-    ``followup_wanted`` is that flag together with the role's own switch.
     One adapter serves one generation; ``publish`` marks it published.
+    Scene follow-up demand is ``SCENE.request`` from the proactive plugin.
     """
 
     def __init__(
@@ -27,12 +24,10 @@ class HostSceneAdapter:
         workspace: Path,
         roles: RoleStore,
         sessions: SessionManager,
-        scene_followup: bool,
     ) -> None:
         self._workspace = workspace
         self._roles = roles
         self._sessions = sessions
-        self._scene_followup = scene_followup
         self._published = False
         self._starts: dict[object, Callable[[], None]] = {}
 
@@ -49,39 +44,6 @@ class HostSceneAdapter:
             id=role.id,
             name=role.name or role.id,
             system_prompt=role.system_prompt,
-        )
-
-    def followup_wanted(self, role_id: str) -> bool:
-        """Whether this role's scene follow-up is still a host strategy."""
-        if not self._scene_followup:
-            return False
-        role = self._roles.get_role(role_id)
-        return role is not None and role.proactive.enabled
-
-    def proactive_history(
-        self,
-        *,
-        session_key: str,
-        role_id: str,
-        thread_id: str,
-        limit: int,
-    ) -> tuple[SceneHistoryMessage, ...] | None:
-        """Recent messages, or ``None`` when the turn is external context."""
-        view = session_context_view(
-            self._workspace,
-            session_key=session_key,
-            role_id=role_id,
-            thread_id=thread_id,
-        )
-        if view is not None and view.is_external:
-            return None
-        session = self._sessions.get_or_create(session_key)
-        messages = to_history_messages(
-            session.history_window(limit, include=history_filter(view))
-        )
-        return tuple(
-            SceneHistoryMessage(role=item.role, content=item.content)
-            for item in messages
         )
 
     def on_published(self, start: Callable[[], None]) -> Callable[[], None]:

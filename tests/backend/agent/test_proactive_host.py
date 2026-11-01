@@ -15,7 +15,7 @@ import pytest
 
 from agent.config_models import Config
 from agent.core.turn_events import core_kernel
-from agent.core.proactive_turn.strategies import RelationshipStrategy
+from plugins.proactive.backend.turn.strategies import RelationshipStrategy
 from agent.initiated_delivery import HostConversation, orchestrator_for
 from agent.looping.ports import SessionServices
 from agent.proactive_host import HostProactiveRunner
@@ -25,7 +25,6 @@ from agent.tools.registry import ToolRegistry
 from agent.turns.channel_sequence import ChannelSequenceOwner
 from agent.turns.orchestrator import TurnOrchestrator, TurnOrchestratorDeps
 from agent.turns.outbound import DeliveryReceipt
-from bootstrap.proactive import build_proactive_runtime
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
 from bus.processing import ProcessingState
@@ -37,11 +36,13 @@ from core.memory.group_environment import GroupEnvironment, GroupEnvironmentUpda
 from core.roles import RoleRepository, RoleRuntimeRegistry, RoleStore
 from core.roles.affection_access import AffectionGetter
 from core.roles.errors import RoleNotFoundError
+from core.roles.plugin_capability import HostRoles
 from core.roles.reply_policy import ReplyPolicyGetter
 from core.roles.reply_state import InvalidRoleReply
 from core.roles.services import RoleSessionService
 from plugins.natural_chat.backend.plugin import NaturalChatPolicy
-from proactive_v2.state import ProactiveStateStore
+from plugins.proactive.backend.service import build_role_loops
+from plugins.proactive.backend.state import ProactiveStateStore
 from session.manager import SessionManager
 from session.manager.helpers import role_session_key
 from shiori_sdk.core.affection import Affection
@@ -497,18 +498,16 @@ async def test_held_lease_keeps_the_draining_generation(tmp_path) -> None:
     old_lease = SimpleNamespace(core=old_core)
     busy: bool | None = None
     try:
-        tasks, loops = build_proactive_runtime(
-            Config(provider="test", model="m", api_key=""),
+        config = Config(provider="test", model="m", api_key="")
+        loops = build_role_loops(
             tmp_path,
-            session_manager=sessions,
-            memory_store=None,
-            presence=sessions.presence,
-            role_store=roles,
+            sessions=sessions,
+            roles=HostRoles(roles),
             proactive_host=runner,
             conversation=_UnusedConversation(),  # type: ignore[arg-type]
+            presence=sessions.presence,
+            max_tokens=config.max_tokens,
         )
-        for task in tasks:
-            task.close()
 
         async def operation() -> None:
             nonlocal busy
@@ -739,19 +738,17 @@ async def _assembly(
     )
     runtime = ProactiveRuntime(generation, reply_sequences=ChannelSequenceOwner())
     runner = HostProactiveRunner(lambda: runtime)
-    tasks, loops = build_proactive_runtime(
-        Config(provider="test", model="m", api_key=""),
+    config = Config(provider="test", model="m", api_key="")
+    loops = build_role_loops(
         tmp_path,
-        session_manager=sessions,
-        memory_store=None,
-        presence=sessions.presence,
-        role_store=roles,
-        proactive_motives=[RelationshipStrategy(affection)],
+        sessions=sessions,
+        roles=HostRoles(roles),
         proactive_host=runner,
         conversation=conversation,
+        presence=sessions.presence,
+        motives=[RelationshipStrategy(affection)],
+        max_tokens=config.max_tokens,
     )
-    for task in tasks:
-        task.close()
 
     async def no_pause(_: object) -> None:
         return None

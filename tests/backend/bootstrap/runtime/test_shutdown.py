@@ -21,7 +21,7 @@ async def start_app(tmp_path, monkeypatch):
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     return app

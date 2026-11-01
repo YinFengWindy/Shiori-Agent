@@ -140,10 +140,12 @@ async def test_scene_host_is_provided_with_the_role_store(tmp_path: Path) -> Non
         "from shiori_sdk.core.scene import SCENE_HOST\n"
         f"SENTINEL = Path({str(sentinel)!r})\n"
         "async def setup(ctx):\n"
-        "    wanted = ctx.require(SCENE_HOST).followup_wanted('mira')\n"
-        "    SENTINEL.write_text('yes' if wanted else 'no', encoding='utf-8')\n",
+        "    subject = ctx.require(SCENE_HOST).subject('role:mira', 'mira')\n"
+        "    SENTINEL.write_text(subject.name if subject else '', encoding='utf-8')\n",
         encoding="utf-8",
     )
+    from session.manager import SessionManager
+
     workspace = tmp_path / "workspace"
     role_store = RoleStore(workspace)
     role_store.create_role(
@@ -153,27 +155,32 @@ async def test_scene_host_is_provided_with_the_role_store(tmp_path: Path) -> Non
         [tmp_path / "plugins"],
         settings=PluginGenerationSettings(workspace=workspace),
         role_store=role_store,
-        session_manager=SimpleNamespace(),
-        scene_followup=False,
+        session_manager=SessionManager(workspace),
     )
     await kernel.load_all()
     try:
         assert [state["state"] for state in kernel.states()] == ["ACTIVE"]
-        assert sentinel.read_text(encoding="utf-8") == "no"
+        assert sentinel.read_text(encoding="utf-8") == "Mira"
     finally:
         await kernel.terminate_all(force=True)
 
 
 @pytest.mark.asyncio
-async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
+async def test_scene_demand_is_reregistered_after_reload_or_re_enable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The plugin settings page reloads scene in place; intake must not stop."""
+    """A recreated scene service does not keep the previous generation's demand."""
+    import asyncio
+
     from session.manager import SessionManager
-    from shiori_sdk.core.scene import SCENE_HOST
-    from shiori_sdk.core.conversation import InitiatedMessageCommitted
+    from shiori_sdk.core.conversation import (
+        ConversationMessage,
+        InitiatedMessageCommitted,
+    )
+    from shiori_sdk.core.scene import SCENE, SCENE_HOST
     from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
+    from core.common.plugin_capability import BackgroundCapability
     from core.scene.host import HostSceneAdapter
 
     stage_plugin_package(plugin_directory("scene"), tmp_path / "plugins" / "scene")
@@ -181,6 +188,14 @@ async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
     role_store = RoleStore(workspace)
     role_store.create_role(role_id="mira", name="Mira", system_prompt="stay")
     bus = EventBus()
+    names: list[str] = []
+
+    def record_spawn(self, coro, *, name):
+        names.append(name)
+        coro.close()
+        return asyncio.create_task(asyncio.sleep(0))
+
+    monkeypatch.setattr(BackgroundCapability, "spawn", record_spawn)
     kernel = host_kernel(
         [tmp_path / "plugins"],
         settings=PluginGenerationSettings(workspace=workspace),
@@ -193,14 +208,6 @@ async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
     await kernel.load_all()
     host = kernel.kernel.get(SCENE_HOST)
     assert isinstance(host, HostSceneAdapter)
-    reads: list[str] = []
-
-    def history(*, session_key, role_id, thread_id, limit):
-        # Only a listening intake reads history; None ends the observation.
-        reads.append(role_id)
-        return None
-
-    monkeypatch.setattr(host, "proactive_history", history)
     event = InitiatedMessageCommitted(
         session_key="role:mira",
         channel="desktop",
@@ -208,13 +215,21 @@ async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
         thread_id="desktop:mira",
         assistant_response="在吗？",
         source="proactive",
+        history=(ConversationMessage(role="user", content="hi"),),
     )
+
+    def demand():
+        scene = kernel.kernel.get(SCENE)
+        assert scene is not None
+        return scene.request(lambda role: role.id == "mira")
+
     try:
+        dispose = demand()
         await bus.fanout(event)
-        assert reads == []
+        assert names == []
         host.publish()
         await bus.fanout(event)
-        assert reads == ["mira"]
+        assert names == ["scene_awareness:role:mira"]
 
         await kernel.reload(
             "scene",
@@ -223,7 +238,10 @@ async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
             drain_timeout=1,
         )
         await bus.fanout(event)
-        assert reads == ["mira"] * 2
+        assert names == ["scene_awareness:role:mira"]
+        dispose = demand()
+        await bus.fanout(event)
+        assert len(names) == 2
 
         for enabled in (False, True):
             await kernel.set_enabled(
@@ -233,7 +251,11 @@ async def test_scene_keeps_observing_after_an_in_generation_reload_or_re_enable(
                 drain_timeout=1,
             )
         await bus.fanout(event)
-        assert reads == ["mira"] * 3
+        assert len(names) == 2
+        dispose = demand()
+        await bus.fanout(event)
+        assert len(names) == 3
+        dispose()
     finally:
         await kernel.terminate_all(force=True)
 

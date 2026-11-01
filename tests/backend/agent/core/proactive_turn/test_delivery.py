@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.core.proactive_turn import ResolveResult
-from agent.core.proactive_turn.delivery import (
+from plugins.proactive.backend.turn import ResolveResult
+from plugins.proactive.backend.turn.delivery import (
     deliver_execute,
     resolve_target_transport,
 )
@@ -15,9 +15,9 @@ from agent.turns.result import TurnOutbound, TurnResult
 from bus.event_bus import EventBus
 from bus.events_lifecycle import InitiatedMessageCommitted
 from core.roles.reply_state import RoleReply, RoleReplyContext
-from proactive_v2.context import AgentTickContext
-from proactive_v2.gateway import GatewayDeps
-from proactive_v2.tools import ToolDeps
+from plugins.proactive.backend.context import AgentTickContext
+from plugins.proactive.backend.gateway import GatewayDeps
+from plugins.proactive.backend.tools import ToolDeps
 from shiori_sdk.core.conversation import InitiatedDelivery, InitiatedReply
 from tests.backend.proactive_v2.conftest import (
     FakeAckSink,

@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Callable, cast
 from unittest.mock import AsyncMock, MagicMock
@@ -23,12 +24,12 @@ from shiori_sdk.core.conversation import (
     RoleReplyState,
 )
 from shiori_sdk.core.proactive_host import ProactiveHost
-from proactive_v2.config import ProactiveConfig
-from proactive_v2.gateway import GatewayDeps
-from proactive_v2.tools import ToolDeps
+from plugins.proactive.backend.config import ProactiveConfig
+from plugins.proactive.backend.gateway import GatewayDeps
+from plugins.proactive.backend.tools import ToolDeps
 from agent.looping.ports import SessionServices
 from agent.turns.outbound import DeliveryReceipt, OutboundDispatch
-from agent.core.proactive_turn.gates import (
+from plugins.proactive.backend.turn.gates import (
     ProactiveGateAdapter,
     ProactiveGateChain,
     ProactiveGateCompletion,
@@ -36,7 +37,7 @@ from agent.core.proactive_turn.gates import (
     ProactiveGateDecision,
     ProactiveMode,
 )
-from agent.core.proactive_turn.strategies import RelationshipStrategy
+from plugins.proactive.backend.turn.strategies import RelationshipStrategy
 from tests.support.bound_chat_delivery import bound_chat_orchestrator
 from tests.support.proactive_runtime import ProactiveGeneration, ProactiveRuntime
 
@@ -186,6 +187,15 @@ class _FakeSession:
     ) -> list[dict[str, object]]:
         return self.messages[-max_messages:]
 
+    def history_window(
+        self,
+        max_messages: int = 500,
+        *,
+        start_index: int | None = None,
+        include: object = None,
+    ) -> list[dict[str, object]]:
+        return self.get_history(max_messages, start_index=start_index, include=include)
+
     def add_message(self, role: str, content: str, media=None, **kwargs) -> None:
         msg: dict[str, object] = {
             "role": role,
@@ -330,7 +340,7 @@ def make_proactive_pipeline(
     sends through ``sender``. A test running under its own generation lease
     passes that generation's ``proactive_host`` and ``conversation``.
     """
-    from agent.core.proactive_turn import (
+    from plugins.proactive.backend.turn import (
         ProactiveTurnPipeline,
         ProactiveTurnPipelineDeps,
     )
@@ -392,6 +402,7 @@ def make_proactive_pipeline(
         return True
 
     session_manager = SimpleNamespace(
+        workspace=Path("."),
         get_or_create=lambda _key: session,
         append_messages=AsyncMock(side_effect=append_messages),
     )

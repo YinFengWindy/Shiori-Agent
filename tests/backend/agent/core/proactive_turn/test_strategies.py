@@ -4,13 +4,13 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 import pytest
 
-from agent.core.proactive_turn.gates import (
+from plugins.proactive.backend.turn.gates import (
     ProactiveGateChain,
     ProactiveGateContext,
     ProactiveGateCompletion,
     ProactiveMode,
 )
-from agent.core.proactive_turn.strategies import (
+from plugins.proactive.backend.turn.strategies import (
     SceneFollowupStrategy,
     RelationshipStrategy,
 )

@@ -34,7 +34,7 @@ related:
 
 ## 主动主链路
 
-`apps/backend/proactive_v2/` 根据时间、presence、关系和其他传感结果创建 tick，经过裁定后启动主动 Agent 回合。Drift 是具有独立状态的特殊回合路径。主动输出最终仍复用会话、工具和投递基础设施，避免形成第二套消息系统。
+`plugins/proactive/` 根据时间、presence、关系和其他传感结果创建 tick，经过裁定后启动主动 Agent 回合。Drift 是具有独立状态的特殊回合路径。主动输出最终仍复用会话、工具和投递基础设施，避免形成第二套消息系统。
 
 ## 权威状态边界
 

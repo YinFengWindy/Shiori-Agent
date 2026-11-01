@@ -117,16 +117,12 @@ class SceneAwarenessController:
     def schedule_proactive_turn(self, event: InitiatedMessageCommitted) -> None:
         """Schedule scene observation for one committed proactive text message.
 
-        按事件自带的 ``thread_id`` 判定上下文，外部上下文不观察。
+        ``history`` is None for external context or when the publisher did not
+        attach a window; those turns are not observed.
         """
         if not event.assistant_response.strip() or not self._can_observe():
             return
-        history = self._host.proactive_history(
-            session_key=event.session_key,
-            role_id=event.role_id,
-            thread_id=event.thread_id,
-            limit=_RECENT_HISTORY_LIMIT,
-        )
+        history = event.history
         if history is None:
             return
         self._cancel_pending_task(event.session_key)

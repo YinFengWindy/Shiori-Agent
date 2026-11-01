@@ -1,6 +1,6 @@
 """ProactiveConfig defaults, removed fields and explicit overrides."""
 
-from proactive_v2.config import ProactiveConfig
+from plugins.proactive.backend.config import ProactiveConfig
 
 
 def test_loop_and_web_defaults():

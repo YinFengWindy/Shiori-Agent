@@ -7,9 +7,9 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any
 
-from shiori_sdk.core.scene import SCENE, SCENE_HOST, SceneHistoryMessage, SceneSubject
+from shiori_sdk.core.scene import SCENE, SCENE_HOST, SceneSubject
 from shiori_sdk.core.services import BACKGROUND
-from shiori_sdk.core.conversation import InitiatedMessageCommitted
+from shiori_sdk.core.conversation import ConversationMessage, InitiatedMessageCommitted
 from shiori_sdk.testing.service_context import FakeServiceContext
 
 from plugins.scene.backend.plugin import setup
@@ -23,30 +23,19 @@ _PROACTIVE = InitiatedMessageCommitted(
     thread_id="desktop:mira",
     assistant_response="在吗？",
     source="proactive",
+    history=(ConversationMessage(role="user", content="hi"),),
 )
 
 
 class _Host:
-    """``SCENE_HOST`` with a publication switch; history reads are the probe."""
+    """``SCENE_HOST`` with a publication switch."""
 
-    def __init__(self, *, published: bool, history: bool = False) -> None:
+    def __init__(self, *, published: bool) -> None:
         self.published = published
         self._starts: list[Callable[[], None]] = []
-        self.history_reads = 0
-        self._history = history
 
     def subject(self, session_key: str, role_id: str) -> SceneSubject | None:
         return SceneSubject(id=role_id, name="Mira", system_prompt="test")
-
-    def followup_wanted(self, role_id: str) -> bool:
-        return False
-
-    def proactive_history(
-        self, *, session_key: str, role_id: str, thread_id: str, limit: int
-    ) -> tuple[SceneHistoryMessage, ...] | None:
-        # Read only by an intake that is listening; None ends the observation.
-        self.history_reads += 1
-        return () if self._history else None
 
     def legacy_state_paths(self) -> tuple[Path, ...]:
         return ()
@@ -83,19 +72,28 @@ def _context(tmp_path: Path, host: _Host) -> FakeServiceContext:
     return context
 
 
+def _demand(context: FakeServiceContext):
+    context.fake_roles.create_role(role_id="mira", name="Mira", system_prompt="test")
+    scene = context.kernel.get(SCENE)
+    assert scene is not None
+    return scene.request(lambda role: role.id == "mira")
+
+
 async def test_intake_waits_until_the_generation_is_published(tmp_path: Path) -> None:
     host = _Host(published=False)
     context = _context(tmp_path, host)
+    background = _Background()
+    context.serve(BACKGROUND, background)
     try:
         await setup(context)
-        assert context.kernel.get(SCENE) is not None
+        _demand(context)
         await context.fake_events.fanout(_PROACTIVE)
-        assert host.history_reads == 0
+        assert background.names == []
 
         host.publish()
         await context.fake_events.fanout(_PROACTIVE)
 
-        assert host.history_reads == 1
+        assert background.names == ["scene_awareness:role:mira"]
     finally:
         await context.aclose()
 
@@ -106,18 +104,21 @@ async def test_setup_in_a_published_generation_listens_at_once(
     """An in-generation reload or enable sets the plugin up after publication."""
     host = _Host(published=True)
     context = _context(tmp_path, host)
+    background = _Background()
+    context.serve(BACKGROUND, background)
     try:
         await setup(context)
+        _demand(context)
         await context.fake_events.fanout(_PROACTIVE)
 
-        assert host.history_reads == 1
+        assert background.names == ["scene_awareness:role:mira"]
     finally:
         await context.aclose()
 
 
 async def test_only_a_registered_demand_starts_an_observation(tmp_path: Path) -> None:
-    """Without follow-up or a consumer's demand, intake does not call the model."""
-    host = _Host(published=True, history=True)
+    """Without a consumer's demand, intake does not call the model."""
+    host = _Host(published=True)
     context = _context(tmp_path, host)
     background = _Background()
     context.serve(BACKGROUND, background)
@@ -131,10 +132,10 @@ async def test_only_a_registered_demand_starts_an_observation(tmp_path: Path) ->
 
         dispose = scene.request(lambda role: role.id == "mira")
         await context.fake_events.fanout(_PROACTIVE)
-        assert len(background.names) == 1
+        assert background.names == ["scene_awareness:role:mira"]
 
         dispose()
         await context.fake_events.fanout(_PROACTIVE)
-        assert len(background.names) == 1
+        assert background.names == ["scene_awareness:role:mira"]
     finally:
         await context.aclose()

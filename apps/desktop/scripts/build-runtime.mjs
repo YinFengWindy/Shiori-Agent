@@ -26,7 +26,6 @@ const HOST_PACKAGE_ROOTS = [
   "core",
   "desktop_bridge",
   "infra",
-  "proactive_v2",
   "prompts",
   "session",
   "shiori_runtime_resources",

@@ -9,8 +9,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from proactive_v2.config import ProactiveConfig
-from proactive_v2.loop import ProactiveLoop
+from plugins.proactive.backend.config import ProactiveConfig
+from plugins.proactive.backend.loop import ProactiveLoop
 
 
 class _ProactiveTraceLoop(ProactiveLoop):
@@ -73,6 +73,7 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     loop._memory = SimpleNamespace(
         read_long_term=lambda: "remember", get_memory_context=lambda: "ctx"
     )
+    loop._host = SimpleNamespace()
     loop._sessions = SimpleNamespace(workspace=tmp_path)
     (tmp_path / "AGENTS.md").write_text("guide", encoding="utf-8")
     loop._sender = SimpleNamespace(send=AsyncMock(return_value=True))
@@ -94,9 +95,14 @@ async def test_proactive_loop_wrapper_methods_cover_paths(tmp_path: Path):
     ) == (0.5, {"x": 1})
     assert await loop._tick() == 0.2
     with pytest.MonkeyPatch.context() as mp:
-        mp.setattr("proactive_v2.loop.compute_energy", lambda last_user_at: 0.8)
-        mp.setattr("proactive_v2.loop.d_energy", lambda energy: 0.5)
-        mp.setattr("proactive_v2.loop.next_tick_from_score", lambda *args, **kwargs: 7)
+        mp.setattr(
+            "plugins.proactive.backend.loop.compute_energy", lambda last_user_at: 0.8
+        )
+        mp.setattr("plugins.proactive.backend.loop.d_energy", lambda energy: 0.5)
+        mp.setattr(
+            "plugins.proactive.backend.loop.next_tick_from_score",
+            lambda *args, **kwargs: 7,
+        )
         assert loop._next_interval() == 7
     await loop.run()
     loop._mcp_pool.connect_all.assert_awaited_once()
@@ -186,8 +192,8 @@ def test_sample_random_memory_reads_long_term_and_workspace_guide(tmp_path: Path
 async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ):
-    from agent.core.proactive_turn.delivery import resolve_target_transport
-    from proactive_v2.sensor import Sensor
+    from plugins.proactive.backend.turn.delivery import resolve_target_transport
+    from plugins.proactive.backend.sensor import Sensor
     from session.manager import SessionManager
 
     # Without a target resolver every tick fails when it picks its target.
@@ -216,7 +222,7 @@ async def test_tick_target_error_is_logged_at_loop_boundary_and_loop_continues(
     loop._wait_interval = AsyncMock(return_value=None)
     loop._run_tick = run_tick
 
-    with caplog.at_level("INFO", logger="proactive_v2.loop"):
+    with caplog.at_level("INFO", logger="plugins.proactive.backend.loop"):
         await loop._run_loop()
     assert loop._poll_task is not None
     await loop._poll_task

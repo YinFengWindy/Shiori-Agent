@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from agent.core.proactive_turn.gates import (
+from plugins.proactive.backend.turn.gates import (
     ProactiveGateAdapter,
     ProactiveGateChain,
     ProactiveGateCompletion,

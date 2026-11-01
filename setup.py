@@ -15,7 +15,6 @@ HOST_PACKAGES = (
     "core",
     "desktop_bridge",
     "infra",
-    "proactive_v2",
     "prompts",
     "session",
     "utils",

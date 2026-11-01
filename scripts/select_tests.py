@@ -102,8 +102,12 @@ _BACKEND_HOST: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("apps/backend/session", ("tests/backend/session", "tests/backend/agent")),
     (
-        "apps/backend/proactive_v2",
-        ("tests/backend/proactive_v2", "tests/backend/agent"),
+        "plugins/proactive",
+        (
+            "tests/backend/proactive_v2",
+            "tests/backend/agent",
+            "tests/backend/bootstrap",
+        ),
     ),
     ("apps/backend/bus", ("tests/backend/bus", "tests/backend/agent")),
     ("apps/backend/infra", ("tests/backend/infra", "tests/backend/agent")),

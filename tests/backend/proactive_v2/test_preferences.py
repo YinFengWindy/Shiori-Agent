@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from proactive_v2.preferences import load_proactive_preferences
+from plugins.proactive.backend.preferences import load_proactive_preferences
 
 
 def test_a_string_switch_is_rejected() -> None:

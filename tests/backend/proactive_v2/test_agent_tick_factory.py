@@ -13,9 +13,9 @@ from agent.config_models import Config
 from agent.core.turn_events import core_kernel
 from agent.provider import LLMProvider, LLMResponse
 from agent.proactive_host import HostProactiveRunner
-from proactive_v2.agent_tick_factory import AgentTickDeps, AgentTickFactory
-from proactive_v2.context import AgentTickContext
-from proactive_v2.mcp_sources import McpClientPool
+from plugins.proactive.backend.agent_tick_factory import AgentTickDeps, AgentTickFactory
+from plugins.proactive.backend.context import AgentTickContext
+from plugins.proactive.backend.mcp_sources import McpClientPool
 from tests.support.proactive_runtime import ProactiveGeneration, ProactiveRuntime
 
 
@@ -84,7 +84,7 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
     from core.roles.affection_access import AffectionGetter
     from core.roles.reply_policy import ReplyPolicyGetter
     from core.roles.reply_state import RoleReplyContext
-    from proactive_v2.tools import ToolDeps
+    from plugins.proactive.backend.tools import ToolDeps
     from session.manager import SessionManager
 
     from core.roles.store import RoleStore

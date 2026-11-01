@@ -91,7 +91,7 @@ async def test_initial_partial_core_failure_forces_unsafe_plugin_cleanup(
     app = AppRuntime(
         config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     states = []
     original_start = CoreRuntime.start
@@ -149,7 +149,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
             model_registrations=[],
         ),
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     starting = asyncio.create_task(app.start())
 
@@ -216,7 +216,7 @@ async def test_start_publishes_accounts_and_stop_drops_the_generation(
             model_registrations=[],
         ),
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     assert app.core is not None and app.core.plugin_manager is not None
@@ -262,7 +262,7 @@ async def test_started_runtime_serves_proactive_host_and_conversation(
     app = AppRuntime(
         empty_config,
         tmp_path,
-        features=RuntimeFeatures(enable_message_channels=False, enable_proactive=False),
+        features=RuntimeFeatures(enable_message_channels=False),
     )
     await app.start()
     try:

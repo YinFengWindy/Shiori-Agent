@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from zoneinfo import ZoneInfo
 
-from proactive_v2.contracts import (
+from plugins.proactive.backend.contracts import (
     MAX_METRICS_KEYS,
     AlertContract,
     normalize_alert,
     normalize_content,
     normalize_context,
 )
-from proactive_v2.event import GenericAlertEvent
+from plugins.proactive.backend.event import GenericAlertEvent
 
 
 def test_normalize_alert_supports_body_alias_and_default_severity():

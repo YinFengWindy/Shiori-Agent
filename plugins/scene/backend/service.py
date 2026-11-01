@@ -71,7 +71,7 @@ class SceneService:
             spawn=spawn,
             publish=publish,
             needs_observation=lambda role_id: observation_enabled
-            and self._role_needed(role_id, host),
+            and self._role_needed(role_id),
         )
         self._capture = self._on_turn_starting
         self._passive = self._on_turn_finished
@@ -112,7 +112,6 @@ class SceneService:
         self._controller.schedule_passive_turn(event)
         return event
 
-    def _role_needed(self, role_id: str, host: SceneHost) -> bool:
+    def _role_needed(self, role_id: str) -> bool:
         role = self._roles.get_role(role_id)
-        demanded = role is not None and self._demand.needed(role)
-        return demanded or host.followup_wanted(role_id)
+        return role is not None and self._demand.needed(role)

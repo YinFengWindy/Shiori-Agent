@@ -27,7 +27,7 @@ from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus
 from bus.events_context import ContextWindowChanged
 from bus.events_lifecycle import InitiatedMessageCommitted, ReplyMessageCommitted
-from shiori_sdk.role_events import RoleCreated, RoleDeleted
+from shiori_sdk.role_events import RoleCreated, RoleDeleted, RoleProactiveChanged
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.engine import MemoryEngine
 from shiori_sdk.core.sessions import Presence
@@ -147,6 +147,7 @@ class DesktopBridgeService:
         ] = set()
         self._role_deleted_listener = self._on_role_deleted
         self._role_created_listener = self._on_role_created
+        self._proactive_enabled_listener = self._on_proactive_enabled
         self.role_service = role_service or RoleAggregateService.from_runtime(
             workspace=workspace,
             role_store=role_store,
@@ -160,6 +161,7 @@ class DesktopBridgeService:
         )
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
         self.role_service.add_role_created_listener(self._role_created_listener)
+        self.role_store.add_proactive_enabled_listener(self._proactive_enabled_listener)
         self.conversation_service = ConversationService(session_manager)
         self.presence = presence
         self.role_tasks = RoleTaskService(
@@ -453,6 +455,14 @@ class DesktopBridgeService:
             raise ValueError("role_id required for role creation lifecycle")
         self.event_bus.enqueue(RoleCreated(clean_role_id))
 
+    def _on_proactive_enabled(self, role_id: str, enabled: bool) -> None:
+        clean_role_id = str(role_id or "").strip()
+        if not clean_role_id:
+            raise ValueError("role_id required for proactive switch")
+        self.event_bus.enqueue(
+            RoleProactiveChanged(role_id=clean_role_id, enabled=enabled)
+        )
+
     def remove_event_listener(
         self,
         listener: Callable[[dict[str, Any]], Awaitable[None] | None],
@@ -487,6 +497,9 @@ class DesktopBridgeService:
         )
         self.role_service.remove_role_deleted_listener(self._role_deleted_listener)
         self.role_service.remove_role_created_listener(self._role_created_listener)
+        self.role_store.remove_proactive_enabled_listener(
+            self._proactive_enabled_listener
+        )
         self.role_store.accounts.remove_change_listener(self._account_change_listener)
         self.role_store.identities.remove_change_listener(
             self._identity_change_listener

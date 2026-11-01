@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0"
 id: scene
 display_name: 场景观察
-version: '0.1.0'
+version: '0.1.1'
 desc: 回合结束后用轻量模型观察场景，供自动 CG 与场景追问读取
 category: system
 config_model: config:SceneConfig

@@ -2,8 +2,9 @@
 
 Observation is not on the turn's critical path, so it stays a plugin. The
 ``scene`` plugin provides ``SCENE``. The host provides ``SCENE_HOST``: role
-identity, whether the host still wants a scene follow-up, and recent proactive
-history. ``None`` from ``get(SCENE)`` means observation is off; chat still runs.
+identity and publication. Demand is ``SCENE.request``. Recent history rides
+on ``InitiatedMessageCommitted.history``. ``None`` from ``get(SCENE)`` means
+observation is off; chat still runs.
 
 ``request`` returns a disposer. The caller effects it so demand leaves with
 the caller. The plugin starts intake through ``SceneHost.on_published``: at
@@ -45,28 +46,6 @@ class SceneHost(Protocol):
 
     def subject(self, session_key: str, role_id: str) -> SceneSubject | None:
         """The role of this turn, from ``role_id`` or the session. None if absent."""
-        ...
-
-    def followup_wanted(self, role_id: str) -> bool:
-        """Whether the host's scene-follow-up strategy applies to this role.
-
-        The proactive strategy flag stays on the host until proactive leaves.
-        This is not a method on ``Roles``.
-        """
-        ...
-
-    def proactive_history(
-        self,
-        *,
-        session_key: str,
-        role_id: str,
-        thread_id: str,
-        limit: int,
-    ) -> tuple[SceneHistoryMessage, ...] | None:
-        """Recent messages for a proactive turn.
-
-        ``None`` means the turn is external context and must not be observed.
-        """
         ...
 
     def legacy_state_paths(self) -> tuple[Path, ...]:
