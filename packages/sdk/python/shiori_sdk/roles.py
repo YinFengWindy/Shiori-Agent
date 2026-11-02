@@ -52,9 +52,9 @@ class RoleExtensions(Protocol):
 class PluginSettings(Protocol):
     """Opaque read/write of one role namespace.
 
-    ``proactive`` is the namespace that exists today. The 4.0 host still parses
-    that namespace with the core proactive config until proactive leaves the
-    core. 4.x cannot add methods here later (D19, D22).
+    ``proactive`` is the namespace that exists today. The host preserves its
+    object without interpreting it; the plugin validates its own schema.
+    4.x cannot add methods here later (D19, D22).
     """
 
     def read(self) -> Mapping[str, object]:

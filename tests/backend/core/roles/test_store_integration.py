@@ -201,36 +201,6 @@ def test_role_store_persists_runtime_config_updates(tmp_path: Path):
     assert reloaded.runtime_config["nsfw_memory_enabled"] is True
 
 
-def test_role_store_drops_proactive_candidate_in_other_qq_chat_form(tmp_path: Path):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-
-    updated = store.update_role(
-        "mira",
-        proactive={
-            "enabled": True,
-            "candidates": [{"channel": "qq", "chat_id": "gqq:7"}],
-        },
-    )
-    assert updated.proactive.enabled is True
-    assert updated.proactive.candidates == ()
-
-
-def test_role_store_drops_proactive_candidate_outside_its_bindings(tmp_path: Path):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-
-    updated = store.update_role(
-        "mira",
-        proactive={
-            "enabled": True,
-            "candidates": [{"channel": "telegram", "chat_id": "42"}],
-        },
-    )
-    assert updated.proactive.enabled is True
-    assert updated.proactive.candidates == ()
-
-
 def test_role_store_delete_role_removes_role_runtime_directory(tmp_path: Path):
     service = RoleAggregateService.from_runtime(
         workspace=tmp_path,

@@ -242,7 +242,7 @@ def _seed_role(
             system_prompt=prompt,
             runtime_config={"natural_chat_enabled": natural},
         )
-        _ = roles.update_role(role_id, proactive={"enabled": True})
+        _ = roles.write_plugin_proactive(role_id, {"enabled": True})
     sessions = SessionManager(workspace)
     for role_id, name, _prompt in created:
         sessions.save(

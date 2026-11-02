@@ -21,6 +21,7 @@ class DesktopRolePresenter:
         payload = role.to_dict()
         # Stage guidance is the affection plugin's RPC (stage_prompts_get/set).
         payload.pop("affection_stage_prompts", None)
+        payload.pop("proactive", None)
         avatar = payload.get("avatar")
         illustrations = payload.get("illustrations") or []
         payload["avatar_abs"] = (

@@ -2,7 +2,6 @@ import { readPluginRoleSettings } from "../plugins/pluginRoleSettings";
 import type { SettingsSectionId } from "../settings/SettingsSidebar";
 import type { RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { AppMainView, NewRoleFormState, RoleFormState } from "../shared/types";
-import { createDefaultRoleProactiveForm } from "../roles/roleProactiveDefaults";
 
 export const sidebarMinWidth = 220;
 export const sidebarMaxWidth = 400;
@@ -119,7 +118,6 @@ export function createEmptyRoleForm(): RoleFormState {
     nsfwMemoryEnabled: false,
     naturalChatEnabled: false,
     pluginSettings: readPluginRoleSettings(),
-    ...createDefaultRoleProactiveForm(),
     avatarSource: "",
     illustrationSources: [],
     removedIllustrations: [],
@@ -152,13 +150,6 @@ export function createPendingRoleRecord(
     system_prompt: form.profile?.character?.behavior_rules ?? form.systemPrompt,
     profile: form.profile,
     runtime_config: {},
-    proactive: {
-      enabled: false,
-      candidates: [],
-      profile: "daily",
-      agent: {},
-      drift: {},
-    },
     avatar: null,
     avatar_abs: null,
     chat_background: null,

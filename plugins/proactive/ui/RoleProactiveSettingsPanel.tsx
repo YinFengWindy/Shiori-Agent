@@ -2,8 +2,8 @@ import { Select, cx } from "@yinfengwindy/shiori-sdk";
 import { CaretDown } from "@phosphor-icons/react";
 import type React from "react";
 import { useState } from "react";
-import type { RoleFormState } from "../shared/types";
-import { roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "./roleEditorStyles";
+import type { RoleProactiveFormState as RoleFormState } from "./roleProactiveDefaults";
+import { roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "@yinfengwindy/shiori-sdk";
 import { RoleProactiveExecutionFields } from "./RoleProactiveExecutionFields";
 import { roleProactiveDefaults } from "./roleProactiveDefaults";
 import { proactiveProfileOptions } from "./roleProactiveOptions";
@@ -18,7 +18,7 @@ type RoleProactiveSettingsPanelProps = {
 /**
  * The 主动推送 capability's settings dialog body: the strategy and the folded
  * 执行参数. Every field edits the role draft, so the role editor's Save/Reset
- * owns them; nothing is written until the user changes a field.
+ * owns them; nothing is written until the user saves the role.
  */
 export function RoleProactiveSettingsPanel({ devMode = false, roleForm, onUpdate }: RoleProactiveSettingsPanelProps) {
   const [executionOpen, setExecutionOpen] = useState(false);

@@ -3,7 +3,8 @@ from __future__ import annotations
 from core.roles.errors import RoleNotFoundError
 
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from copy import deepcopy
+import json
 import uuid
 from pathlib import Path
 from typing import Any
@@ -17,7 +18,6 @@ from .manifest import RoleManifestRepository
 from .models import (
     DEFAULT_ASSET_CATEGORY_ID,
     RoleAssetCategory,
-    RoleProactiveConfig,
     RoleRecord,
     default_asset_category,
 )
@@ -148,7 +148,7 @@ class RoleStore:
                 asset_categories=[default_asset_category()],
                 asset_category_bindings={},
                 runtime_config=resolved_runtime_config,
-                proactive=RoleProactiveConfig(),
+                proactive={},
                 memory_init_state={},
                 created_at=now,
                 updated_at=now,
@@ -212,7 +212,6 @@ class RoleStore:
         background: str | None = None,
         profile: RoleProfile | dict[str, Any] | None = None,
         runtime_config: dict[str, Any] | None = None,
-        proactive: RoleProactiveConfig | dict[str, Any] | None = None,
         memory_init_state: dict[str, Any] | None = None,
         avatar_source: str | Path | None = None,
         avatar_asset: str | None = None,
@@ -255,13 +254,6 @@ class RoleStore:
                     role.affection_stage_prompts = change_affection_stage_prompts(
                         dict(role.affection_stage_prompts)
                     )
-                if proactive is not None:
-                    normalized = (
-                        proactive
-                        if isinstance(proactive, RoleProactiveConfig)
-                        else RoleProactiveConfig.from_dict(proactive)
-                    )
-                    role.proactive = replace(normalized, candidates=())
                 self._update_asset_categories(
                     role,
                     asset_categories=asset_categories,
@@ -289,18 +281,17 @@ class RoleStore:
     def write_plugin_proactive(self, role_id: str, value: dict[str, Any]) -> None:
         """Write the ``proactive`` namespace for ``ROLES.plugin_settings``.
 
-        Parsed by ``RoleProactiveConfig`` until proactive leaves the core.
-        Like ``update_role``, retired candidates are cleared (#427), so a
-        plugin read-then-write cannot bring old bindings back. Extension
-        ``plugin_data`` is left as stored.
+        Values are opaque: validation and retired-field policy belong to the
+        plugin. The existing role JSON location and other fields are preserved.
         """
-        normalized = RoleProactiveConfig.from_dict(value)
+        normalized = deepcopy(value)
+        json.dumps(normalized, allow_nan=False)
         with self._lock:
             roles = self.list_roles()
             for index, role in enumerate(roles):
                 if role.id != role_id:
                     continue
-                role.proactive = replace(normalized, candidates=())
+                role.proactive = normalized
                 role.updated_at = now_iso()
                 roles[index] = role
                 self._repository.save_roles(roles)

@@ -209,60 +209,29 @@ def test_role_store_rejects_invalid_manifest_shape(tmp_path):
         store.list_roles()
 
 
-def test_role_store_persists_proactive_policy_without_legacy_candidates(
-    tmp_path,
-):
-    store = RoleStore(tmp_path)
-    store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    store.update_role(
-        "mira",
-        proactive={
-            "enabled": True,
-            "candidates": [{"channel": "telegram", "chat_id": "42"}],
-            "profile": "quiet",
-            "overrides": {"gate": {"judge_send_threshold": 0.8}},
-            "agent": {"model": "agent-model", "max_steps": 12},
-            "drift": {"enabled": True, "min_interval_hours": 6},
-        },
-    )
-
-    updated = store.update_role("mira", description="edited")
-    reloaded = store.get_role("mira")
-
-    assert updated.proactive.enabled is True
-    assert updated.proactive.candidates == ()
-    assert reloaded is not None
-    assert reloaded.proactive.profile == "quiet"
-    assert "model" not in reloaded.proactive.agent
-    assert reloaded.proactive.agent["max_steps"] == 12
-    assert reloaded.proactive.drift["min_interval_hours"] == 6
-    assert reloaded.proactive.policy_configured is True
-
-
-def test_plugin_settings_write_clears_candidates_like_update_role(tmp_path):
-    """A plugin write cannot bring back the bindings update_role retires (#427)."""
+def test_plugin_settings_preserves_opaque_data_during_other_role_edits(tmp_path):
     from core.roles.plugin_capability import HostRoles
 
     store = RoleStore(tmp_path)
     store.create_role(name="Mira", system_prompt="mira", role_id="mira")
-    roles = HostRoles(store)
-    roles.plugin_settings("mira", "proactive").write(
-        {
-            "enabled": True,
-            "candidates": [{"channel": "telegram", "chat_id": "42"}],
-            "profile": "quiet",
-        }
-    )
-
-    saved = roles.plugin_settings("mira", "proactive").read()
+    storage = HostRoles(store).plugin_settings("mira", "proactive")
+    original = {"enabled": True, "profile": "quiet", "future": {"opaque": [1, 2]}}
+    storage.write(original)
+    original["future"]["opaque"].append(3)
+    store.update_role("mira", description="edited")
     reloaded = RoleStore(tmp_path).get_role("mira")
-    assert saved["enabled"] is True
-    assert saved["profile"] == "quiet"
-    assert saved["candidates"] == []
     assert reloaded is not None
-    assert reloaded.proactive.candidates == ()
+    assert reloaded.proactive == {
+        "enabled": True,
+        "profile": "quiet",
+        "future": {"opaque": [1, 2]},
+    }
+    assert reloaded.description == "edited"
     with pytest.raises(KeyError):
-        roles.plugin_settings("mira", "other")
+        HostRoles(store).plugin_settings("mira", "other")
+    with pytest.raises(TypeError):
+        storage.write({"invalid": object()})
+    assert storage.read() == reloaded.proactive
 
 
 @pytest.mark.asyncio

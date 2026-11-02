@@ -116,6 +116,8 @@ class DesktopRoleRequestHandler:
             }
             return await handlers[method](payload)
         if method == "roles.update":
+            if "proactive" in payload:
+                raise ValueError("主动设置请通过主动推送插件保存")
             role_id = str(payload.get("role_id") or "")
             previous = self._role_service.repository.get_required(role_id)
             update_kwargs: dict[str, Any] = {
@@ -133,7 +135,6 @@ class DesktopRoleRequestHandler:
             aggregate = await self._role_service.update_role_async(
                 role_id,
                 **update_kwargs,
-                proactive=self._dict_payload(payload, "proactive"),
                 avatar_source=str(payload.get("avatar_source") or "").strip() or None,
                 avatar_asset=str(payload.get("avatar_asset") or "").strip() or None,
                 chat_background=str(payload.get("chat_background") or "").strip()

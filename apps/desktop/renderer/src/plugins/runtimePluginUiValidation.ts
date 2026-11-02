@@ -74,6 +74,7 @@ export function validateRuntimePluginUi(value: unknown, pluginId: string) {
     if ("pluginId" in settings || typeof settings.read !== "function") throw new Error("Invalid roleSettings reader or identity");
     if (settings.storage !== undefined && settings.storage !== "runtime" && settings.storage !== "plugin") throw new Error("Invalid roleSettings storage");
     if (settings.storage !== "plugin" && typeof settings.write !== "function") throw new Error("Invalid roleSettings writer");
+    if (settings.save !== undefined && (settings.storage !== "plugin" || typeof settings.save !== "function")) throw new Error("Invalid roleSettings save");
     if (settings.afterSave !== undefined && typeof settings.afterSave !== "function") throw new Error("Invalid roleSettings afterSave");
   }
 }

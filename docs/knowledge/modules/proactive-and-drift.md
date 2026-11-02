@@ -20,7 +20,7 @@ source_paths:
   - apps/backend/agent/proactive_host/
   - apps/backend/bootstrap/proactive_config_migration.py
   - apps/backend/core/identity/
-  - apps/desktop/renderer/src/roles/roleProactiveDefaults.ts
+  - plugins/proactive/ui/roleProactiveDefaults.ts
 related:
   - roles.md
   - conversations-and-sessions.md
@@ -41,7 +41,7 @@ related:
 
 ### 投递目标
 
-接收会话不再由角色手工勾选或从渠道绑定派生，而是每轮从运行时实时计算（`ProactiveTargetResolver.resolve_saved`）：角色的桌面会话，加上经该角色**在线**渠道账号（`RoleStore.accounts`）与已绑定的桌面用户身份（`RoleStore.identities`，`core/identity/`）之间的私聊，按身份绑定顺序、再按账号顺序排列。角色主动推送关闭时不选目标。`RoleProactiveConfig.candidates` 仅作为旧数据按原顺序保留，运行时不读取；渲染端 `roleProactiveDefaults.ts` 保存角色时写入空数组。
+接收会话不再由角色手工勾选或从渠道绑定派生，而是每轮从运行时实时计算（`ProactiveTargetResolver.resolve_saved`）：角色的桌面会话，加上经该角色**在线**渠道账号（`RoleStore.accounts`）与已绑定的桌面用户身份（`RoleStore.identities`，`core/identity/`）之间的私聊，按身份绑定顺序、再按账号顺序排列。角色主动推送关闭时不选目标。角色 JSON 的 `proactive.candidates` 仅作为旧数据按原顺序保留，运行时不读取；主动插件 `settings_set` 保存时清空这项已退役的绑定。核心只保存该不透明对象，不解释其字段。
 
 每轮 tick 由 `plugins/proactive/backend/sensor.py` 的 `target_transport()` 经 `target_selection.py` 选出唯一目标，发送阶段只投递这一处，不再换渠道重发。候选和线程上最后一条用户消息读 `PROACTIVE_HOST`（`candidate_chats`、`last_user_message_at`），主动开关读 `ROLES.plugin_settings(role_id, "proactive")`。桌面在场（`user_at_desktop()`，读 `AppRuntime.desktop_presence`）→ 桌面；否则 → 最近有用户消息的非桌面候选；都没有记录 → 第一个非桌面候选；没有非桌面候选 → 桌面。选中私聊时由宿主投递时解析为对应账号插件与 `AccountTarget("private", user_id)`。按角色构建的运行时用 `ProactiveConfig.role_id` 标明所服务的角色。角色配置里的全局投递目标键（`target` / `default_channel` / `default_chat_id` / `default_role_id`）在加载时被拒绝。`config.toml` 的顶层 `[proactive]` 不再解析，启动迁移直接删掉。
 

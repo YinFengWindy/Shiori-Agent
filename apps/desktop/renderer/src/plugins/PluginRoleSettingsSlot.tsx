@@ -12,6 +12,7 @@ type SlotProps = {
   drafts: PluginRoleSettingsDraft;
   snapshots?: PluginRoleSettingsDraft;
   disabled?: boolean;
+  devMode?: boolean;
   onChange: (drafts: PluginRoleSettingsDraft) => void;
 };
 
@@ -20,27 +21,28 @@ type SlotProps = {
  * Each card is keyed by role, so plugin-private state in its settings dialog
  * never outlives the role it was opened for.
  */
-export function PluginRoleSettingsSlot({ roleId, moodCatalog, drafts, snapshots, disabled, onChange }: SlotProps) {
+export function PluginRoleSettingsSlot({ roleId, moodCatalog, drafts, snapshots, disabled, devMode, onChange }: SlotProps) {
   const enabled = usePluginEnabledState();
   return pluginRoleSettingsRegistry.list().filter((entry) => enabled(entry.pluginId)).map((entry) => (
     <PluginRoleSettingsEntry key={`${entry.pluginId}:${roleId ?? "new"}`} entry={entry} roleId={roleId} moodCatalog={moodCatalog}
-      values={drafts[entry.pluginId] ?? entry.read({})} snapshot={snapshots?.[entry.pluginId]} disabled={disabled}
+      values={drafts[entry.pluginId] ?? entry.read({})} snapshot={snapshots?.[entry.pluginId]} disabled={disabled} devMode={devMode}
       onChange={(values) => onChange({ ...drafts, [entry.pluginId]: values })} />
   ));
 }
 
 /** One contribution with its scoped client and host services. */
-function PluginRoleSettingsEntry({ entry, roleId, moodCatalog, values, snapshot, disabled, onChange }: {
+function PluginRoleSettingsEntry({ entry, roleId, moodCatalog, values, snapshot, disabled, devMode, onChange }: {
   entry: PluginRoleSettingsContribution & { pluginId: string };
   roleId: string | null;
   moodCatalog: readonly string[];
   values: PluginRoleValues;
   snapshot?: PluginRoleValues;
   disabled?: boolean;
+  devMode?: boolean;
   onChange: (values: PluginRoleValues) => void;
 }) {
   const client = usePluginRpcClient(entry.pluginId);
   return <PluginHostServicesProvider services={pluginHostServicesFor(entry.pluginId)}>
-    <entry.Component roleId={roleId} client={client} moodCatalog={moodCatalog} values={values} snapshot={snapshot} disabled={disabled} onChange={onChange} />
+    <entry.Component roleId={roleId} client={client} moodCatalog={moodCatalog} values={values} snapshot={snapshot} disabled={disabled} devMode={devMode} onChange={onChange} />
   </PluginHostServicesProvider>;
 }

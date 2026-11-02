@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { createEmptyRoleForm } from "../app/appState";
+import { readRoleProactiveForm } from "./roleProactiveDefaults";
 import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
 
 test("proactive settings do not expose legacy bound target candidates", () => {
   const markup = renderToStaticMarkup(
     <RoleProactiveSettingsPanel
       roleForm={{
-        ...createEmptyRoleForm(),
+        ...readRoleProactiveForm({}),
         proactiveEnabled: true,
       }}
       onUpdate={() => undefined}

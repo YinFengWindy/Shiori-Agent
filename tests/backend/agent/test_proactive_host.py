@@ -480,7 +480,7 @@ async def test_held_lease_keeps_the_draining_generation(tmp_path) -> None:
     """
     roles = RoleStore(tmp_path)
     roles.create_role(role_id="mira", name="米拉", system_prompt="规矩")
-    roles.update_role("mira", proactive={"enabled": True})
+    roles.write_plugin_proactive("mira", {"enabled": True})
     repository = RoleRepository(roles)
     old_models = _ChatModels()
     new_models = _ChatModels()
@@ -797,7 +797,7 @@ async def _assembly(
         roles.create_role(
             role_id=role, name=role, system_prompt=f"ROLE-{role}", runtime_config=config
         )
-        roles.update_role(role, proactive={"enabled": True})
+        roles.write_plugin_proactive(role, {"enabled": True})
         sessions.save(
             sessions.open_role_session(role, role_name=role, role_runtime_config=config)
         )

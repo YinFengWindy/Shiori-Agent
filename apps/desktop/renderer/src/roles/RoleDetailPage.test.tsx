@@ -14,6 +14,9 @@ import { pluginRoleSettingsRegistry } from "../plugins/pluginFeatureRegistry";
 import { affectionUiRegistry } from "../plugins/affectionUiRegistry";
 import type { PluginRoleSettingsProps } from "@yinfengwindy/shiori-sdk";
 
+import { proactiveRoleSettings } from "../../../../../plugins/proactive/ui/roleSettings";
+import { readRoleProactiveForm } from "../../../../../plugins/proactive/ui/roleProactiveDefaults";
+
 type PageProps = Parameters<typeof RoleDetailPage>[0];
 
 function pageElement(overrides: Partial<PageProps> = {}) {
@@ -58,6 +61,7 @@ function DraftDetailPage({ onSave }: { onSave: (form: RoleFormState) => void }) 
 const profileForm: RoleFormState = {
   ...createEmptyRoleForm(),
   name: "Mira",
+  pluginSettings: { proactive: readRoleProactiveForm({}) },
   profile: {
     character: {
       profile: "A meticulous archivist.",
@@ -77,7 +81,7 @@ const role: RoleRecord = {
 describe("RoleDetailPage", () => {
   // A loaded roster: mounts read the enabled state without a bridge round-trip.
   beforeEach(() => setPluginEnabledSnapshot([]));
-  afterEach(() => resetPluginEnabledStateForTests());
+  afterEach(() => { resetPluginEnabledStateForTests(); pluginRoleSettingsRegistry.unregister("proactive"); });
 
   it("carries role-field and roleSettings drafts across tabs into one save, and resets both", async () => {
     function SampleCard({ values, onChange }: PluginRoleSettingsProps) {
@@ -182,7 +186,8 @@ describe("RoleDetailPage", () => {
   });
 
   it("saves and resets proactive edits made in its settings dialog through the shared role draft", async () => {
-    setPluginEnabledSnapshot([]);
+    pluginRoleSettingsRegistry.register({ pluginId: "proactive", ...proactiveRoleSettings });
+    setPluginEnabledSnapshot([{ id: "proactive", enabled: true, state: "ACTIVE" }]);
     let saved: RoleFormState | undefined;
     const desktop: Pick<DesktopApi, "readSettings" | "onEvent"> = {
       readSettings: async () => ({ configPath: "config.toml", formData: createSettingsDraft() }),
@@ -237,7 +242,7 @@ describe("RoleDetailPage", () => {
       await closeDialog();
       await act(async () => button("资料").click());
       await act(async () => button("保存").click());
-      assert.deepEqual(saved, { ...profileForm, proactiveEnabled: true, proactiveProfile: "quiet", proactiveAgentMaxSteps: 48, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 5 });
+      assert.deepEqual(saved, { ...profileForm, pluginSettings: { proactive: { ...profileForm.pluginSettings.proactive, proactiveEnabled: true, proactiveProfile: "quiet", proactiveAgentMaxSteps: 48, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 5 } } });
 
       await act(async () => button("能力").click());
       assert.equal(view.container.querySelector('[aria-label="主动推送"]')?.getAttribute("aria-checked"), "true");
@@ -255,8 +260,8 @@ describe("RoleDetailPage", () => {
       assert.equal(document.querySelector('[aria-label="推送策略"]')?.textContent, "日常");
       // The dialog stayed mounted on this role, so 执行参数 is still unfolded and shows the reset values.
       assert.equal(button("执行参数").getAttribute("aria-expanded"), "true");
-      assert.equal(field("空闲活动最大步数")?.value, String(profileForm.proactiveDriftMaxSteps));
-      assert.equal(field("空闲活动最小间隔（小时）")?.value, String(profileForm.proactiveDriftMinIntervalHours));
+      assert.equal(field("空闲活动最大步数")?.value, String(profileForm.pluginSettings.proactive.proactiveDriftMaxSteps));
+      assert.equal(field("空闲活动最小间隔（小时）")?.value, String(profileForm.pluginSettings.proactive.proactiveDriftMinIntervalHours));
       await closeDialog();
     } finally {
       await view.cleanup();

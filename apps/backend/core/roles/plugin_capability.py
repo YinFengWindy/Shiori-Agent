@@ -65,7 +65,7 @@ class HostRoles:
         """The baseline entry for one role namespace (D19).
 
         Only ``proactive`` is stored; any other name raises ``KeyError``. The
-        core still parses that namespace until proactive leaves it. The
+        plugin owns its schema; the core preserves the opaque object. The
         renderer ``roleSettings`` slot is separate.
         """
         if namespace != "proactive":
@@ -84,7 +84,7 @@ class _RoleProactiveSettings:
         role = self._store.get_role(self._role_id)
         if role is None:
             raise RoleNotFoundError(self._role_id)
-        return role.proactive.to_dict()
+        return dict(role.proactive)
 
     def write(self, value: Mapping[str, object]) -> None:
         self._store.write_plugin_proactive(self._role_id, dict(value))

@@ -23,7 +23,7 @@ export function writePluginRoleSettings(runtimeConfig: Record<string, unknown>, 
 /** Includes changed active independent drafts in the same roles.update transaction. */
 export function buildPluginRoleDraftUpdates(drafts: PluginRoleSettingsDraft, pluginState: PluginRoleSettingsDraft = {}) {
   return Object.fromEntries(pluginRoleSettingsRegistry.list()
-    .filter((entry) => entry.storage === "plugin" && isPluginEnabled(entry.pluginId)
+    .filter((entry) => entry.storage === "plugin" && !entry.save && isPluginEnabled(entry.pluginId)
       && drafts[entry.pluginId] !== undefined
       && JSON.stringify(drafts[entry.pluginId]) !== JSON.stringify(entry.read(pluginState[entry.pluginId] ?? {})))
     .map((entry) => [entry.pluginId, drafts[entry.pluginId]]));
@@ -64,4 +64,17 @@ export function refreshPluginRoleDrafts(drafts: PluginRoleSettingsDraft, snapsho
     }
   }
   return JSON.stringify(hydrated) === JSON.stringify(drafts) ? drafts : hydrated;
+}
+
+/** Persists RPC-owned drafts after core save; the caller retains drafts on failure. */
+export async function savePluginRoleSettings(roleId: string, drafts: PluginRoleSettingsDraft, previousState: PluginRoleSettingsDraft, onSaved: (pluginId: string, snapshot: PluginRoleValues) => void) {
+  for (const entry of pluginRoleSettingsRegistry.list()) {
+    if (entry.storage !== "plugin" || !entry.save || !isPluginEnabled(entry.pluginId)) continue;
+    const values = drafts[entry.pluginId];
+    const previous = entry.read(previousState[entry.pluginId] ?? {});
+    if (!values || JSON.stringify(values) === JSON.stringify(previous)) continue;
+    const client = createPluginRpcClient(entry.pluginId);
+    try { onSaved(entry.pluginId, await entry.save(roleId, values, previous, client)); }
+    finally { await client.dispose(); }
+  }
 }

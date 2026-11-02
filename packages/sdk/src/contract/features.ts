@@ -26,6 +26,8 @@ export type PluginRoleSettingsProps = {
   /** Latest plugin-owned projection, distinct from the editable draft. */
   snapshot?: PluginRoleValues;
   disabled?: boolean;
+  /** Whether the host enables developer-only settings. */
+  devMode?: boolean;
   onChange: (values: PluginRoleValues) => void;
 };
 
@@ -37,7 +39,16 @@ export type PluginRoleSettingsContribution = {
   afterSave?: (values: PluginRoleValues, client: PluginRpcClient) => Promise<void>;
 } & (
   | { storage?: "runtime"; write: (runtimeConfig: Record<string, unknown>, values: PluginRoleValues) => Record<string, unknown> }
-  | { storage: "plugin" }
+  | {
+      storage: "plugin";
+      /**
+       * Saves through plugin RPC after core persistence. Unlike plugin_drafts,
+       * this is a separate commit: failure keeps the plugin draft for retry.
+       * Return the persisted projection to update the baseline even if refresh fails.
+       * Omit to participate in the existing atomic role extension transaction.
+       */
+      save?: (roleId: string, values: PluginRoleValues, previous: PluginRoleValues, client: PluginRpcClient) => Promise<PluginRoleValues>;
+    }
 );
 
 /** Identifies an existing message image without exposing the host's mutable session state. */

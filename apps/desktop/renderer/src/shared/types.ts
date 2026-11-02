@@ -76,14 +76,6 @@ export type RoleFormState = {
   naturalChatEnabled: boolean;
   /** Draft values owned by registered role-setting plugins. */
   pluginSettings: import("../plugins/pluginRoleSettings").PluginRoleSettingsDraft;
-  /** Enables both proactive messages and idle activity for this role. */
-  proactiveEnabled?: boolean;
-  proactiveProfile?: string;
-  proactiveAgentMaxSteps?: number;
-  proactiveAgentContentLimit?: number;
-  proactiveAgentWebFetchMaxChars?: number;
-  proactiveDriftMaxSteps?: number;
-  proactiveDriftMinIntervalHours?: number;
   avatarSource: string;
   illustrationSources: string[];
   removedIllustrations: string[];

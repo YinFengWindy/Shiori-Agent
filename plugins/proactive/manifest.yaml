@@ -11,6 +11,7 @@ inject:
   - process_resources
   - processes
   - roles
+  - rpc
   - conversation
   - sessions
   - workspace
@@ -23,3 +24,5 @@ optional_inject:
   - reply_policy
   - memory_engine
   - main_model
+frontend:
+  entry: ui/index.tsx

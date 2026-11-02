@@ -1,6 +1,6 @@
 import type React from "react";
-import type { RoleFormState } from "../shared/types";
-import { roleFieldClass, roleFieldLabelClass } from "./roleEditorStyles";
+import type { RoleProactiveFormState as RoleFormState } from "./roleProactiveDefaults";
+import { roleFieldClass, roleFieldLabelClass } from "@yinfengwindy/shiori-sdk";
 import { roleProactiveDefaults } from "./roleProactiveDefaults";
 
 type NumberField =
