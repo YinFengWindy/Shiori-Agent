@@ -4,6 +4,10 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 ## 4.0.0
 
+- **breaking**（P6b-5，#907）：主动角色设置面板归 `plugins/proactive/ui`，通过 `roleSettings` 的 `storage: "plugin"` 挂载；核心 `roles.update` 拒绝 `proactive` 字段，前端 SDK 删除 `RoleProactiveConfig` / `RoleProactiveCandidate` 和角色响应中的该字段。插件投影进入 `plugin_state`，`plugin.proactive.settings_set` 通过 `ROLES.plugin_settings` 写原角色 JSON 的同一字段；核心不再解释其配置内容。
+- `roleSettings` 新增可选 `save(roleId, values, previous, client)` 与 props `devMode`。RPC 保存发生在核心保存之后，失败保留插件草稿、更新核心基线并提示部分成功；原有无 `save` 贡献的原子扩展事务不变。主动 RPC 只合并已编辑字段并保留最新 overrides 等未编辑内容；禁用插件后面板消失、数据保留。
+
+
 尚未发布到 npm / PyPI。桌面要等插件系统重构做完才带这个 SDK 出包。
 
 - manifest 只接受 `api: 4`，并要求 `sdk` 最低约束。基线是 `>=4.0.0`。

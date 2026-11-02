@@ -24,6 +24,7 @@ from shiori_sdk.core.services import (
     PROCESS_RESOURCES,
     PROCESSES,
     ROLES,
+    RPC,
     WORKSPACE,
 )
 from shiori_sdk.core.sessions import SESSIONS
@@ -32,6 +33,7 @@ from shiori_sdk.roles import Roles, RoleView
 from shiori_sdk.runtime import PluginRuntimeContext
 
 from .plugin_config import ProactivePluginConfig
+from .role_settings import ProactiveRoleSettings
 from .service import ProactiveBinding, ProactiveService
 from .turn.scene_subscription import SceneFollowupSubscription
 
@@ -51,6 +53,13 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     config = ProactivePluginConfig.model_validate(ctx.require(CONFIG).as_dict())
     events = ctx.require(EVENTS)
     roles = ctx.require(ROLES)
+    settings = ProactiveRoleSettings(roles)
+    ctx.effect(
+        "proactive.role_settings",
+        roles.extensions.register("proactive", settings.reject_draft, settings.project),
+    )
+    rpc = ctx.require(RPC)
+    rpc.register("settings_set", settings.set)
     scene = ctx.get(SCENE)
     if scene is not None and config.scene_followup:
         ctx.effect(

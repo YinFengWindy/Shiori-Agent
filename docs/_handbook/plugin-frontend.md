@@ -88,3 +88,10 @@ surface 组件收到 `SurfaceHandle`（`PluginSurfaceComponentProps`）。`onRol
 `@yinfengwindy/shiori-sdk/testing`：`mountTestComponent` / `changeInputValue` / `mockableWindowTimers`（happy-dom 挂载）、`chooseSelectOption`、`deferred`、`createFakeHostServices`（可断言的内存 `host`）、`createFakeSurfaceHandle`、`createFakePluginClient`。假的 `host.ui` 组件只渲染文本、按钮和 ARIA，不带宿主样式和看板娘，`persona` 在记录下来的 props 上断言。宿主侧的插件 UI 测试用 `pnpm desktop:test:plugin-ui`。
 
 独立构建的示例在 `tests/fixtures/external-plugin/`：复制到仓库外即可用它自己固定版本的 pnpm / esbuild 构建，把 TSX / TS 编成 ESM、把宿主对等依赖设为 external，不需要宿主源码；构建和校验命令见该目录的 README。
+
+`roleSettings` 的 `storage: "plugin"` 贡献可提供 `save(roleId, values, previous, client)`。
+回调返回已保存的投影，宿主逐项更新基线；写入成功但后续通知或刷新失败会如实报告已保存。
+有此回调时，草稿不进入 `roles.update.plugin_drafts`，宿主先保存核心角色，再调用插件 RPC；
+没有回调的贡献仍参加原有的原子角色扩展事务。RPC 失败时核心基线已更新、素材的一次性操作已清空，
+插件草稿保留供重试或重置，并明确提示部分保存。两次提交不构成跨 RPC 的原子事务。
+`devMode` 是可选的宿主开发模式标志；主动插件借此保持原有开发验证策略的可见性。

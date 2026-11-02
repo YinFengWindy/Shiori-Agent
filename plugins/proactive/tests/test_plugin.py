@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
+from shiori_sdk.testing.roles import FakeRoleExtensions
 from pathlib import Path
 
 import pytest
@@ -52,10 +54,17 @@ class _Settings:
     def read(self) -> dict[str, object]:
         return dict(self._role.settings)
 
+    def write(self, value):
+        self._role.settings = dict(value)
+
 
 class _Roles:
     def __init__(self, *roles: _Role) -> None:
         self._roles = {role.id: role for role in roles}
+        self.extensions = FakeRoleExtensions()
+
+    def read_scope(self):
+        return nullcontext()
 
     def add(self, role: _Role) -> None:
         self._roles[role.id] = role
@@ -225,3 +234,57 @@ async def test_a_non_boolean_switch_fails_setup(tmp_path: Path) -> None:
             await setup(context)
     finally:
         await context.aclose()
+
+
+async def test_role_settings_rpc_preserves_latest_unedited_fields_and_validates_before_write(
+    tmp_path,
+):
+    from pydantic import ValidationError
+
+    role = _Role("mira", False)
+    role.settings.update(
+        {
+            "profile": "quiet",
+            "overrides": {"gate": {"judge_send_threshold": 0.8}},
+            "agent": {"max_steps": 12, "model": "retired"},
+            "drift": {"enabled": True, "min_interval_hours": 6},
+            "candidates": [{"channel": "telegram", "chat_id": "42"}],
+            "future": {"opaque": "kept"},
+            "policy_configured": False,
+        }
+    )
+    roles = _Roles(role)
+    context = _context(tmp_path, model=None)
+    context.serve(ROLES, roles)
+    try:
+        await setup(context)
+        # User changed only the switch; another save changed max_steps meanwhile.
+        role.settings["agent"]["max_steps"] = 21
+        result = await context.fake_rpc.handlers["settings_set"](
+            {
+                "role_id": "mira",
+                "values": {"proactiveEnabled": True},
+            }
+        )
+        assert result["proactiveEnabled"] is True
+        assert result["proactiveAgentMaxSteps"] == 21
+        assert role.settings["overrides"] == {"gate": {"judge_send_threshold": 0.8}}
+        assert role.settings["future"] == {"opaque": "kept"}
+        assert role.settings["policy_configured"] is False
+        assert role.settings["candidates"] == []
+        assert "model" not in role.settings["agent"]
+        assert "enabled" not in role.settings["drift"]
+        previous = dict(role.settings)
+        with pytest.raises(ValidationError):
+            await context.fake_rpc.handlers["settings_set"](
+                {
+                    "role_id": "mira",
+                    "values": {"proactiveEnabled": False, "proactiveAgentMaxSteps": 0},
+                }
+            )
+        assert role.settings == previous
+        project = roles.extensions.participants["proactive"][1]
+        assert project("mira", {}) == result
+    finally:
+        await context.aclose()
+    assert "proactive" not in roles.extensions.participants

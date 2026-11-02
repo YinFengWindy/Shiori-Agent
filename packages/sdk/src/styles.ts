@@ -169,3 +169,18 @@ export const compactIconButtonClass = cx(
  * SDK's capability settings dialog.
  */
 export const dialogBackdropClass = "confirm-dialog-backdrop motion-backdrop fixed inset-0 z-50 bg-ink/30 backdrop-blur-sm";
+
+/** Shared geometry and typography of the existing role editor controls. */
+export const roleControlClass = "w-full rounded-md border px-3.5 py-2.5 text-body text-ink transition placeholder:text-ink-faint";
+
+/** Unified input/select surface for the role editor tabs, capability cards and create page. */
+export const roleFieldClass = cx(roleControlClass, "border-transparent bg-surface-soft hover:bg-surface-hover focus:bg-surface");
+
+/** Field label wrapper with the shared caption color. */
+export const roleFieldLabelClass = "grid gap-1.5 text-caption text-ink-muted";
+
+/** Compact quiet action rendered beside section headings (添加, 编辑参数). */
+export const rolePanelGhostButtonClass = cx(
+  pressableClass,
+  "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-body-sm font-medium text-ink-secondary hover:bg-surface-hover hover:text-ink disabled:cursor-not-allowed disabled:text-ink-faint",
+);

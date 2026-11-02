@@ -8,8 +8,6 @@ from .services import (
 )
 from .models import (
     RoleAssetCategory,
-    RoleProactiveCandidate,
-    RoleProactiveConfig,
     RoleRecord,
 )
 from .profile_models import (
@@ -31,8 +29,6 @@ __all__ = [
     "RoleAssetCategory",
     "RoleMemoryService",
     "RoleRecord",
-    "RoleProactiveCandidate",
-    "RoleProactiveConfig",
     "RoleRepository",
     "RoleExecutionContext",
     "RoleRequest",

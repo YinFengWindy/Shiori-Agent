@@ -30,7 +30,6 @@ export type RoleRecord = {
     character?: { profile?: string; personality?: string; behavior_rules?: string };
   };
   runtime_config: Record<string, unknown>;
-  proactive?: RoleProactiveConfig;
   avatar: string | null;
   avatar_abs: string | null;
   chat_background: string | null;
@@ -60,30 +59,4 @@ export type RoleAssetCategory = {
   id: string;
   name: string;
   allow_role_send: boolean;
-};
-
-/** A session that may receive proactive messages, by channel and chat id. */
-export type RoleProactiveCandidate = {
-  channel: string;
-  chat_id: string;
-};
-
-/** A role's proactive messaging settings. */
-export type RoleProactiveConfig = {
-  enabled: boolean;
-  /** Candidate sessions in binding order; each message goes to the one the backend selects. */
-  candidates: RoleProactiveCandidate[];
-  profile?: string;
-  overrides?: Record<string, Record<string, number>>;
-  agent?: {
-    max_steps?: number;
-    content_limit?: number;
-    web_fetch_max_chars?: number;
-  };
-  drift?: {
-    /** Legacy persisted field; idle activity now follows the main enabled switch. */
-    enabled?: boolean;
-    max_steps?: number;
-    min_interval_hours?: number;
-  };
 };

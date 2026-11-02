@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
-import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, pluginRoleSettingsDirty, readPluginRoleSettings, writePluginRoleSettings } from "./pluginRoleSettings";
+import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, pluginRoleSettingsDirty, readPluginRoleSettings, refreshPluginRoleDrafts, writePluginRoleSettings } from "./pluginRoleSettings";
 
 test("role extensions round trip their keys without replacing another module's values", () => {
   pluginRoleSettingsRegistry.register({ pluginId: "sample", Component: () => null,
@@ -18,6 +18,18 @@ test("role extensions round trip their keys without replacing another module's v
   } finally {
     pluginRoleSettingsRegistry.unregister("sample");
   }
+});
+
+test("merging saved fields keeps newer edits without changing the persisted snapshot", () => {
+  pluginRoleSettingsRegistry.register({ pluginId: "sample", storage: "plugin", Component: () => null, read: (state) => state });
+  try {
+    const submitted = { sample: { enabled: true, limit: 10 } };
+    const current = { sample: { enabled: false, limit: 10 } };
+    const persisted = { sample: { enabled: true, limit: 50 } };
+    const refreshed = refreshPluginRoleDrafts(current, persisted, submitted);
+    assert.deepEqual(refreshed, { sample: { enabled: false, limit: 50 } });
+    assert.deepEqual(persisted, { sample: { enabled: true, limit: 50 } });
+  } finally { pluginRoleSettingsRegistry.unregister("sample"); }
 });
 
 test("independent drafts keep explicit save semantics without touching runtime_config", async () => {

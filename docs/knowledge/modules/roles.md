@@ -64,3 +64,5 @@ related:
 - 业务入口显式携带 `role_id`。
 - 角色身份与渠道账号分离；渠道标识和账号 ID 不能替代角色主键。
 - 运行时派生状态不应反向覆盖角色持久化定义，除非经过 owning service。
+
+主动角色设置由 proactive 插件的 `roleSettings` 卡片与 `settings_set` RPC 拥有；`ROLES.plugin_settings` 只保存原角色 JSON 的不透明对象。核心 `roles.update` 拒绝 `proactive`。RPC 草稿与核心保存是两个提交点，失败保留主动草稿、更新核心基线并提示部分保存；普通插件扩展草稿仍走原来的原子事务。

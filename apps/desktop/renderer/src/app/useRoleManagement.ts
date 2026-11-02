@@ -1,12 +1,12 @@
-import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved } from "../plugins/pluginRoleSettings";
+import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, refreshPluginRoleDrafts, savePluginRoleSettings } from "../plugins/pluginRoleSettings";
 import type React from "react";
 import { useRolePluginRefresh } from "./useRolePluginRefresh";
 import { waitForMinimumRoleCardBusy } from "./appState";
-import type { RoleAssetCategory, RoleRecord, SessionPayload } from "@yinfengwindy/shiori-sdk";
+import { useLatestRef, errorMessage, type RoleAssetCategory, type RoleRecord, type SessionPayload } from "@yinfengwindy/shiori-sdk";
 import type { RoleFormState, PendingRoleCardAction } from "../shared/types";
 import type { AppMainView } from "../shared/types";
 import type { NavigationEntry } from "./appState";
-import { buildRoleProactiveConfig, buildRoleRuntimeConfig } from "../roles/roleFormState";
+import { buildRoleRuntimeConfig } from "../roles/roleFormState";
 import type { FeedbackReporter } from "../shared/feedback/feedbackStore";
 
 type UseRoleManagementArgs = {
@@ -77,6 +77,7 @@ export function useRoleManagement({
   rememberIllustration,
   roleAssetSaveRequestIdRef,
 }: UseRoleManagementArgs) {
+  const currentRoleId = useLatestRef(detailRoleId);
   const refreshDetailRoleForPlugins = useRolePluginRefresh({ detailRoleId, detailRole, roleFormRef, loadRolesFromBridge, updateRoleForm, reportError: feedback.error });
   async function refreshRolesAndResolveRole(updated: RoleRecord): Promise<{
     resolvedRole: RoleRecord;
@@ -112,7 +113,6 @@ export function useRoleManagement({
         system_prompt: nextRoleForm.systemPrompt,
         profile: nextRoleForm.profile,
         runtime_config: buildRoleRuntimeConfig(detailRole, nextRoleForm),
-        proactive: buildRoleProactiveConfig(detailRole, nextRoleForm),
         plugin_drafts: buildPluginRoleDraftUpdates(nextRoleForm.pluginSettings, detailRole?.plugin_state),
         avatar_source: nextRoleForm.avatarSource || undefined,
         illustration_sources: nextRoleForm.illustrationSources,
@@ -125,17 +125,62 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
-    await notifyPluginRoleSaved(nextRoleForm.pluginSettings, detailRole?.runtime_config, detailRole?.plugin_state);
-    const { resolvedRole } = await refreshRolesAndResolveRole(updated);
-    updateRoleForm((current) => ({
-      ...current,
-      avatarSource: "",
-      illustrationSources: [],
-      removedIllustrations: [],
-    }));
-    await openRole(updated.id, resolvedRole, { recordHistory: false });
-    setSavingRole(false);
-    feedback.success("角色已保存");
+    let committedRole = updated;
+    // Core fields are already committed. Update their baseline and retire the
+    // one-shot asset operations before attempting the independent plugin RPC.
+    setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
+    if (currentRoleId.current === updated.id) {
+      updateRoleForm((current) => ({
+        ...current,
+        avatarSource: current.avatarSource === nextRoleForm.avatarSource ? "" : current.avatarSource,
+        illustrationSources: current.illustrationSources === nextRoleForm.illustrationSources ? [] : current.illustrationSources,
+        removedIllustrations: current.removedIllustrations === nextRoleForm.removedIllustrations ? [] : current.removedIllustrations,
+      }));
+    }
+    const postSaveErrors: string[] = [];
+    async function notifySaved(pluginId?: string) {
+      try { await notifyPluginRoleSaved(nextRoleForm.pluginSettings, detailRole?.runtime_config, detailRole?.plugin_state, pluginId); }
+      catch (error: unknown) { postSaveErrors.push(errorMessage(error)); }
+    }
+    // Atomic extension drafts already committed with the role. Their effects
+    // must not depend on a later independent plugin write succeeding.
+    await notifySaved();
+    try {
+      await savePluginRoleSettings(updated.id, nextRoleForm.pluginSettings, detailRole?.plugin_state ?? {}, async (pluginId, snapshot) => {
+        committedRole = { ...committedRole, plugin_state: { ...committedRole.plugin_state, [pluginId]: snapshot } };
+        setRoles((current) => current.map((role) => role.id === updated.id
+          ? { ...role, plugin_state: { ...role.plugin_state, [pluginId]: snapshot } } : role));
+        if (currentRoleId.current === updated.id) {
+          updateRoleForm((current) => {
+            const pluginSettings = refreshPluginRoleDrafts(current.pluginSettings, { [pluginId]: snapshot }, nextRoleForm.pluginSettings);
+            return pluginSettings === current.pluginSettings ? current : { ...current, pluginSettings };
+          });
+        }
+        await notifySaved(pluginId);
+      }, (error) => postSaveErrors.push(errorMessage(error)));
+    } catch (error: unknown) {
+      // Keep failed drafts dirty even if refreshing the other persisted values fails.
+      let detail = errorMessage(error);
+      try { if (await loadRolesFromBridge() === null) detail += "；角色列表刷新失败"; }
+      catch (refreshError: unknown) { detail += `；刷新失败：${errorMessage(refreshError)}`; }
+      if (postSaveErrors.length) detail += `；已保存设置的后续处理失败：${postSaveErrors.join("；")}`;
+      setSavingRole(false);
+      feedback.error(`角色已保存，插件设置未保存：${detail}`);
+      return;
+    }
+    try {
+      const { resolvedRole, nextRoles } = await refreshRolesAndResolveRole(committedRole);
+      if (nextRoles === null) postSaveErrors.push("角色列表刷新失败");
+      if (currentRoleId.current === updated.id) {
+        await openRole(updated.id, resolvedRole, { recordHistory: false });
+      }
+    } catch (error: unknown) {
+      postSaveErrors.push(errorMessage(error));
+    } finally {
+      setSavingRole(false);
+    }
+    if (postSaveErrors.length) feedback.error(`角色及插件设置已保存，后续处理失败：${postSaveErrors.join("；")}`);
+    else feedback.success("角色已保存");
   }
 
   async function saveRoleAssets(nextSelection?: {

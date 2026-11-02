@@ -18,94 +18,6 @@ def normalize_role_id(role_id: str) -> str:
 
 
 @dataclass(frozen=True)
-class RoleProactiveCandidate:
-    """One session of the role that may receive proactive messages."""
-
-    channel: str
-    chat_id: str
-
-    def to_dict(self) -> dict[str, str]:
-        return {"channel": self.channel, "chat_id": self.chat_id}
-
-    @classmethod
-    def from_dict(cls, payload: object) -> "RoleProactiveCandidate":
-        if not isinstance(payload, dict):
-            raise ValueError("主动推送候选会话必须是对象")
-        channel = str(payload.get("channel") or "").strip()
-        chat_id = str(payload.get("chat_id") or "").strip()
-        if not channel or not chat_id:
-            raise ValueError("主动推送候选会话必须包含 channel 和 chat_id")
-        return cls(channel=channel, chat_id=chat_id)
-
-
-@dataclass(frozen=True)
-class RoleProactiveConfig:
-    """角色自己的主动推送候选会话、策略与执行参数。
-
-    ``candidates`` retains legacy default destinations in saved order. An
-    enabled role with no candidates starts from its desktop session and may
-    choose an owned communication account during the turn.
-    """
-
-    enabled: bool = False
-    candidates: tuple[RoleProactiveCandidate, ...] = ()
-    profile: str = "daily"
-    overrides: dict[str, Any] = field(default_factory=dict)
-    agent: dict[str, Any] = field(default_factory=dict)
-    drift: dict[str, Any] = field(default_factory=dict)
-    policy_configured: bool = False
-
-    def to_dict(self) -> dict[str, Any]:
-        agent = dict(self.agent)
-        agent.pop("model", None)
-        return {
-            "enabled": self.enabled,
-            "candidates": [candidate.to_dict() for candidate in self.candidates],
-            "profile": self.profile,
-            "overrides": dict(self.overrides),
-            "agent": agent,
-            "drift": dict(self.drift),
-            "policy_configured": self.policy_configured,
-        }
-
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> "RoleProactiveConfig":
-        data = payload if isinstance(payload, dict) else {}
-        profile = str(data.get("profile") or "daily").strip()
-        if not profile:
-            raise ValueError("角色主动推送 profile 不能为空")
-        agent = _proactive_dict_field(data, "agent")
-        agent.pop("model", None)
-        raw_candidates = data.get("candidates", [])
-        if not isinstance(raw_candidates, list):
-            raise ValueError("角色主动推送 candidates 必须是数组")
-        return cls(
-            enabled=bool(data.get("enabled", False)),
-            candidates=tuple(
-                RoleProactiveCandidate.from_dict(item) for item in raw_candidates
-            ),
-            profile=profile,
-            overrides=_proactive_dict_field(data, "overrides"),
-            agent=agent,
-            drift=_proactive_dict_field(data, "drift"),
-            policy_configured=(
-                bool(data.get("policy_configured"))
-                if "policy_configured" in data
-                else any(
-                    key in data for key in ("profile", "overrides", "agent", "drift")
-                )
-            ),
-        )
-
-
-def _proactive_dict_field(data: dict[str, Any], field_name: str) -> dict[str, Any]:
-    value = data.get(field_name, {})
-    if not isinstance(value, dict):
-        raise ValueError(f"角色主动推送 {field_name} 必须是对象")
-    return dict(value)
-
-
-@dataclass(frozen=True)
 class RoleAssetCategory:
     """角色素材库中的单归属分类。"""
 
@@ -152,7 +64,7 @@ class RoleRecord:
     asset_categories: list[RoleAssetCategory]
     asset_category_bindings: dict[str, str]
     runtime_config: dict[str, Any]
-    proactive: RoleProactiveConfig
+    proactive: dict[str, Any]
     memory_init_state: dict[str, Any]
     created_at: str
     updated_at: str
@@ -175,7 +87,7 @@ class RoleRecord:
             for path, category_id in self.asset_category_bindings.items()
             if normalize_rel_path(path)
         }
-        payload["proactive"] = self.proactive.to_dict()
+        payload["proactive"] = dict(self.proactive)
         payload["profile"] = self.profile.to_dict()
         return payload
 
@@ -226,7 +138,7 @@ class RoleRecord:
             asset_categories=categories,
             asset_category_bindings=bindings,
             runtime_config=dict(payload.get("runtime_config") or {}),
-            proactive=RoleProactiveConfig.from_dict(payload.get("proactive")),
+            proactive=dict(payload.get("proactive") or {}),
             memory_init_state=dict(payload.get("memory_init_state") or {}),
             created_at=str(payload.get("created_at") or now_iso()),
             updated_at=str(payload.get("updated_at") or now_iso()),

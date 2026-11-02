@@ -6,7 +6,6 @@ import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { createEmptyRoleForm } from "../app/appState";
 import { resetPluginEnabledStateForTests, setPluginEnabledSnapshot } from "../plugins/pluginEnabledStateStore";
 import { createSettingsDraft } from "../settings/testFixtures";
-import type { RoleFormState } from "../shared/types";
 import { RoleCapabilitiesPanel } from "./RoleCapabilitiesPanel";
 
 describe("RoleCapabilitiesPanel", () => {
@@ -38,64 +37,7 @@ describe("RoleCapabilitiesPanel", () => {
 
     assert.match(markup, /运行能力/);
     assert.match(markup, /已启用/);
-    assert.doesNotMatch(markup, /桌宠/);
+    assert.doesNotMatch(markup, /桌宠|主动推送/);
   });
 
-  it("keeps the proactive switch on its capability card and its parameters in the card's dialog", async () => {
-    setPluginEnabledSnapshot([]);
-    const initialForm = { ...createEmptyRoleForm(), proactiveProfile: "quiet", proactiveAgentMaxSteps: 42, proactiveDriftMaxSteps: 9, proactiveDriftMinIntervalHours: 4 };
-    let form: RoleFormState = initialForm;
-    const panel = () => <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={form} onUpdate={(next) => { form = typeof next === "function" ? next(form) : next; }} />;
-    const view = await mountTestComponent(panel(), { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: createSettingsDraft() }) } } });
-    try {
-      assert.deepEqual(Array.from(view.container.querySelectorAll("h2"), (heading) => heading.textContent), ["运行能力"]);
-      assert.equal(view.container.querySelector('[aria-label="推送策略"]'), null);
-      const capability = view.container.querySelector('[data-testid="role-proactive-capability"]');
-      assert.equal(capability?.closest("section")?.querySelector("h2")?.textContent, "运行能力");
-      assert.match(capability?.textContent ?? "", /未启用/);
-      const toggle = capability?.querySelector<HTMLButtonElement>('[role="switch"][aria-label="主动推送"]');
-      assert.ok(toggle);
-      assert.equal(view.container.querySelectorAll('[role="switch"][aria-label="主动推送"]').length, 1);
-
-      await act(async () => toggle.click());
-      assert.deepEqual(form, { ...initialForm, proactiveEnabled: true });
-      await view.render(panel());
-      assert.equal(toggle.getAttribute("aria-checked"), "true");
-      assert.match(capability?.textContent ?? "", /已启用/);
-
-      await act(async () => toggle.click());
-      assert.deepEqual(form, initialForm);
-      await view.render(panel());
-      assert.equal(toggle.getAttribute("aria-checked"), "false");
-      await act(async () => capability?.querySelector<HTMLButtonElement>('button[aria-label="主动推送设置"]')?.click());
-      assert.ok(document.querySelector('[role="dialog"] [aria-label="推送策略"]'), "disabling proactive push keeps its parameters available");
-      assert.deepEqual(form, initialForm, "opening the dialog leaves the draft untouched");
-    } finally {
-      await view.cleanup();
-      resetPluginEnabledStateForTests();
-    }
-  });
-
-  for (const devMode of [false, true]) {
-    it(`preserves developer strategy visibility with devMode=${devMode}`, async () => {
-      setPluginEnabledSnapshot([]);
-      const settings = createSettingsDraft();
-      settings.advanced.devMode = devMode;
-      const view = await mountTestComponent(
-        <RoleCapabilitiesPanel activeRole={null} bridgeReady roleForm={createEmptyRoleForm()} onUpdate={() => undefined} />,
-        { windowGlobals: { miraDesktop: { onEvent: () => () => undefined, invoke: async () => ({ error: null, payload: { providers: [] } }), readSettings: async () => ({ formData: settings }) } } },
-      );
-      try {
-        await act(async () => view.container.querySelector<HTMLButtonElement>('button[aria-label="主动推送设置"]')?.click());
-        const picker = document.querySelector<HTMLButtonElement>('[role="combobox"][aria-label="推送策略"]');
-        assert.ok(picker);
-        await act(async () => picker.click());
-        const options = Array.from(document.querySelectorAll('[role="option"]'), (option) => option.textContent);
-        assert.deepEqual(options, devMode ? ["日常", "低打扰", "开发验证"] : ["日常", "低打扰"]);
-      } finally {
-        await view.cleanup();
-        resetPluginEnabledStateForTests();
-      }
-    });
-  }
 });
