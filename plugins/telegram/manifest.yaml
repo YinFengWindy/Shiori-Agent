@@ -27,4 +27,4 @@ contributes:
           chat_id_label: 群组 ID
           chat_id_hint: 以 - 开头的群组 ID
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

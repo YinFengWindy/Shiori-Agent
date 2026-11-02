@@ -10,10 +10,7 @@ REACT_API_VERSION = "19.2.0"
 
 @dataclass(frozen=True)
 class HostRuntimeContract:
-    """React peer versions a package's ``peer_dependencies`` must admit.
-
-    Kept for ``renderer`` until P7; P8 deletes this module (D4).
-    """
+    """Host React versions that compiled frontend peer metadata must admit."""
 
     renderer_peers: dict[str, str] = field(
         default_factory=lambda: {

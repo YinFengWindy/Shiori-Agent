@@ -55,7 +55,7 @@ const host = new PluginBackgroundHost({
   registry: pluginBackgroundRegistry,
   async listEnabledPluginIds() {
     const plugins = await pluginBridge.listPlugins();
-    await loadRuntimeBackground(plugins.flatMap((plugin) => plugin.rendererBackground ? [plugin.rendererBackground] : []));
+    await loadRuntimeBackground(plugins.flatMap((plugin) => plugin.frontend?.exports.includes("background") ? [plugin.frontend] : []));
     return activePluginIds(plugins);
   },
   subscribeRosterChanged(listener) {

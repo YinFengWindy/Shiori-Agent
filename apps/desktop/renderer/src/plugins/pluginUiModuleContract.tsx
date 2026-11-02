@@ -1,3 +1,4 @@
+import type { PluginFrontendModule } from "@yinfengwindy/shiori-sdk";
 import type React from "react";
 import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { usePluginRpcClient } from "./usePluginRpcClient";
@@ -9,7 +10,7 @@ import { createPluginSchemaSettingsSection } from "./pluginSchemaSettingsSection
 import { retiredPluginUiContribution } from "./runtimePluginUiValidation";
 import { pluginUiRegistry } from "./pluginUiRegistry";
 
-/** Narrows an unknown default export down to a well-formed PluginUiModule, without an unsafe cast. */
+/** Narrows an unknown named export down to a well-formed PluginUiModule, without an unsafe cast. */
 function isPluginUiModule(value: unknown): value is PluginUiModule {
   if (value === null || typeof value !== "object") return false;
   return "pluginId" in value && typeof value.pluginId === "string";
@@ -36,19 +37,20 @@ function bindPluginClient<TBaseProps extends object>(
 }
 
 /**
- * Registers every plugin UI module found by the build-time glob into
+ * Registers every plugin UI module found by the frontend inventory into
  * `pluginUiRegistry`. Pure and DOM-free (only mutates the passed registry)
  * so it is unit-testable with a hand-built `modules` record instead of a
  * real `import.meta.glob` result, which only Vite can produce.
  */
 export function applyPluginUiModules(
-  modules: Record<string, { default: PluginUiModule }>,
+  modules: Record<string, PluginFrontendModule>,
   registry = pluginUiRegistry,
 ): void {
   for (const [path, mod] of Object.entries(modules)) {
-    const uiModule = mod.default;
+    const uiModule = mod.ui;
+    if (mod.ui === undefined) continue;
     if (!isPluginUiModule(uiModule)) {
-      console.error(`[pluginUiModules] ${path} 的默认导出不是合法的 PluginUiModule，已跳过`);
+      console.error(`[pluginUiModules] ${path} 的ui 导出不是合法的 PluginUiModule，已跳过`);
       continue;
     }
     const retired = retiredPluginUiContribution(uiModule);
@@ -76,7 +78,7 @@ export function applyPluginUiModules(
       // surface lives inside 「插件」, alongside "已安装", instead of
       // flattening the sidebar. This is also what makes a hand-written
       // module win over `pluginSettingsAutoRegistration`'s config-schema
-      // auto-registration — this call always runs first (build-time glob /
+      // auto-registration — this call always runs first (frontend inventory /
       // runtime synchronizeUi both resolve before the roster refresh that
       // drives auto-registration), so a later auto-registration attempt for
       // the same plugin id hits `registerSettingsSubsection`'s duplicate

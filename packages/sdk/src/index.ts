@@ -219,3 +219,5 @@ export type { AsrRequest, AsrResult, TtsRequest, TtsResult } from "./contract/sp
 export { roleControlClass, roleFieldClass, roleFieldLabelClass, rolePanelGhostButtonClass } from "./styles";
 
 export type { PluginFrontendModule } from "./contract/frontend";
+
+export type { PluginFrontendExport } from "./contract/frontendNames";

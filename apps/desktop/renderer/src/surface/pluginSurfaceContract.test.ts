@@ -32,7 +32,7 @@ afterEach(() => {
 test("registers a well-formed surface module under its plugin id", () => {
   const registry = new PluginSurfaceRegistry();
   applyPluginSurfaceModules(
-    { "/plugins/demo/surface/index.tsx": { default: { pluginId: "demo", surface: { component } } } },
+    { "/plugins/demo/surface/index.tsx": { surface: { pluginId: "demo", surface: { component } } } },
     registry,
   );
   assert.deepEqual(registry.get("demo"), { slot: "desktop.surface", pluginId: "demo", Component: component });
@@ -43,13 +43,13 @@ test("a malformed module is reported and skipped, and never blocks a valid one",
   const registry = new PluginSurfaceRegistry();
   applyPluginSurfaceModules(
     {
-      "/plugins/a/surface/index.tsx": { default: null as unknown as PluginSurfaceModule },
-      "/plugins/b/surface/index.tsx": { default: { surface: { component } } as unknown as PluginSurfaceModule },
-      "/plugins/c/surface/index.tsx": { default: { pluginId: "c" } as unknown as PluginSurfaceModule },
+      "/plugins/a/surface/index.tsx": { surface: null as unknown as PluginSurfaceModule },
+      "/plugins/b/surface/index.tsx": { surface: { surface: { component } } as unknown as PluginSurfaceModule },
+      "/plugins/c/surface/index.tsx": { surface: { pluginId: "c" } as unknown as PluginSurfaceModule },
       "/plugins/d/surface/index.tsx": {
-        default: { pluginId: "d", surface: { component: "nope" } } as unknown as PluginSurfaceModule,
+        surface: { pluginId: "d", surface: { component: "nope" } } as unknown as PluginSurfaceModule,
       },
-      "/plugins/good/surface/index.tsx": { default: { pluginId: "good", surface: { component } } },
+      "/plugins/good/surface/index.tsx": { surface: { pluginId: "good", surface: { component } } },
     },
     registry,
   );
@@ -61,11 +61,11 @@ test("a duplicate plugin id is warned about rather than silently replacing the f
   const registry = new PluginSurfaceRegistry();
   const second = () => null;
   applyPluginSurfaceModules(
-    { "/plugins/demo/surface/index.tsx": { default: { pluginId: "demo", surface: { component } } } },
+    { "/plugins/demo/surface/index.tsx": { surface: { pluginId: "demo", surface: { component } } } },
     registry,
   );
   applyPluginSurfaceModules(
-    { "/plugins/demo/surface/index.tsx": { default: { pluginId: "demo", surface: { component: second } } } },
+    { "/plugins/demo/surface/index.tsx": { surface: { pluginId: "demo", surface: { component: second } } } },
     registry,
   );
   assert.equal(registry.get("demo")?.Component, component);
@@ -75,7 +75,7 @@ test("a duplicate plugin id is warned about rather than silently replacing the f
 test("unregistering a plugin removes its surface", () => {
   const registry = new PluginSurfaceRegistry();
   applyPluginSurfaceModules(
-    { "/plugins/demo/surface/index.tsx": { default: { pluginId: "demo", surface: { component } } } },
+    { "/plugins/demo/surface/index.tsx": { surface: { pluginId: "demo", surface: { component } } } },
     registry,
   );
   registry.unregister("demo");

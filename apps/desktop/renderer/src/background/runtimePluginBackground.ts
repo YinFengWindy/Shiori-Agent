@@ -1,5 +1,5 @@
 import { loadRuntimePluginModules } from "../plugins/runtimePluginModuleLoader";
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 import type { PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { isPluginBackgroundModule } from "./pluginBackgroundContract";
 import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./pluginBackgroundRegistry";
@@ -8,8 +8,8 @@ import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./plugi
 export type RuntimePluginBackgroundHost = {
   importModule: (url: string) => Promise<Record<string, unknown>>;
   loadCss: (url: string) => Promise<() => void>;
-  succeeded?: (entry: RuntimePluginUi) => void;
-  failed: (entry: RuntimePluginUi, error: unknown) => void;
+  succeeded?: (entry: RuntimePluginFrontend) => void;
+  failed: (entry: RuntimePluginFrontend, error: unknown) => void;
 };
 
 /** Rejects a malformed contribution, or one whose identity does not match its admitted package. */
@@ -29,7 +29,7 @@ export function createRuntimePluginBackgroundLoader(
 ) {
   const loaded = new Map<string, { token: string | undefined; dispose: () => void }>();
   const failures = new Map<string, { token: string | undefined; error: unknown }>();
-  return async (entries: RuntimePluginUi[]): Promise<string[]> => {
+  return async (entries: RuntimePluginFrontend[]): Promise<string[]> => {
     const admitted = new Set(entries.map((entry) => entry.pluginId));
     for (const [id, state] of loaded) {
       if (!admitted.has(id)) { state.dispose(); loaded.delete(id); }
@@ -53,10 +53,10 @@ export function createRuntimePluginBackgroundLoader(
         continue;
       }
       let succeeded = false;
-      const dispose = await loadRuntimePluginModules([entry], {
+      const dispose = await loadRuntimePluginModules([entry], "background", {
         importModule: async (url) => {
           const cached = registry.get(entry.pluginId);
-          return cached ? { default: { pluginId: cached.pluginId, setup: cached.setup } } : host.importModule(url);
+          return cached ? { background: { pluginId: cached.pluginId, setup: cached.setup } } : host.importModule(url);
         },
         loadCss: host.loadCss,
         validate: assertRuntimePluginBackgroundModule,

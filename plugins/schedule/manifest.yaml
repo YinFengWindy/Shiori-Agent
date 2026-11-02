@@ -17,4 +17,4 @@ inject:
 provides:
   - scheduler
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

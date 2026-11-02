@@ -1,5 +1,5 @@
 import { validateRuntimePluginUi } from "./runtimePluginUiValidation";
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 import { loadRuntimePluginModules } from "./runtimePluginModuleLoader";
 
@@ -9,8 +9,8 @@ export type RuntimePluginUiHost = {
   loadCss: (url: string) => Promise<() => void>;
   register: (module: PluginUiModule) => void;
   unregister: (pluginId: string) => void;
-  succeeded?: (entry: RuntimePluginUi) => void;
-  failed: (entry: RuntimePluginUi, error: unknown) => void;
+  succeeded?: (entry: RuntimePluginFrontend) => void;
+  failed: (entry: RuntimePluginFrontend, error: unknown) => void;
 };
 
 /**
@@ -20,8 +20,8 @@ export type RuntimePluginUiHost = {
  * order, what gets reported) is unchanged from before that loader was
  * extracted for `background` and `surface` to reuse.
  */
-export async function loadRuntimePluginUi(entries: RuntimePluginUi[], host: RuntimePluginUiHost) {
-  return loadRuntimePluginModules(entries, { ...host, validate: assertRuntimePluginUiModule });
+export async function loadRuntimePluginUi(entries: RuntimePluginFrontend[], host: RuntimePluginUiHost) {
+  return loadRuntimePluginModules(entries, "ui", { ...host, validate: assertRuntimePluginUiModule });
 }
 
 /** Rejects malformed contributions before any registry mutation. */

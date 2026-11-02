@@ -1,45 +1,37 @@
-import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { builtinPluginDirectories, readPluginManifest, PLUGIN_RENDERER_SOURCES } from "../../../scripts/plugin-distribution.mjs";
+import { builtinPluginDirectories, readPluginManifest } from "../../../scripts/plugin-distribution.mjs";
 
 import { frontendExports } from "../../../scripts/plugin-frontend.mjs";
 
-const prefix = "virtual:shiori-builtin-plugins/";
+const moduleId = "virtual:shiori-builtin-plugins";
 
 /** Generate imports before bundling, so external source never enters the host graph. */
-export async function builtinPluginEntrySource(pluginsRoot, kind) {
-  if (!Object.hasOwn(PLUGIN_RENDERER_SOURCES, kind)) throw new Error(`Unknown plugin entry kind: ${kind}`);
-  const entries = [];
+export async function builtinPluginEntrySource(pluginsRoot) {
+  const paths = [];
   for (const directory of await builtinPluginDirectories(pluginsRoot)) {
     const manifest = await readPluginManifest(directory);
-    const exports = await frontendExports(directory, manifest);
-    if (exports.length) {
-      if (exports.includes(kind)) entries.push({ path: join(directory, manifest.frontend.entry), exportName: kind });
-    } else {
-      // Temporary P7-4 source adapter, never a compatibility path for old APIs.
-      const path = join(directory, PLUGIN_RENDERER_SOURCES[kind]);
-      if (existsSync(path)) entries.push({ path, exportName: "default" });
-    }
+    if (!manifest.frontend) continue;
+    await frontendExports(directory, manifest);
+    paths.push(join(directory, manifest.frontend.entry));
   }
   return {
-    paths: entries.map(({ path }) => path),
+    paths,
     code: [
-      ...entries.map(({ path }, index) => `import * as entry${index} from ${JSON.stringify(path.replaceAll("\\", "/"))};`),
-      `export default {${entries.map(({ path, exportName }, index) => `${JSON.stringify(path)}: {default:entry${index}.${exportName}}`).join(",")}};`,
+      ...paths.map((path, index) => `import * as entry${index} from ${JSON.stringify(path.replaceAll("\\", "/"))};`),
+      `export default {${paths.map((path, index) => `${JSON.stringify(path)}: entry${index}`).join(",")}};`,
     ].join("\n"),
   };
 }
 
-/** Vite boundary for the three host-owned static contribution registries. */
+/** One Vite module inventories all declared builtin frontend namespaces. */
 export function builtinPluginEntries(pluginsRoot) {
-  const ids = Object.keys(PLUGIN_RENDERER_SOURCES).map((kind) => prefix + kind);
+  const ids = [moduleId];
   return {
     name: "shiori-builtin-plugin-entries",
     resolveId(id) { if (ids.includes(id)) return `\0${id}`; },
     async load(id) {
       if (!ids.some((candidate) => id === `\0${candidate}`)) return;
-      const kind = id.slice(id.lastIndexOf("/") + 1);
-      const result = await builtinPluginEntrySource(pluginsRoot, kind);
+      const result = await builtinPluginEntrySource(pluginsRoot);
       for (const path of result.paths) this.addWatchFile(path);
       return result.code;
     },

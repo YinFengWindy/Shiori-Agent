@@ -19,9 +19,11 @@ id: manual_trust_qa
 version: 1.0.0
 entry: backend/plugin.py
 inject: [rpc]
-peer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}
-renderer:
-  ui: {entry: ui/dist/index.mjs, css: [ui/dist/style.css]}
+frontend:
+  entry: ui/dist/index.mjs
+  exports: [ui]
+  css: [ui/dist/style.css]
+  peers: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0', '@yinfengwindy/shiori-sdk': '>=4.0.0 <5.0.0'}
 `, "utf8");
 await writeFile(resolve(packageRoot, "backend", "plugin.py"), "from pathlib import Path\nwith (Path(__file__).parents[3] / 'backend-executions.txt').open('a', encoding='utf-8') as marker: marker.write('executed\\n')\nasync def ping(payload): return {'pong': payload.get('value')}\nfrom shiori_sdk.core.services import RPC\nasync def setup(ctx): ctx.require(RPC).register('ping', ping)\n", "utf8");
 const entryPath = resolve(packageRoot, "ui", "dist", "index.mjs");
@@ -36,7 +38,7 @@ function View({client}) {
     React.createElement('button', {onClick:async()=>setReply('RPC '+(await client.call('ping',{value:42})).pong)}, '调用后端'),
     React.createElement('p', {role:'status'}, reply));
 }
-export default {pluginId:'manual_trust_qa',navPage:{label:'手动信任验证',component:View}};
+export const ui = {pluginId:'manual_trust_qa',navPage:{label:'手动信任验证',component:View}};
 `, "utf8");
 await writeFile(resolve(packageRoot, "ui", "dist", "style.css"), ".manual-trust-qa { padding: 2rem; } .manual-trust-qa button { margin: 1rem; padding: 1rem; }", "utf8");
 

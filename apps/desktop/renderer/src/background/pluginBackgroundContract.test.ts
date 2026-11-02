@@ -33,7 +33,7 @@ afterEach(() => {
 test("registers a well-formed background module under its plugin id", () => {
   const registry = new PluginBackgroundRegistry();
   applyPluginBackgroundModules(
-    { "/plugins/demo/background/index.ts": { default: { pluginId: "demo", setup } } },
+    { "/plugins/demo/background/index.ts": { background: { pluginId: "demo", setup } } },
     registry,
   );
   assert.deepEqual(registry.get("demo"), { slot: "app.background", pluginId: "demo", setup });
@@ -44,13 +44,13 @@ test("a malformed module is reported and skipped, and never blocks a valid one",
   const registry = new PluginBackgroundRegistry();
   applyPluginBackgroundModules(
     {
-      "/plugins/a/background/index.ts": { default: null as unknown as PluginBackgroundContribution },
-      "/plugins/b/background/index.ts": { default: { setup } as unknown as PluginBackgroundContribution },
-      "/plugins/c/background/index.ts": { default: { pluginId: "c" } as unknown as PluginBackgroundContribution },
+      "/plugins/a/background/index.ts": { background: null as unknown as PluginBackgroundContribution },
+      "/plugins/b/background/index.ts": { background: { setup } as unknown as PluginBackgroundContribution },
+      "/plugins/c/background/index.ts": { background: { pluginId: "c" } as unknown as PluginBackgroundContribution },
       "/plugins/d/background/index.ts": {
-        default: { pluginId: "d", setup: "nope" } as unknown as PluginBackgroundContribution,
+        background: { pluginId: "d", setup: "nope" } as unknown as PluginBackgroundContribution,
       },
-      "/plugins/good/background/index.ts": { default: { pluginId: "good", setup } },
+      "/plugins/good/background/index.ts": { background: { pluginId: "good", setup } },
     },
     registry,
   );
@@ -62,11 +62,11 @@ test("a duplicate plugin id is warned about rather than silently replacing the f
   const registry = new PluginBackgroundRegistry();
   const secondSetup = () => {};
   applyPluginBackgroundModules(
-    { "/plugins/demo/background/index.ts": { default: { pluginId: "demo", setup } } },
+    { "/plugins/demo/background/index.ts": { background: { pluginId: "demo", setup } } },
     registry,
   );
   applyPluginBackgroundModules(
-    { "/plugins/demo/background/index.ts": { default: { pluginId: "demo", setup: secondSetup } } },
+    { "/plugins/demo/background/index.ts": { background: { pluginId: "demo", setup: secondSetup } } },
     registry,
   );
   assert.equal(registry.get("demo")?.setup, setup);
@@ -76,7 +76,7 @@ test("a duplicate plugin id is warned about rather than silently replacing the f
 test("unregistering a plugin removes its background entry", () => {
   const registry = new PluginBackgroundRegistry();
   applyPluginBackgroundModules(
-    { "/plugins/demo/background/index.ts": { default: { pluginId: "demo", setup } } },
+    { "/plugins/demo/background/index.ts": { background: { pluginId: "demo", setup } } },
     registry,
   );
   registry.unregister("demo");

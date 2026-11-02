@@ -22,9 +22,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `entry` | 外部包必填 | 包内 `.py` 后端入口；内置包默认 `backend/plugin.py` |
 | `inject` / `optional_inject` / `provides` | 否 | 服务 Key 名，见[服务 Key](#服务-key)。同一个名字不能同时在 `inject` 和 `optional_inject`；任何以 `host.` 开头的名字都拒绝 |
 | `contributes.channels` | 否 | 静态渠道声明；非空时 `inject` 必须含 `channels`。规则见[渠道插件](channel-plugins.md) |
-| `frontend.entry` | 否 | 包内前端入口，具名导出 `ui` / `background` / `surface`。外部构建生成同一 ESM 的 `frontend.exports` 和 `frontend.css`，见[前端契约](plugin-frontend.md#入口与产物) |
-| `renderer` | 否 | 预编译的 `ui` / `background` / `surface` 入口，**临时保留到 P7**，见[前端契约](plugin-frontend.md#入口与产物) |
-| `peer_dependencies` | 声明 `renderer` 时必填 | `react` 与 `react-dom` 的范围，随 `renderer` 保留到 P7 |
+| `frontend.entry` | 否 | 包内前端入口，具名导出 `ui` / `background` / `surface`。外部构建生成同一 ESM 的 `frontend.exports`、`frontend.css` 和 `frontend.peers`，见[前端契约](plugin-frontend.md#入口与产物) |
 | `assets` | 否 | 必须存在的包内常规文件列表，默认 `[]` |
 | `dependencies` / `optional_dependencies` | 否 | 插件 ID 列表（强 / 可选），不能重复出现在两边 |
 | `supports_hot_unload` | 否 | 布尔，默认 `true`；`false` 的插件只能随重启变化 |
@@ -34,11 +32,11 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 已删除：`runtime_api`、`capabilities`、`package_contract`、顶层 `channels` 按名字拒绝（「api: 4 不再接受 …」）；`host_dependencies` 在外部包里是未知字段。`api` 先于 `sdk` 检查，所以 `api: 2` 且缺 `sdk` 报的是 `unsupported_api`。
 
-### `sdk` 与 `peer_dependencies` 的比较语法
+### `sdk` 与 `frontend.peers` 的比较语法
 
 两者用同一套小语法（`agent/plugin_host/versions.py`）：空格分隔的 `=`、`>`、`>=`、`<`、`<=` 比较，逻辑与；不带运算符的 SemVer 表示相等。例如 `>=4.0.0`、`>=4.0.0 <5.0.0`。**不支持** caret（`^`）、tilde（`~`）、通配、逗号、`||` 和连字符范围，`4` 这种不完整版本也不行。build 元数据不参与比较。宿主是预发布版本时，必须有一条比较项写的是同一 `主.次.补丁` 的预发布版本才算满足。
 
-`sdk` 写错语法：安装和发现都是 `invalid_manifest`。语法对但不包含当前 SDK：安装被拒（`incompatible_sdk`），已装的包和内置包在名册里是 `BLOCKED` / `incompatible_sdk`，不中断启动。`peer_dependencies` 写错语法是 `invalid_version_range`，宿主的 React 不满足是 `incompatible_runtime`，缺少 `react` 或 `react-dom` 是 `missing_dependency`。
+`sdk` 写错语法：安装和发现都是 `invalid_manifest`。语法对但不包含当前 SDK：安装被拒（`incompatible_sdk`），已装的包和内置包在名册里是 `BLOCKED` / `incompatible_sdk`，不中断启动。`frontend.peers` 写错语法是 `invalid_version_range`，宿主的 React 不满足是 `incompatible_runtime`，缺少 `react`、`react-dom` 或 `@yinfengwindy/shiori-sdk` 是 `missing_dependency`。
 
 ## setup 上下文
 

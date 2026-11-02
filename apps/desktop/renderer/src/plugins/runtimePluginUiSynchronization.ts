@@ -1,5 +1,5 @@
 import { errorMessage } from "@yinfengwindy/shiori-sdk";
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 import { loadRuntimePluginUi, type RuntimePluginUiHost } from "./runtimePluginUi";
 
 /**
@@ -11,12 +11,12 @@ import { loadRuntimePluginUi, type RuntimePluginUiHost } from "./runtimePluginUi
  * package change.
  *
  * Written as an exclusion rather than a list of the fields to compare, so a
- * field added to `RuntimePluginUi` later participates in the diff by
+ * field added to `RuntimePluginFrontend` later participates in the diff by
  * default. The safe failure for an unknown new field is an extra reload; a
  * field that silently stops being compared would leave stale code loaded
  * with nothing to signal it.
  */
-function packageIdentity(entry: RuntimePluginUi): string {
+function packageIdentity(entry: RuntimePluginFrontend): string {
   // `JSON.stringify` omits undefined-valued keys, so overriding is enough to
   // drop the token while every other field — present and future — is carried
   // through by the spread.
@@ -33,7 +33,7 @@ export function createRuntimePluginUiSynchronization(host: RuntimePluginUiHost) 
   const loaded = new Map<string, { identity: string; token: string | undefined; error?: unknown; dispose: () => void }>();
   const failures = new Map<string, string>();
   let tail = Promise.resolve(new Map<string, string>());
-  const synchronize = async (entries: RuntimePluginUi[]) => {
+  const synchronize = async (entries: RuntimePluginFrontend[]) => {
     const identities = new Map(entries.map((entry) => [entry.pluginId, packageIdentity(entry)]));
     for (const [id, value] of loaded) {
       if (identities.get(id) === value.identity) continue;
@@ -64,7 +64,7 @@ export function createRuntimePluginUiSynchronization(host: RuntimePluginUiHost) 
     }
     return new Map(failures);
   };
-  return (entries: RuntimePluginUi[]) => {
+  return (entries: RuntimePluginFrontend[]) => {
     tail = tail.then(() => synchronize(entries), () => synchronize(entries));
     return tail;
   };

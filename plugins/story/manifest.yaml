@@ -15,4 +15,4 @@ inject:
   - workspace
   - models
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

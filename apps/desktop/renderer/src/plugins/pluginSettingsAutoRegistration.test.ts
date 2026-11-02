@@ -145,9 +145,9 @@ describe("synchronizePluginSettingsAutoRegistration (issue #230 AC 5/6)", () => 
     // Mirrors real production ordering: the build-time glob (pluginUiModules.ts)
     // registers every hand-written module before the roster's first refresh
     // ever runs auto-registration.
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/novelai/ui/index.tsx": {
-        default: {
+        ui: {
           pluginId: "novelai",
           settingsSection: { kind: "schema", label: "NovelAI" },
           navPage: { label: "生图", component: () => null },

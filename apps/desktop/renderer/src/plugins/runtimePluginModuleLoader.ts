@@ -1,4 +1,5 @@
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { PluginFrontendExport } from "@yinfengwindy/shiori-sdk";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 
 /**
  * Loader boundaries shared by every runtime-admitted plugin renderer entry
@@ -22,8 +23,8 @@ export type RuntimePluginModuleLoadHost<TModule> = {
    * back `entry.activationToken` in the backend activation report (#262) —
    * the only current consumer of either callback.
    */
-  succeeded?: (entry: RuntimePluginUi) => void;
-  failed: (entry: RuntimePluginUi, error: unknown) => void;
+  succeeded?: (entry: RuntimePluginFrontend) => void;
+  failed: (entry: RuntimePluginFrontend, error: unknown) => void;
 };
 
 /**
@@ -39,7 +40,8 @@ export type RuntimePluginModuleLoadHost<TModule> = {
  * partial failure) is unchanged.
  */
 export async function loadRuntimePluginModules<TModule>(
-  entries: RuntimePluginUi[],
+  entries: RuntimePluginFrontend[],
+  exportName: PluginFrontendExport,
   host: RuntimePluginModuleLoadHost<TModule>,
 ) {
   const dispose: (() => void)[] = [];
@@ -49,7 +51,7 @@ export async function loadRuntimePluginModules<TModule>(
       if (entry.error) throw new Error(entry.error);
       for (const css of entry.css) styles.push(await host.loadCss(css));
       const namespace = await host.importModule(entry.entry);
-      const module = namespace[entry.exportName ?? "default"];
+      const module = namespace[exportName];
       host.validate(module, entry.pluginId);
       host.register(module);
       host.succeeded?.(entry);

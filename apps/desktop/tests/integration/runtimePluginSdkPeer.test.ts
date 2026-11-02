@@ -23,7 +23,7 @@ async function importPrecompiledPlugin(source: string) {
   // The wrapper reads the realm global the peers were installed on.
   Object.defineProperty(globalThis, "__shioriPluginPeers", { configurable: true, value: Reflect.get(window, "__shioriPluginPeers") });
   try {
-    return (await import(/* @vite-ignore */ `data:text/javascript,${encodeURIComponent(precompiled)}`)).default;
+    return (await import(/* @vite-ignore */ `data:text/javascript,${encodeURIComponent(precompiled)}`)).ui;
   } finally { Reflect.deleteProperty(globalThis, "__shioriPluginPeers"); }
 }
 
@@ -35,7 +35,7 @@ test("a precompiled plugin importing the SDK through the import map receives the
     initializeRuntimePluginPeers();
     const plugin = await importPrecompiledPlugin([
       'import { PluginBridgeError } from "@yinfengwindy/shiori-sdk";',
-      'export default { pluginId: "external_sdk", PluginBridgeError };',
+      'export const ui = { pluginId: "external_sdk", PluginBridgeError };',
     ].join("\n"));
     assert.equal(plugin.PluginBridgeError, PluginSdk.PluginBridgeError);
     assert.ok(new PluginSdk.PluginBridgeError("gone", "plugin_unavailable") instanceof plugin.PluginBridgeError);
@@ -50,7 +50,7 @@ test("a precompiled plugin importing the removed usePrivateDraft fails to load, 
     initializeRuntimePluginPeers();
     await assert.rejects(importPrecompiledPlugin([
       'import { usePrivateDraft } from "@yinfengwindy/shiori-sdk";',
-      'export default { pluginId: "external_sdk", usePrivateDraft };',
+      'export const ui = { pluginId: "external_sdk", usePrivateDraft };',
     ].join("\n")), (error: unknown) => error instanceof SyntaxError && /usePrivateDraft/.test(error.message));
   } finally { await view.cleanup(); }
 });
@@ -66,10 +66,10 @@ test("a precompiled plugin's usePluginHostServices reads the services the host m
       'import { usePluginHostServices } from "@yinfengwindy/shiori-sdk";',
       "const seen = [];",
       "function Page() { seen.push(usePluginHostServices()); return null; }",
-      'export default { pluginId: "external_sdk", navPage: { label: "External", component: Page }, seen };',
+      'export const ui = { pluginId: "external_sdk", navPage: { label: "External", component: Page }, seen };',
     ].join("\n"));
     const registry = new PluginUiRegistry();
-    applyPluginUiModules({ "external_sdk/ui.mjs": { default: plugin } }, registry);
+    applyPluginUiModules({ "external_sdk/ui.mjs": { ui: plugin } }, registry);
     const NavPage = registry.getNavPage("external_sdk")?.Component as ComponentType<{ pageId: string }>;
     await view.render(createElement(NavPage, { pageId: "external_sdk" }));
     assert.ok(plugin.seen.length > 0);

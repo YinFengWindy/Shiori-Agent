@@ -25,8 +25,8 @@ async function loadOwnRuntimeSurface() {
   if (!key) return;
   const pluginBridge = createPluginBridgeClient();
   const plugins = await pluginBridge.listPlugins();
-  const entry = plugins.find((plugin) => plugin.id === key.pluginId)?.rendererSurface;
-  if (!entry) return;
+  const entry = plugins.find((plugin) => plugin.id === key.pluginId)?.frontend;
+  if (!entry?.exports.includes("surface")) return;
   await loadRuntimePluginSurface(entry, {
     importModule: importRuntimePluginModule,
     loadCss: loadRuntimePluginCss,

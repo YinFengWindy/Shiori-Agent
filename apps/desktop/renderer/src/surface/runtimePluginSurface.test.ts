@@ -9,9 +9,9 @@ test("registers a well-formed external surface entry into the shared registry", 
   const registry = new PluginSurfaceRegistry();
   const events: string[] = [];
   await loadRuntimePluginSurface(
-    { pluginId: "demo", entry: "demo.mjs", css: ["demo.css"] },
+    { pluginId: "demo", entry: "demo.mjs", css: ["demo.css"], exports: ["surface" as const] },
     {
-      importModule: async () => { events.push("import"); return { default: { pluginId: "demo", surface: { component: Component } } }; },
+      importModule: async () => { events.push("import"); return { surface: { pluginId: "demo", surface: { component: Component } } }; },
       loadCss: async (url) => { events.push(`css ${url}`); return () => events.push(`remove ${url}`); },
       failed: () => assert.fail("unexpected failure"),
     },
@@ -25,7 +25,7 @@ test("a declared entry's own error is reported and never imported or registered"
   const registry = new PluginSurfaceRegistry();
   const failures: unknown[] = [];
   await loadRuntimePluginSurface(
-    { pluginId: "demo", entry: "demo.mjs", css: [], error: "package changed" },
+    { pluginId: "demo", entry: "demo.mjs", css: [], exports: ["surface" as const], error: "package changed" },
     {
       importModule: async () => assert.fail("a declared-invalid entry must not be imported"),
       loadCss: async () => assert.fail("a declared-invalid entry must not load CSS"),
@@ -42,9 +42,9 @@ test("a malformed module removes its loaded CSS and is reported, not registered"
   const removed: string[] = [];
   const failures: unknown[] = [];
   await loadRuntimePluginSurface(
-    { pluginId: "demo", entry: "demo.mjs", css: ["demo.css"] },
+    { pluginId: "demo", entry: "demo.mjs", css: ["demo.css"], exports: ["surface" as const] },
     {
-      importModule: async () => ({ default: { pluginId: "demo" /* no surface.component */ } }),
+      importModule: async () => ({ surface: { pluginId: "demo" /* no surface.component */ } }),
       loadCss: async (url) => () => removed.push(url),
       failed: (pluginId, error) => failures.push([pluginId, error]),
     },
@@ -59,9 +59,9 @@ test("an entry whose identity does not match its admitted pluginId is refused", 
   const registry = new PluginSurfaceRegistry();
   const failures: unknown[] = [];
   await loadRuntimePluginSurface(
-    { pluginId: "demo", entry: "demo.mjs", css: [] },
+    { pluginId: "demo", entry: "demo.mjs", css: [], exports: ["surface" as const] },
     {
-      importModule: async () => ({ default: { pluginId: "other", surface: { component: Component } } }),
+      importModule: async () => ({ surface: { pluginId: "other", surface: { component: Component } } }),
       loadCss: async () => () => {},
       failed: (pluginId, error) => failures.push([pluginId, error]),
     },

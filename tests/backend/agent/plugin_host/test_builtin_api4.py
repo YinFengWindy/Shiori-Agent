@@ -157,7 +157,7 @@ def test_builtin_plugin_manifest_matches_require(plugin_dir: Path) -> None:
     manifest = load_manifest(plugin_dir)
     assert manifest is not None
     assert satisfies(__version__, manifest.sdk)
-    # The parser rejects the other removed fields; renderer is kept until P7.
+    # Legacy renderer declarations have been removed from API 4.
     assert "renderer" not in manifest.metadata
     assert not ({"sessions", "session_store"} <= set(manifest.inject))
     for name in (*manifest.inject, *manifest.optional_inject, *manifest.provides):
@@ -166,9 +166,6 @@ def test_builtin_plugin_manifest_matches_require(plugin_dir: Path) -> None:
     if manifest.channels:
         assert "channels" in manifest.inject
         assert manifest.category == "channel"
-    ui = plugin_dir / "ui" / "index.tsx"
-    if ui.is_file():
-        assert manifest.frontend_entry == "ui/index.tsx"
     if manifest.frontend_entry is not None:
         assert (plugin_dir / manifest.frontend_entry).is_file()
 

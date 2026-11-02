@@ -1,36 +1,17 @@
+import type { PluginFrontendExport } from "@yinfengwindy/shiori-sdk/contract";
 /** Controlled origin for admitted, precompiled plugin renderer resources. */
 export const pluginUiScheme = "shiori-plugin";
 
-/**
- * One admitted (or failed-to-admit) workspace renderer entry returned by the
- * main process. The same shape serves all three renderer contribution
- * points (`renderer.ui`, `renderer.background`, `renderer.surface`) — they
- * are admitted under identical trust and resource-authorization rules, so
- * only the field name they travel under (`renderer_ui` / `renderer_background`
- * / `renderer_surface`, see `ipcRegistrations.ts`) tells them apart.
- */
-export type RuntimePluginUi = {
+/** One admitted frontend namespace and its package-scoped resources. */
+export type RuntimePluginFrontend = {
   pluginId: string;
-  /** Named contribution selected from a unified frontend namespace. */
-  exportName?: "ui" | "background" | "surface";
   entry: string;
   css: string[];
+  exports: PluginFrontendExport[];
   error?: string;
-  /**
-   * Opaque per-activation-attempt identity, echoed back by
-   * `plugins.activation.report` (#262). Shared by every kind a plugin
-   * declares — it identifies the backend handle, not the renderer entry —
-   * so a report about a since-superseded generation's abandoned load cannot
-   * be mistaken for one belonging to the plugin's current handle.
-   */
+  /** Opaque identity echoed to activation reports; never inferred from code identity. */
   activationToken?: string;
 };
-
-/** The three renderer contribution points a plugin package may declare (`renderer_contract.py`). */
-export type PluginRendererKind = "ui" | "background" | "surface";
-
-/** One `RuntimePluginUi` grant tagged with which renderer contribution point it admits. */
-export type RuntimePluginRendererEntry = RuntimePluginUi & { kind: PluginRendererKind };
 
 /**
  * Module export names guaranteed by the renderer peer ABI, keyed by the bare

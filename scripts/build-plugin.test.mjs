@@ -9,6 +9,7 @@ import test from "node:test";
 import { buildPlugin } from "./build-plugin.mjs";
 import { pathToFileURL } from "node:url";
 
+const peers = { react: ">=19.2.0 <20.0.0", "react-dom": ">=19.2.0 <20.0.0", "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0" };
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("one frontend artifact carries named contributions without starting their effects", async (t) => {
@@ -17,12 +18,13 @@ test("one frontend artifact carries named contributions without starting their e
   const source = join(root, "source");
   await mkdir(join(source, "backend"), { recursive: true });
   await writeFile(join(source, "backend/plugin.py"), "async def setup(ctx):\n    pass\n", "utf8");
-  await writeFile(join(source, "manifest.yaml"), "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: frontend_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: entry.ts}\npeer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}\n", "utf8");
+  await writeFile(join(source, "manifest.yaml"), "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: frontend_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: entry.ts}\n", "utf8");
+  await writeFile(join(source, "package.json"), JSON.stringify({peerDependencies: peers}), "utf8");
   await writeFile(join(source, "entry.ts"), "import './style.css'; export const ui={pluginId:'frontend_demo'}; export const background={pluginId:'frontend_demo',setup(){throw Error('explicit start only')}}; export const surface={pluginId:'frontend_demo',surface:{component(){return null}}};", "utf8");
   await writeFile(join(source, "style.css"), ".frontend-demo { display: flex; }", "utf8");
   const built = await buildPlugin({ plugin: source, output: join(root, "output") });
   const python = process.env.SHIORI_TEST_PYTHON ?? join(repository, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  const script = "import json,sys\nfrom pathlib import Path\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\np=validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z: z.extractall(sys.argv[2])\nprint(json.dumps({'exports':[e.export_name for e in p.renderer], 'entry':p.manifest.frontend_entry}))";
+  const script = "import json,sys\nfrom pathlib import Path\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\np=validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z: z.extractall(sys.argv[2])\nprint(json.dumps({'exports':p.frontend.exports, 'entry':p.manifest.frontend_entry}))";
   const extracted = join(root, "extracted");
   const { stdout } = await promisify(execFile)(python, ["-c", script, built.archive, extracted], { cwd: repository });
   const contract = JSON.parse(stdout);
@@ -40,14 +42,15 @@ test("independent ZIP builds preserve peers and pass the actual host package val
   t.after(() => rm(root, { recursive: true, force: true }));
   const source = join(root, "source"), output = join(root, "output");
   const files = {
-    "manifest.yaml": "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: independent_demo\nversion: '1.0.0'\nentry: backend/plugin.py\npeer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}\nrenderer:\n  ui: {entry: renderer/ui.mjs, css: [renderer/ui.css]}\nassets: [assets/label.txt]\n",
+    "package.json": JSON.stringify({peerDependencies: peers}),
+    "manifest.yaml": "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: independent_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: ui/index.tsx}\nassets: [assets/label.txt]\n",
     "backend/plugin.py": "from .helper import LABEL\nasync def setup(ctx):\n    pass\n",
     "backend/helper.py": "LABEL = 'self contained'\n",
     "backend/__pycache__/helper.pyc": "not shipped",
     "backend/.venv/runtime.txt": "not shipped",
     "tests/test_plugin.py": "not shipped",
     ".env": "not shipped",
-    "ui/index.tsx": "import React from 'react'; import { PluginBridgeError } from '@yinfengwindy/shiori-sdk'; import './style.css'; export default {pluginId: 'independent_demo', settingsSection:{kind:'component',label:'Independent',component:()=><button onClick={()=>{throw new PluginBridgeError('example','example')}}>Hello</button>}};",
+    "ui/index.tsx": "import React from 'react'; import { PluginBridgeError } from '@yinfengwindy/shiori-sdk'; import './style.css'; export const ui = {pluginId: 'independent_demo', settingsSection:{kind:'component',label:'Independent',component:()=><button onClick={()=>{throw new PluginBridgeError('example','example')}}>Hello</button>}};",
     "ui/style.css": ".independent-demo { display: flex; }",
     "assets/label.txt": "resource",
     "README.md": "# Independent demo\n",
@@ -64,11 +67,11 @@ test("independent ZIP builds preserve peers and pass the actual host package val
   assert.equal((await buildPlugin({ plugin: source, output })).sha256, built.sha256);
   assert.deepEqual(await readFile(built.archive), first);
   const python = process.env.SHIORI_TEST_PYTHON ?? join(repository, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  const script = "import json, sys\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\nfrom pathlib import Path\np = validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z:\n print(json.dumps({'id':p.manifest.id,'names':z.namelist(),'ui':z.read('renderer/ui.mjs').decode()}))\n";
+  const script = "import json, sys\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\nfrom pathlib import Path\np = validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z:\n print(json.dumps({'id':p.manifest.id,'names':z.namelist(),'ui':z.read('renderer/frontend.mjs').decode()}))\n";
   const { stdout } = await promisify(execFile)(python, ["-c", script, built.archive], { cwd: repository });
   const actual = JSON.parse(stdout);
   assert.equal(actual.id, "independent_demo");
-  assert.deepEqual(actual.names.sort(), ["README.md", "LICENSE-MIT", "assets/label.txt", "backend/helper.py", "backend/plugin.py", "docs/usage.md", "manifest.yaml", "renderer/ui.css", "renderer/ui.mjs"].sort());
+  assert.deepEqual(actual.names.sort(), ["README.md", "LICENSE-MIT", "assets/label.txt", "backend/helper.py", "backend/plugin.py", "docs/usage.md", "manifest.yaml", "renderer/frontend.css", "renderer/frontend.mjs"].sort());
   assert.match(actual.ui, /from ["']@yinfengwindy\/shiori-sdk["']/);
   assert.match(actual.ui, /from ["']react\/jsx-runtime["']/);
   assert.doesNotMatch(actual.ui, /react\.production|react\.development/);

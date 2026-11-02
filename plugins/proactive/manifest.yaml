@@ -25,4 +25,4 @@ optional_inject:
   - memory_engine
   - main_model
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

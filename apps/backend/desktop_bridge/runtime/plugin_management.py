@@ -106,7 +106,6 @@ class RuntimePluginManagement:
                     "description": record.manifest.desc or "",
                     # Static declarations are data only; Electron grants resources
                     # exclusively for unique ACTIVE workspace candidates.
-                    "renderer": record.manifest.metadata.get("renderer", {}),
                     "frontend": record.manifest.metadata.get("frontend", {}),
                     # Main-process resources must use the approved startup bytes,
                     # never establish a newer baseline during their first request.

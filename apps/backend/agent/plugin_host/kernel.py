@@ -1043,7 +1043,7 @@ class PluginKernel:
         diagnostic = PluginDiagnostic(
             code=f"renderer_{kind}_failed",
             stage=kind,
-            field=f"renderer.{kind}.entry",
+            field="frontend.entry",
             reason=reason,
             state="FAILED",
         )
@@ -1535,7 +1535,4 @@ def _required_renderer_kinds(record: PluginRecord) -> frozenset[str]:
         return frozenset(
             kind for kind in _RENDERER_GATED_KINDS if kind in frontend["exports"]
         )
-    renderer = record.manifest.metadata.get("renderer", {})
-    if not isinstance(renderer, dict):
-        return frozenset()
-    return frozenset(kind for kind in _RENDERER_GATED_KINDS if renderer.get(kind))
+    return frozenset()

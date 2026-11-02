@@ -1,5 +1,5 @@
 import { errorMessage } from "@yinfengwindy/shiori-sdk";
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 import type { PluginBridgeClient } from "./pluginBridgeClient";
 
 /**
@@ -20,7 +20,7 @@ import type { PluginBridgeClient } from "./pluginBridgeClient";
  */
 export function reportRuntimePluginActivation(
   pluginBridge: Pick<PluginBridgeClient, "reportActivation">,
-  entry: Pick<RuntimePluginUi, "pluginId" | "activationToken">,
+  entry: Pick<RuntimePluginFrontend, "pluginId" | "activationToken">,
   kind: "ui" | "background" | "surface",
   outcome: { ok: true } | { ok: false; reason: string },
 ): void {
@@ -49,7 +49,7 @@ export function reportRuntimePluginActivation(
 export function reportRuntimePluginRendererLoadFailure(
   pluginBridge: Pick<PluginBridgeClient, "reportActivation">,
   event: string,
-  entry: Pick<RuntimePluginUi, "pluginId" | "activationToken">,
+  entry: Pick<RuntimePluginFrontend, "pluginId" | "activationToken">,
   kind: "ui" | "surface",
   error: unknown,
 ): void {

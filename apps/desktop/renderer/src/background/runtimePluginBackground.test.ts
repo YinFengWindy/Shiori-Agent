@@ -8,12 +8,12 @@ test("registers a well-formed external background entry into the shared registry
   const events: string[] = [];
   const setup = () => {};
   const load = createRuntimePluginBackgroundLoader({
-    importModule: async () => { events.push("import"); return { default: { pluginId: "demo", setup } }; },
+    importModule: async () => { events.push("import"); return { background: { pluginId: "demo", setup } }; },
     loadCss: async (url) => { events.push(`css ${url}`); return () => events.push(`remove ${url}`); },
     failed: () => assert.fail("unexpected failure"),
   }, registry);
 
-  const registered = await load([{ pluginId: "demo", entry: "demo.mjs", css: ["demo.css"] }]);
+  const registered = await load([{ pluginId: "demo", entry: "demo.mjs", css: ["demo.css"], exports: ["background" as const] }]);
 
   assert.deepEqual(registered, ["demo"]);
   assert.deepEqual(events, ["css demo.css", "import"]);
@@ -24,13 +24,13 @@ test("reports a plugin id through succeeded once its background entry registers 
   const registry = new PluginBackgroundRegistry();
   const succeeded: string[] = [];
   const load = createRuntimePluginBackgroundLoader({
-    importModule: async () => ({ default: { pluginId: "demo", setup: () => {} } }),
+    importModule: async () => ({ background: { pluginId: "demo", setup: () => {} } }),
     loadCss: async () => () => {},
     succeeded: (entry) => succeeded.push(entry.pluginId),
     failed: () => assert.fail("unexpected failure"),
   }, registry);
 
-  await load([{ pluginId: "demo", entry: "demo.mjs", css: [] }]);
+  await load([{ pluginId: "demo", entry: "demo.mjs", css: [], exports: ["background" as const] }]);
 
   assert.deepEqual(succeeded, ["demo"]);
 });
@@ -40,12 +40,12 @@ test("a malformed module removes its loaded CSS and is reported, not registered"
   const removed: string[] = [];
   const failures: unknown[] = [];
   const load = createRuntimePluginBackgroundLoader({
-    importModule: async () => ({ default: { pluginId: "demo" /* no setup() */ } }),
+    importModule: async () => ({ background: { pluginId: "demo" /* no setup() */ } }),
     loadCss: async (url) => () => removed.push(url),
     failed: (entry, error) => failures.push([entry.pluginId, error]),
   }, registry);
 
-  await load([{ pluginId: "demo", entry: "demo.mjs", css: ["demo.css"] }]);
+  await load([{ pluginId: "demo", entry: "demo.mjs", css: ["demo.css"], exports: ["background" as const] }]);
 
   assert.equal(registry.get("demo"), undefined);
   assert.deepEqual(removed, ["demo.css"]);
@@ -56,12 +56,12 @@ test("an entry whose identity does not match its admitted pluginId is refused", 
   const registry = new PluginBackgroundRegistry();
   const failures: unknown[] = [];
   const load = createRuntimePluginBackgroundLoader({
-    importModule: async () => ({ default: { pluginId: "other", setup: () => {} } }),
+    importModule: async () => ({ background: { pluginId: "other", setup: () => {} } }),
     loadCss: async () => () => {},
     failed: (entry, error) => failures.push([entry.pluginId, error]),
   }, registry);
 
-  await load([{ pluginId: "demo", entry: "demo.mjs", css: [] }]);
+  await load([{ pluginId: "demo", entry: "demo.mjs", css: [], exports: ["background" as const] }]);
 
   assert.equal(registry.get("demo"), undefined);
   assert.equal(failures.length, 1);
@@ -72,11 +72,11 @@ test("is idempotent: an already-registered or already-reported plugin is never r
   let imports = 0;
   const setup = () => {};
   const load = createRuntimePluginBackgroundLoader({
-    importModule: async () => { imports += 1; return { default: { pluginId: "demo", setup } }; },
+    importModule: async () => { imports += 1; return { background: { pluginId: "demo", setup } }; },
     loadCss: async () => () => {},
     failed: () => assert.fail("unexpected failure"),
   }, registry);
-  const entry = { pluginId: "demo", entry: "demo.mjs", css: [] };
+  const entry = { pluginId: "demo", entry: "demo.mjs", css: [], exports: ["background" as const] };
 
   assert.deepEqual(await load([entry]), ["demo"]);
   assert.deepEqual(await load([entry]), [], "second call must skip an already-registered plugin");
@@ -87,7 +87,7 @@ test("is idempotent: an already-registered or already-reported plugin is never r
     loadCss: async () => () => {},
     failed: () => undefined,
   });
-  const failing = { pluginId: "broken", entry: "broken.mjs", css: [] };
+  const failing = { pluginId: "broken", entry: "broken.mjs", css: [], exports: ["background" as const] };
   assert.deepEqual(await failLoad([failing]), ["broken"]);
   assert.deepEqual(await failLoad([failing]), [], "an already-reported failure must not be retried within the session");
 });
@@ -97,12 +97,12 @@ test("re-enable restores styles and acknowledges the new activation without reim
   const registry = new PluginBackgroundRegistry();
   const events: string[] = [];
   const load = createRuntimePluginBackgroundLoader({
-    importModule: async () => { events.push("import"); return { default: { pluginId: "demo", setup() {} } }; },
+    importModule: async () => { events.push("import"); return { background: { pluginId: "demo", setup() {} } }; },
     loadCss: async () => { events.push("css"); return () => events.push("remove-css"); },
     succeeded: (entry) => { events.push(`ready:${entry.activationToken}`); },
     failed: () => assert.fail("unexpected failure"),
   }, registry);
-  const entry = { pluginId: "demo", entry: "demo.mjs", css: ["demo.css"], activationToken: "first" };
+  const entry = { pluginId: "demo", entry: "demo.mjs", css: ["demo.css"], exports: ["background" as const], activationToken: "first" };
   await load([entry]);
   await load([entry]);
   await load([]);

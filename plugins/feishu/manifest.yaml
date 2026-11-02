@@ -21,4 +21,4 @@ contributes:
           chat_id_label: 私聊 chat_id
           chat_id_hint: oc_<私聊会话 ID>
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

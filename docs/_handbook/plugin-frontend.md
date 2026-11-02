@@ -2,24 +2,21 @@
 
 [插件指南](plugin-guide.md)的专题篇：插件 UI、后台模块和 surface 与宿主之间的 TypeScript 契约。类型的唯一来源是 `@yinfengwindy/shiori-sdk`（源码 `packages/sdk/src/`，契约类型在 `src/contract/`）；运行时导出清单是 `apps/desktop/src/plugins/uiContract.ts` 的 `pluginUiPeerExports`。生成的 [API 参考](plugin-api.md) 只覆盖 Python。与源码冲突时以源码为准。
 
-前端使用 `frontend.entry` 单入口；P7 迁移期间仍支持未迁移插件的旧 `renderer` 声明。共享 React 的版本约束继续校验。
+前端统一使用 `frontend.entry` 单入口和具名导出。旧 `renderer` 与顶层 `peer_dependencies` 字段已删除。
 
 ## 入口与产物
 
 单 frontend 入口写 `frontend: { entry: frontend.ts }`，入口显式导出 `ui`、`background`、`surface` 中需要的贡献；可以直接从原有模块 re-export。贡献对象本身沿用各自 SDK 类型，合并模块类型为 `PluginFrontendModule`。不要在模块顶层启动后台任务、打开窗口或申请原生资源：三个环境都可能求值同一个入口，只有各自宿主会挂载对应导出。
 
-外部构建自动生成 `renderer/frontend.mjs`（名称只是产物路径，不是旧 manifest 字段），并将 manifest 改写为 `frontend: { entry, exports, css }`。`exports` 来自构建器的真实导出表；CSS 自动收集。React 与 SDK 仍保持 external，共享宿主实例，`peer_dependencies` 校验不变。安装后每个声明的导出都会检查，加载失败仍按原激活令牌回滚整插件。一个包只获取一份受信资源快照，各窗口从同一个 ESM 选择自己的导出。
+外部构建自动生成 `renderer/frontend.mjs`（名称只是产物路径，不是旧 manifest 字段），并将 manifest 改写为 `frontend: { entry, exports, css, peers }`。`exports` 来自构建器的真实导出表；CSS 自动收集。React 与 SDK 仍保持 external，共享宿主实例，源码 `package.json` 的 `peerDependencies` 由构建器写入 `frontend.peers`，安装前校验 React、React DOM 和 Shiori SDK 的范围。安装后每个声明的导出都会检查，加载失败仍按原激活令牌回滚整插件。一个包只获取一份受信资源快照，各窗口从同一个 ESM 选择自己的导出。
 
-以下多入口声明只用于尚未迁移的当前 4.0 插件，P7-4 删除；新入口不同时声明 `renderer`。
+`node scripts/build-plugin.mjs --plugin plugins/<id> --output artifacts/plugins` 从声明的源码入口编译 ESM 和 CSS 并打 ZIP（要求 `api: 4` 与 `distribution: external`）。内置构建只读取 builtin 插件的 manifest，一份清单供各执行环境使用，不按目录或 kind 另找入口。外部源码不会进入宿主构建图。
 
+产物是浏览器 ESM，必须含声明的具名导出；CommonJS、TypeScript/JSX 源码和缺少的导出会被拒绝。静态格式检查不执行插件代码；renderer 在激活时校验完整模块及贡献对象，失败回滚整插件。
 
-内置插件的源码入口按目录发现：`ui/index.tsx`、`background/index.ts`、`surface/index.tsx`，各自默认导出。外部包在 manifest 的 `renderer.<kind>` 下声明预编译产物：`entry` 是包内 `.mjs`，`css` 是 `.css` 列表（`[]` 表示没有样式）。每个声明的入口和样式都必须存在，缺一个整包在导入后端前就被拒。`node scripts/build-plugin.mjs --plugin plugins/<id> --output artifacts/plugins` 从源码入口编译出这些产物并打 ZIP（要求 `api: 4` 与 `distribution: external`）。
-
-产物是浏览器 ESM，必须有默认导出。CommonJS、格式不明的 `.js`、TypeScript / JSX 源码、空模块、没有默认导出都被拒。静态检查不是完整的 JS 解析器；renderer 加载器在激活前解析完整模块图并校验导出，初始化出错算 `FAILED`，不会部分激活。
-
-| 入口 | 默认导出 |
+| 具名导出 | 类型 |
 | --- | --- |
-| `ui` | `PluginUiModule`：`{ pluginId, navPage?, settingsSection?, roleAssets?, accountDetail?, roleSettings?, chatImageActions?, roleAffection?, chatAffection?, roleTasks? }` |
+| `ui` | `PluginUiModule`：设置、导航、角色等 UI 插槽 |
 | `background` | `PluginBackgroundContribution`：`{ pluginId, setup(ctx) }` |
 | `surface` | `PluginSurfaceModule`：`{ pluginId, surface: { component } }` |
 
@@ -33,7 +30,7 @@
 
 React、React DOM 和 SDK 主入口是宿主提供的对等依赖，不打进插件包。预编译时把 `react`、`react/jsx-runtime`、`react-dom`、`react-dom/client`、`@yinfengwindy/shiori-sdk` 设为 external，其它浏览器库自己打包。import map 把这些名字解析到包着**宿主自己实例**的 wrapper，所以 hooks、context 和 `instanceof` 与内置插件完全一致。
 
-- 宿主当前保证 React / React DOM `19.2.0`（`host_contract.REACT_API_VERSION`）；`peer_dependencies` 用[指南里的比较语法](plugin-guide.md#sdk-与-peer_dependencies-的比较语法)写范围。
+- 宿主当前保证 React / React DOM `19.2.0`（`host_contract.REACT_API_VERSION`）；`frontend.peers` 用[指南里的比较语法](plugin-guide.md#sdk-与-frontendpeers-的比较语法)写范围。
 - SDK 主入口能导入的运行时名字只有 `pluginUiPeerExports` 里列出的那些；纯类型导出没有运行时存在。给这张表加名字是契约变更。
 - `@yinfengwindy/shiori-sdk/testing` 只用于开发测试，`/contract` 是给主进程和 preload 用的纯类型入口，`/host-internal` 只给宿主；三者都不在 import map 里，插件运行时代码不能导入。
 - 插件不得附带或要求安装私有的 npm / Python 运行时依赖。CSS 由插件自带并限定在自己的类名下；共享类名（`cardClass` 等）是 Tailwind 工具串，已在宿主样式表里。

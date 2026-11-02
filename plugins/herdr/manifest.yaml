@@ -17,4 +17,4 @@ inject:
   - background
   - rpc
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

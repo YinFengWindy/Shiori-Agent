@@ -1,28 +1,8 @@
 #!/usr/bin/env node
-/**
- * Reproducible build smoke check for the three plugin globs:
- * `renderer/src/plugins/pluginUiModules.ts` (main-window slots),
- * `renderer/src/surface/pluginSurfaceModules.ts` (plugin-owned desktop
- * windows, #181) and `renderer/src/background/pluginBackgroundModules.ts`
- * (headless always-resident background code, #226 item 1).
- *
- * The repo has built-in plugin UI entries, but may have no surface or
- * background entries. This script creates
- * a throwaway plugin under the real top-level `plugins/` tree carrying all
- * three entry points, each with its own recognizable marker, runs a real
- * renderer build against it, asserts all three markers made it into the
- * bundled output, and removes the throwaway plugin directory afterwards (on
- * success or failure) so it is safe to re-run repeatedly on a clean checkout.
- *
- * The three markers are checked separately on purpose: the surface entry
- * lands in a *different* rollup entry (`surface.html`) from the UI one, and
- * the background entry in yet another (`plugin-host.html`), so a single
- * combined check would let a broken glob hide behind the other two working.
- *
- * The UI entry also imports `@yinfengwindy/shiori-sdk` (#503): built-in plugins live
- * outside the Vite root, so this proves the build resolves the workspace SDK
- * package from the plugin tree, or the build fails.
- */
+/** Build a declared frontend with all three named contributions and verify
+ * its markers survive in the real renderer output. Invalid external source
+ * must be excluded before inventory compilation. The fixture is removed on
+ * success or failure, and does not modify the app's visual components. */
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

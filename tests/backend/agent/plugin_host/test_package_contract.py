@@ -13,6 +13,8 @@ from agent.plugin_host.versions import satisfies
 def _change(package, **values):
     path = package / "manifest.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if "frontend" in values and isinstance(values["frontend"], dict):
+        values["frontend"] = {**raw.get("frontend", {}), **values["frontend"]}
     raw.update(values)
     path.write_text(yaml.safe_dump(raw), encoding="utf-8")
 
@@ -20,7 +22,8 @@ def _change(package, **values):
 def test_valid_package_reads_version_and_every_renderer_entry(contract_package):
     result = validate_package(contract_package)
     assert result.manifest.version == "1.2.3"
-    assert [entry.kind for entry in result.renderer] == ["ui", "background", "surface"]
+    assert result.frontend is not None
+    assert result.frontend.exports == ("ui", "background", "surface")
 
 
 def test_missing_named_frontend_export_refuses_the_whole_package(contract_package):
@@ -28,7 +31,6 @@ def test_missing_named_frontend_export_refuses_the_whole_package(contract_packag
     entry.write_text("export const ui = {};", encoding="utf-8")
     _change(
         contract_package,
-        renderer={},
         frontend={"entry": "frontend.mjs", "css": [], "exports": ["ui", "background"]},
     )
     with pytest.raises(PackageContractError) as caught:
@@ -67,22 +69,36 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
     [
         ({"runtime_api": ">=3.1.1 <4.0.0"}, "invalid_manifest", "manifest"),
         ({"version": "1.2"}, "invalid_version", "version"),
-        (
-            {
-                "renderer": {
-                    "ui": {"entry": "renderer/ui.mjs", "css": [], "optional": True}
-                }
-            },
-            "invalid_manifest",
-            "renderer.ui",
-        ),
-        ({"peer_dependencies": {}}, "missing_dependency", "peer_dependencies"),
+        ({"renderer": {}}, "invalid_manifest", "manifest"),
+        ({"peer_dependencies": {}}, "invalid_manifest", "manifest"),
+        ({"frontend": {"peers": {}}}, "missing_dependency", "frontend.peers"),
         ({"assets": ["../secret"]}, "invalid_path", "assets[0]"),
         ({"entry": "backend/missing.py"}, "missing_file", "entry"),
         (
-            {"peer_dependencies": {"react": "20.0.0", "react-dom": "19.2.0"}},
+            {
+                "frontend": {
+                    "peers": {
+                        "react": "20.0.0",
+                        "react-dom": "19.2.0",
+                        "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0",
+                    }
+                }
+            },
             "incompatible_runtime",
-            "peer_dependencies.react",
+            "frontend.peers.react",
+        ),
+        (
+            {
+                "frontend": {
+                    "peers": {
+                        "react": "19.2.0",
+                        "react-dom": "19.2.0",
+                        "@yinfengwindy/shiori-sdk": ">=99.0.0",
+                    }
+                }
+            },
+            "incompatible_runtime",
+            "frontend.peers.@yinfengwindy/shiori-sdk",
         ),
         ({"unknown": True}, "invalid_manifest", "manifest"),
         ({"distribution": "unknown"}, "invalid_manifest", "manifest"),
@@ -104,19 +120,17 @@ def test_rejects_manifest_with_structured_diagnostics(
     assert diagnostic["reason"]
 
 
-@pytest.mark.parametrize("kind", ["ui", "background", "surface"])
-def test_every_declared_renderer_entry_is_required(contract_package, kind):
-    (contract_package / f"renderer/{kind}.mjs").unlink()
-    with pytest.raises(PackageContractError) as caught:
+def test_declared_frontend_artifact_is_required(contract_package):
+    (contract_package / "renderer/frontend.mjs").unlink()
+    with pytest.raises(PackageContractError):
         validate_package(contract_package)
-    assert caught.value.diagnostic.field == f"renderer.{kind}.entry"
 
 
 def test_css_is_required(contract_package):
     (contract_package / "renderer/style.css").unlink()
     with pytest.raises(PackageContractError) as caught:
         validate_package(contract_package)
-    assert caught.value.diagnostic.field == "renderer.ui.css[0]"
+    assert caught.value.diagnostic.field == "frontend.css[0]"
 
 
 _NO_API = object()

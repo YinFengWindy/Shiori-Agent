@@ -272,9 +272,9 @@ def _parse_manifest(
     )
 
 
-# renderer 字段在 api: 4 中临时保留：激活门与 build-plugin.mjs 仍读取，P7 统一
-# frontend 入口时删除。
 _REMOVED_FIELDS = (
+    "renderer",
+    "peer_dependencies",
     "capabilities",
     "runtime_api",
     "package_contract",
@@ -295,7 +295,7 @@ def _parse_sdk(value: object) -> str:
 
 
 def _reject_removed_fields(raw: dict[str, object]) -> None:
-    """api: 4 drops the v2 capability manifest fields."""
+    """Reject retired capability and multi-entry frontend declarations."""
     present = [name for name in _REMOVED_FIELDS if name in raw]
     if present:
         raise ManifestError(
@@ -355,8 +355,8 @@ def _parse_frontend(raw: dict[str, object], plugin_dir: Path) -> str | None:
     value = raw["frontend"]
     if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
         raise ManifestError("frontend 必须是对象")
-    if "entry" not in value or set(value) - {"entry", "css", "exports"}:
-        raise ManifestError("frontend 只能包含 entry、css 和 exports")
+    if "entry" not in value or set(value) - {"entry", "css", "exports", "peers"}:
+        raise ManifestError("frontend 只能包含 entry、css、exports 和 peers")
     if ("css" in value) != ("exports" in value):
         raise ManifestError("已编译 frontend 必须同时包含 css 和 exports")
     if "exports" in value:

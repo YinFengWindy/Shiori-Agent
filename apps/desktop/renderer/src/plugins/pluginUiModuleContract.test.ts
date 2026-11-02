@@ -34,7 +34,7 @@ describe("applyPluginUiModules", () => {
     function AccountIcon() { return null; }
     applyPluginUiModules({
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", accountDetail: { label: "Demo", icon: AccountIcon, component: AccountControls } },
+        ui: { pluginId: "demo", accountDetail: { label: "Demo", icon: AccountIcon, component: AccountControls } },
       },
     }, registry);
     const entry = registry.getAccountDetail("demo", () => true);
@@ -53,9 +53,9 @@ describe("applyPluginUiModules", () => {
 
   it("registers a schema-driven settings.section as a subtab of the built-in 'plugins' section, not a top-level entry", () => {
     const registry = new PluginUiRegistry();
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", settingsSection: { kind: "schema", label: "Demo" } },
+        ui: { pluginId: "demo", settingsSection: { kind: "schema", label: "Demo" } },
       },
     };
 
@@ -74,9 +74,9 @@ describe("applyPluginUiModules", () => {
     const registry = new PluginUiRegistry();
     function CustomSection() { return null; }
     function NavPage() { return null; }
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: {
+        ui: {
           pluginId: "demo",
           settingsSection: { kind: "component", label: "Demo", component: CustomSection },
           navPage: { label: "Demo Page", component: NavPage },
@@ -112,7 +112,7 @@ describe("applyPluginUiModules", () => {
     const originalError = console.error;
     console.error = (message: string) => { errors.push(message); };
     try {
-      applyPluginUiModules({ "/plugins/legacy_memory/ui/index.tsx": { default: legacyModule } }, registry);
+      applyPluginUiModules({ "/plugins/legacy_memory/ui/index.tsx": { ui: legacyModule } }, registry);
     } finally {
       console.error = originalError;
     }
@@ -128,9 +128,9 @@ describe("applyPluginUiModules", () => {
     const registry = new PluginUiRegistry();
     function CustomSection() { return null; }
     function NavPage() { return null; }
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: {
+        ui: {
           pluginId: "demo",
           settingsSection: { kind: "component", label: "Demo", component: CustomSection },
           navPage: { label: "Demo Page", component: NavPage },
@@ -190,9 +190,9 @@ describe("applyPluginUiModules", () => {
     function NavPage() { return null; }
     function Sidebar() { return null; }
     const selectBlockedReason = () => "not now";
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: {
+        ui: {
           pluginId: "demo",
           navPage: { label: "Demo Page", component: NavPage, sidebar: Sidebar, selectBlockedReason },
         },
@@ -221,9 +221,9 @@ describe("applyPluginUiModules", () => {
   it("leaves Sidebar undefined and selectBlockedReason undefined when a nav.page doesn't declare them", () => {
     const registry = new PluginUiRegistry();
     function NavPage() { return null; }
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", navPage: { label: "Demo Page", component: NavPage } },
+        ui: { pluginId: "demo", navPage: { label: "Demo Page", component: NavPage } },
       },
     };
 
@@ -236,8 +236,8 @@ describe("applyPluginUiModules", () => {
 
   it("skips a malformed module instead of throwing", () => {
     const registry = new PluginUiRegistry();
-    const modules = { "/plugins/broken/ui/index.tsx": { default: { settingsSection: {} } } } as unknown as Record<
-      string, { default: PluginUiModule }
+    const modules = { "/plugins/broken/ui/index.tsx": { ui: { settingsSection: {} } } } as unknown as Record<
+      string, { ui: PluginUiModule }
     >;
 
     assert.doesNotThrow(() => applyPluginUiModules(modules, registry));

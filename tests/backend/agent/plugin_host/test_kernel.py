@@ -1744,6 +1744,9 @@ def _write_renderer_gated_plugin(
     without trust.
     """
     (directory / "backend").mkdir(parents=True)
+    (directory / "frontend.mjs").write_text(
+        "export const ui = {}; export const background = {};", encoding="utf-8"
+    )
     (directory / "manifest.yaml").write_text(
         f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\ninject: [tools]\n{renderer}",
         encoding="utf-8",
@@ -1804,10 +1807,14 @@ async def test_activation_gate_clears_only_once_every_declared_kind_confirms(tmp
 async def test_failed_renderer_entry_rolls_back_only_that_plugin(tmp_path):
     tools = ToolRegistry()
     _write_renderer_gated_plugin(
-        tmp_path / "flaky", "flaky", renderer="renderer:\n  ui: {entry: x}\n"
+        tmp_path / "flaky",
+        "flaky",
+        renderer="frontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
     )
     _write_renderer_gated_plugin(
-        tmp_path / "healthy", "healthy", renderer="renderer:\n  ui: {entry: x}\n"
+        tmp_path / "healthy",
+        "healthy",
+        renderer="frontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()
@@ -1833,7 +1840,7 @@ async def test_failed_renderer_entry_rolls_back_only_that_plugin(tmp_path):
     assert states_by_id["flaky"]["diagnostic"] == {
         "code": "renderer_ui_failed",
         "stage": "ui",
-        "field": "renderer.ui.entry",
+        "field": "frontend.entry",
         "reason": "module threw on import",
         "path": "",
         "state": "FAILED",
@@ -1852,7 +1859,9 @@ async def test_failed_renderer_entry_accepts_surface_although_not_gated(tmp_path
     # but a surface failure must still roll the whole plugin back (AC2).
     tools = ToolRegistry()
     _write_renderer_gated_plugin(
-        tmp_path / "demo", "demo", renderer="renderer:\n  ui: {entry: x}\n"
+        tmp_path / "demo",
+        "demo",
+        renderer="frontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()
@@ -1876,7 +1885,7 @@ async def test_stale_or_unknown_activation_reports_are_ignored(tmp_path):
     _write_renderer_gated_plugin(
         tmp_path / "demo",
         "demo",
-        renderer="renderer:\n  ui: {entry: x}\n",
+        renderer="frontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
     )
     kernel = make_kernel(
         [tmp_path],
@@ -1914,7 +1923,9 @@ async def test_stale_report_from_a_superseded_generation_is_ignored(tmp_path):
     for G1 and G3 sharing the same plugin id and host services.
     """
     _write_renderer_gated_plugin(
-        tmp_path / "demo", "demo", renderer="renderer:\n  ui: {entry: x}\n"
+        tmp_path / "demo",
+        "demo",
+        renderer="frontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
     )
     tools = ToolRegistry()
 
@@ -1970,7 +1981,7 @@ async def test_concurrent_failure_reports_for_the_same_plugin_clean_up_exactly_o
     _write_renderer_gated_plugin(
         tmp_path / "demo",
         "demo",
-        renderer="renderer:\n  ui: {entry: x}\n  background: {entry: y}\n",
+        renderer="frontend: {entry: frontend.mjs, exports: [ui, background], css: []}\n",
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()
