@@ -14,6 +14,7 @@ from .turn.delivery import resolve_target_transport
 from .turn.gates import ProactiveGateChain
 from .drift import DriftTurnPipeline, DriftTurnPipelineDeps
 from .drift_state import DriftStateStore
+from .skill_resources import builtin_skills_dir
 from .drift_tools import DriftToolDeps
 from .gateway import GatewayDeps
 from .tools import ToolDeps
@@ -26,9 +27,6 @@ from shiori_sdk.core.proactive_host import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-BUILTIN_DRIFT_SKILL_NAMES = {"meme-manage", "create-drift-skill"}
 
 
 class _PortWebFetch:
@@ -250,12 +248,11 @@ class AgentTickFactory:
         if not getattr(self._deps.cfg, "drift_enabled", False):
             return None
         drift_dir = Path(self._deps.state_store.workspace_dir) / "drift"
-        builtin = Path(self._deps.proactive_host.builtin_skills_dir())
+        builtin = builtin_skills_dir()
         store = DriftStateStore(
             drift_dir,
             builtin_skills_dir=builtin,
             include_builtin_skills=True,
-            builtin_skill_names=BUILTIN_DRIFT_SKILL_NAMES,
         )
         return DriftTurnPipeline(
             DriftTurnPipelineDeps(

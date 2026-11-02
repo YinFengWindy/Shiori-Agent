@@ -26,7 +26,6 @@ from agent.turns.reply_interruption import reply_was_invalidated
 from conversation.service import desktop_chat_id, desktop_thread_id
 from agent.tools.turn_scope import tool_turn_scope
 from agent.tools.web_fetch import WebFetchTool
-from bootstrap.paths import builtin_skills_path
 from core.common.channel_directory import DESKTOP_CHANNEL
 from core.common.runtime_scope import bind_runtime, current_runtime_lease
 from core.error_context import current_session_key
@@ -372,10 +371,6 @@ class HostProactiveRunner:
             ),
             thinking=response.thinking,
         )
-
-    def builtin_skills_dir(self) -> str:
-        """Built-in skills directory. Drift reads it and does not write beside it."""
-        return str(builtin_skills_path())
 
     def file_tool_schema(self, name: str) -> dict[str, Any]:
         """Schema of a host file tool."""

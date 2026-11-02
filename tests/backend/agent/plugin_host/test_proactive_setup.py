@@ -78,15 +78,34 @@ async def test_disabling_proactive_and_optimizer_keeps_chat_and_core_presence(
 ) -> None:
     """Real plugin toggles remove their contributions without breaking a turn."""
     from dataclasses import replace
+    import re
+    from xml.etree.ElementTree import fromstring
     from agent.provider import LLMProvider, LLMResponse
     from conversation.service import desktop_thread_id
     from shiori_sdk.core.conversation import PromptRendering
     from shiori_sdk.core.memory import MEMORY_ENGINE
     from shiori_sdk.core.memory_optimizer import MEMORY_OPTIMIZER
 
+    advertised_skills: list[dict[str, Path]] = []
+
     async def answer(_self, **kwargs):
         if kwargs.get("response_format"):
             return LLMResponse(content='{"mood":"平静","thought":"我想想。"}')
+        # Inspect the assembled model request, then read the advertised files.
+        # This exercises plugin loading, prompt assembly and real packaged paths.
+        advertised: dict[str, Path] = {}
+        for message in kwargs["messages"]:
+            if message["role"] != "system":
+                continue
+            for xml in re.findall(r"<skills>.*?</skills>", message["content"], re.S):
+                for item in fromstring(xml):
+                    if item.get("source") == "proactive":
+                        name, location = item.findtext("name"), item.findtext(
+                            "location"
+                        )
+                        assert name is not None and location is not None
+                        advertised[name] = Path(location)
+        advertised_skills.append(advertised)
         return LLMResponse(content="你好 §cited:[memory-1]§")
 
     monkeypatch.setattr(LLMProvider, "chat", answer)
@@ -144,6 +163,10 @@ async def test_disabling_proactive_and_optimizer_keeps_chat_and_core_presence(
 
         assert await chat() == "你好"
         assert "proactive" in sections[-1]
+        assert set(advertised_skills[-1]) == {"meme-manage", "create-drift-skill"}
+        assert all(
+            path.read_text(encoding="utf-8") for path in advertised_skills[-1].values()
+        )
         first_user_at = app.core.session_manager.presence.last_user_at("role:mira")
         for plugin_id in ("proactive", "memory_optimizer"):
             await manager.set_enabled(
@@ -157,6 +180,7 @@ async def test_disabling_proactive_and_optimizer_keeps_chat_and_core_presence(
         assert manager.kernel.get(MEMORY_OPTIMIZER) is None
         sections.clear()
         assert await chat() == "你好"
+        assert advertised_skills[-1] == {}
         assert sections and all("proactive" not in names for names in sections)
         persisted = app.core.session_manager.get_or_create("role:mira")
         assert [

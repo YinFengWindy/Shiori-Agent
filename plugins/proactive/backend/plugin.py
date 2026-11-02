@@ -36,6 +36,7 @@ from shiori_sdk.runtime import PluginRuntimeContext
 from .plugin_config import ProactivePluginConfig
 from .role_prompt import append_proactive_prompt
 from .role_settings import ProactiveRoleSettings
+from .skill_prompt import append_skill_prompt
 from .service import ProactiveBinding, ProactiveService
 from .turn.scene_subscription import SceneFollowupSubscription
 
@@ -55,6 +56,10 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     config = ProactivePluginConfig.model_validate(ctx.require(CONFIG).as_dict())
     events = ctx.require(EVENTS)
     roles = ctx.require(ROLES)
+    ctx.on(
+        PromptRendering,
+        partial(append_skill_prompt, workspace=ctx.require(WORKSPACE)),
+    )
     ctx.on(
         PromptRendering,
         partial(append_proactive_prompt, workspace=ctx.require(WORKSPACE), roles=roles),

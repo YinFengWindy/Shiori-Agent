@@ -678,10 +678,6 @@ Host services for a proactive tick. The host provides this.
 
   Complete one chat request on the published model. Inside ``run_tick`` the role's chat model snapshot answers and keeps its own reasoning effort. Outside a tick the generation's model answers through a provider that forces thinking off, or through the generation's own provider when no API key is configured; only that last case honors ``disable_thinking``. ``max_tokens`` defaults to the generation's configured cap. ``call_purpose="auxiliary"`` marks a short side request: it opts out of the configured reasoning and does not calibrate the input budget. ``tool_choice`` may be ``"auto"`` or a tool-choice object. ``natural_draft`` turns the completion into the open natural plan's draft before returning: the ``message_push`` call's ``messages`` are validated, with at most one format correction, and the plan keeps the provider response (refusal, finish reason, provider fields). The returned completion carries that ``message_push`` call with the accepted messages, or unchanged business tool calls the model made instead. A completion that cannot become a draft raises ``ValueError``. No open plan raises ``RuntimeError``.
 
-- `builtin_skills_dir() -> str`
-
-  Directory of built-in skills (source tree or the installed resources). Drift reads ``SKILL.md`` from here. It does not write state beside those files.
-
 - `file_tool_schema(name: str) -> Mapping[str, object]`
 
   OpenAI schema of the host file tool ``name`` (``read_file``, ``write_file``, ``edit_file``). An unknown name raises ``KeyError``.

@@ -62,8 +62,8 @@ tick
 | `roles/<role-id>/drift/skills/<name>/scripts/*.py` | **你写** | 当前角色固定脚本，skill 通过 `shell` 工具调用 |
 | `roles/<role-id>/drift/drift.json` | **agent 写** | `finish_drift` 自动写运行记录（`recent_runs`，保留最近 10 条）和跨轮次自由笔记 `note`（`finish_drift` 的可选 `note` 参数，截到 150 字），不用管 |
 
-仓库里的 `apps/backend/skills/` 有两个内置 skill 也会进 drift 的候选列表：`create-drift-skill`（创建新的 drift skill）和 `meme-manage`（维护表情包库）。
-扫描时角色自己的 skill 排在前面，与内置 skill 同名时候选列表只保留角色的那份；但 `read_file("skills/<name>/...")` 是先看内置目录里有没有这个文件、有就读内置的，没有才落到角色工作区——所以别给自己的 skill 起 `create-drift-skill` / `meme-manage` 这两个名字。
+proactive 插件随包分发两个内置 skill：`create-drift-skill`（创建新的 drift skill）和 `meme-manage`（维护表情包库）。源码位于 `plugins/proactive/skills/`，wheel 和桌面安装包都携带它们，不依赖宿主的内置技能目录。
+扫描时角色自己的 skill 排在前面，同名时候选列表保留角色的那份。`read_file("skills/<name>/...")` 先读角色 drift 目录里的文件，不存在时才读插件内置资源。运行状态和工作文件始终写在角色 drift 目录，安装目录只读。插件启用时也向普通聊天提供这两项技能；普通聊天的工作区 `skills/` 同名技能仍优先。
 
 ### SKILL.md 结构
 

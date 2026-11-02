@@ -21,7 +21,7 @@ packages = [
 package-dir = {"plugins.proactive" = "."}
 
 [tool.setuptools.package-data]
-"plugins.proactive" = ["manifest.yaml", "TESTING.md"]
+"plugins.proactive" = ["manifest.yaml", "TESTING.md", "skills/*/SKILL.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

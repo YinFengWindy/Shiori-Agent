@@ -28,9 +28,6 @@ class _Host:
     def web_fetch_available(self) -> bool:
         return False
 
-    def builtin_skills_dir(self) -> str:
-        return str(Path("/tmp/shiori-no-builtin-skills"))
-
     def compile_role_prompt(self, role_id: str) -> str:
         return role_id
 

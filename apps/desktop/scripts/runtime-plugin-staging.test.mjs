@@ -38,3 +38,17 @@ test("frozen staging excludes external source before hidden-import collection", 
   assert.deepEqual(await collectPluginBackendModules(staged), ["plugins.bundled.backend.plugin"]);
   for (const excluded of ["separate", "bundled/tests", "bundled/backend/__pycache__"]) await assert.rejects(access(join(staged, excluded)));
 });
+
+test("proactive ships its read-only Drift skills in the frozen plugin tree", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "proactive-skills-staging-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, "source"), staged = join(root, "staged");
+  const proactive = fileURLToPath(new URL("../../../plugins/proactive", import.meta.url));
+  await cp(proactive, join(source, "proactive"), { recursive: true });
+  await stageBuiltinPlugins(source, staged);
+  for (const name of ["meme-manage", "create-drift-skill"]) {
+    const relative = join("skills", name, "SKILL.md");
+    assert.deepEqual(await readFile(join(staged, "proactive", relative)), await readFile(join(proactive, relative)));
+    await assert.rejects(access(join(staged, "proactive", "skills", name, "state.json")));
+  }
+});

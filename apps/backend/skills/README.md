@@ -14,14 +14,6 @@
   - 管理和查询 RSS/信息来源订阅，支持列订阅、查最新、查概况、关键词搜索。
   - 文件：`apps/backend/skills/feed-manage/SKILL.md`
 
-- `meme-manage`
-  - 维护工作区表情包库，支持新增图片、整理类别和更新 manifest。
-  - 文件：`apps/backend/skills/meme-manage/SKILL.md`
-
-- `create-drift-skill`
-  - 在当前角色的 `roles/<role-id>/drift/skills` 下创建或更新 drift skill。
-  - 文件：`apps/backend/skills/create-drift-skill/SKILL.md`
-
 - `codex-delegate`
   - 把长代码库任务委托给本机 Codex CLI 后台执行，并等待完成后回灌结果。
   - 文件：`apps/backend/skills/codex-delegate/SKILL.md`
@@ -37,6 +29,10 @@
 - `weather`
   - 通过 wttr.in / Open-Meteo 查询天气与预报。
   - 文件：`apps/backend/skills/weather/SKILL.md`
+
+## 插件提供的技能
+
+proactive 启用时提供 `meme-manage` 和 `create-drift-skill`；它们随插件分发，源码在 `plugins/proactive/skills/`。普通聊天和 Drift 都可读取，工作区同名技能优先。
 
 ## 维护约定
 

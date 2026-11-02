@@ -477,14 +477,6 @@ class ProactiveHost(Protocol):
         """
         ...
 
-    def builtin_skills_dir(self) -> str:
-        """Directory of built-in skills (source tree or the installed resources).
-
-        Drift reads ``SKILL.md`` from here. It does not write state beside those
-        files.
-        """
-        ...
-
     def file_tool_schema(self, name: str) -> Mapping[str, object]:
         """OpenAI schema of the host file tool ``name`` (``read_file``, ``write_file``, ``edit_file``).
 
