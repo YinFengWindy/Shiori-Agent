@@ -1140,6 +1140,7 @@ class PluginKernel:
         raw_values: dict[str, Any],
         drain_timeout: float,
         commit: Callable[[tuple[str, ...]], None] | None = None,
+        on_replaced: Callable[[tuple[str, ...]], None] | None = None,
     ) -> PluginReloadResult:
         """Re-runs setup of an ACTIVE plugin with new config, within this generation.
 
@@ -1158,6 +1159,9 @@ class PluginKernel:
         the same uninterruptible replacement as the setup, so caller
         cancellation cannot separate "reloaded" from "persisted"; when it
         raises, the reload is rolled back like a setup failure of the target.
+        ``on_replaced`` receives the full closure once its final instances have
+        settled, including failed restores, inside that same uninterruptible
+        transition. It announces replacement independently of config success.
 
         Raises, with nothing changed: ``LookupError`` for an unknown plugin,
         ``PluginReloadUnsupported`` when no in-generation reload applies, and
@@ -1184,6 +1188,7 @@ class PluginKernel:
                 steps=self._reload_steps(),
                 drain_timeout=drain_timeout,
                 commit=commit,
+                on_replaced=on_replaced,
             )
 
     def _reload_closure(self, record: PluginRecord) -> list[PluginHandle]:
@@ -1278,6 +1283,7 @@ class PluginKernel:
         raw_values: dict[str, Any],
         drain_timeout: float,
         commit: Callable[[tuple[str, ...]], None] | None = None,
+        on_replaced: Callable[[tuple[str, ...]], None] | None = None,
     ) -> PluginReloadResult:
         """Enables or disables a plugin within this generation, as ``values`` say.
 
@@ -1312,6 +1318,8 @@ class PluginKernel:
         cancellation) when draining the optional consumers did not finish: a
         busy consumer refuses the toggle, disabling included, and ``commit``
         never runs. See ``agent.plugin_host.reload.toggle_closure``.
+        ``on_replaced`` has the same settled-instance semantics as ``reload``;
+        a table-only change does not call it.
         """
         async with self._transition_lock:
             record = self._find_record(name)
@@ -1367,6 +1375,7 @@ class PluginKernel:
                 ),
                 drain_timeout=drain_timeout,
                 commit=commit,
+                on_replaced=on_replaced,
             )
             if not enabled:
                 # A later re-enable within this generation is a fresh start.

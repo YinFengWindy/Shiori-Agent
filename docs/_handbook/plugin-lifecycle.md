@@ -57,7 +57,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
   - 排空超时：`plugin_reload_busy`，`details.plugin_ids` 是仍在忙的插件，什么都没变，旧实例继续服务。
   - 新配置 setup 失败：恢复旧配置和旧实例，`plugin_reload_failed`，带 `details.plugin_ids` 与 `details.restore_failed`（没能按旧配置恢复、留在 `FAILED` 的插件）。
   - 新实例起来后写配置文件失败：同样回滚，`runtime_commit_failed`，带相同的 details。
-- **成功后**：桥接发 `plugins.reloaded`（`{generation, plugin_ids}`，目标在前），renderer 只替换这些插件的通信上下文、后台作用域和原生会话。同一 `operation_id` 的重试返回记住的结果，不再发事件。`plugin.config.set` 没有桥接默认的 30 秒请求期限。
+- **实例替换结束后**：桥接发一次 `plugins.reloaded`（`{generation, plugin_ids, disabled_plugin_ids}`，目标在前），renderer 只替换这些插件的通信上下文、后台作用域和原生会话。新配置 setup 或持久化失败时，按旧配置重新创建实例后也发布完整替换闭包；未恢复的插件仍在 `plugin_ids` 中，名册如实显示 `FAILED`，不误报为用户停用。`disabled_plugin_ids` 只标记实际停用的插件及因此阻塞的硬依赖消费者。通知先于失败响应，原错误和未保存状态保持。drain 后调用方取消也不丢恢复通知；drain 拒绝、替换前的校验失败和无变化保存不发替换通知。成功操作的同一 `operation_id` 重试返回记住的结果，不再发事件；失败操作不记作成功。`plugin.config.set` 没有桥接默认的 30 秒请求期限。
 
 插件可观察的语义：
 
