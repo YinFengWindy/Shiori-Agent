@@ -75,6 +75,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     // Unreleased (P6s, #906): chat-sidebar surfaces and the detail row, for the `roleTasks` block.
     "chatSidebarPanelClass", "chatSidebarHeaderClass", "chatSidebarScrollableClass", "DetailRow",
     "roleTaskGroupHeadClass", "roleTaskGroupCountClass", "roleTaskRowClass", "roleTaskRowTitleClass", "roleTaskRowSummaryClass",
+    // Shared role-editor controls used by plugin-owned settings cards.
+    "roleControlClass", "roleFieldClass", "roleFieldLabelClass", "rolePanelGhostButtonClass",
   ],
 };
 

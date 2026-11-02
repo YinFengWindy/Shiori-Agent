@@ -136,32 +136,42 @@ export function useRoleManagement({
         removedIllustrations: current.removedIllustrations === nextRoleForm.removedIllustrations ? [] : current.removedIllustrations,
       }));
     }
+    const postSaveErrors: string[] = [];
+    async function notifySaved(pluginId?: string) {
+      try { await notifyPluginRoleSaved(nextRoleForm.pluginSettings, detailRole?.runtime_config, detailRole?.plugin_state, pluginId); }
+      catch (error: unknown) { postSaveErrors.push(errorMessage(error)); }
+    }
+    // Atomic extension drafts already committed with the role. Their effects
+    // must not depend on a later independent plugin write succeeding.
+    await notifySaved();
     try {
-      await savePluginRoleSettings(updated.id, nextRoleForm.pluginSettings, detailRole?.plugin_state ?? {}, (pluginId, snapshot) => {
+      await savePluginRoleSettings(updated.id, nextRoleForm.pluginSettings, detailRole?.plugin_state ?? {}, async (pluginId, snapshot) => {
         setRoles((current) => current.map((role) => role.id === updated.id
           ? { ...role, plugin_state: { ...role.plugin_state, [pluginId]: snapshot } } : role));
+        await notifySaved(pluginId);
       });
     } catch (error: unknown) {
       // Keep failed drafts dirty even if refreshing the other persisted values fails.
       let detail = errorMessage(error);
       try { await loadRolesFromBridge(); }
       catch (refreshError: unknown) { detail += `；刷新失败：${errorMessage(refreshError)}`; }
+      if (postSaveErrors.length) detail += `；已保存设置的后续处理失败：${postSaveErrors.join("；")}`;
       setSavingRole(false);
       feedback.error(`角色已保存，插件设置未保存：${detail}`);
       return;
     }
     try {
-      await notifyPluginRoleSaved(nextRoleForm.pluginSettings, detailRole?.runtime_config, detailRole?.plugin_state);
       const { resolvedRole } = await refreshRolesAndResolveRole(updated);
       if (currentRoleId.current === updated.id) {
         await openRole(updated.id, resolvedRole, { recordHistory: false });
       }
-      feedback.success("角色已保存");
     } catch (error: unknown) {
-      feedback.error(`角色及插件设置已保存，后续处理失败：${errorMessage(error)}`);
+      postSaveErrors.push(errorMessage(error));
     } finally {
       setSavingRole(false);
     }
+    if (postSaveErrors.length) feedback.error(`角色及插件设置已保存，后续处理失败：${postSaveErrors.join("；")}`);
+    else feedback.success("角色已保存");
   }
 
   async function saveRoleAssets(nextSelection?: {

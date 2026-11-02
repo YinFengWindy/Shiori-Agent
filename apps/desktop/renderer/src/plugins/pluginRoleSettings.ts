@@ -29,10 +29,11 @@ export function buildPluginRoleDraftUpdates(drafts: PluginRoleSettingsDraft, plu
     .map((entry) => [entry.pluginId, drafts[entry.pluginId]]));
 }
 
-/** Invokes plugin-owned post-save effects only after persistence succeeds. */
-export async function notifyPluginRoleSaved(drafts: PluginRoleSettingsDraft, previousRuntime: Record<string, unknown> = {}, previousState: PluginRoleSettingsDraft = {}) {
+/** Notifies core-committed contributions, or one RPC contribution after its own commit. */
+export async function notifyPluginRoleSaved(drafts: PluginRoleSettingsDraft, previousRuntime: Record<string, unknown> = {}, previousState: PluginRoleSettingsDraft = {}, savedPluginId?: string) {
   const previous = readPluginRoleSettings(previousRuntime, previousState);
   await Promise.all(pluginRoleSettingsRegistry.list().filter((entry) => isPluginEnabled(entry.pluginId)
+    && (savedPluginId !== undefined ? entry.pluginId === savedPluginId : entry.storage !== "plugin" || !entry.save)
     && drafts[entry.pluginId] !== undefined
     && JSON.stringify(drafts[entry.pluginId]) !== JSON.stringify(previous[entry.pluginId]))
     .map(async (entry) => {
@@ -67,14 +68,14 @@ export function refreshPluginRoleDrafts(drafts: PluginRoleSettingsDraft, snapsho
 }
 
 /** Persists RPC-owned drafts after core save; the caller retains drafts on failure. */
-export async function savePluginRoleSettings(roleId: string, drafts: PluginRoleSettingsDraft, previousState: PluginRoleSettingsDraft, onSaved: (pluginId: string, snapshot: PluginRoleValues) => void) {
+export async function savePluginRoleSettings(roleId: string, drafts: PluginRoleSettingsDraft, previousState: PluginRoleSettingsDraft, onSaved: (pluginId: string, snapshot: PluginRoleValues) => Promise<void>) {
   for (const entry of pluginRoleSettingsRegistry.list()) {
     if (entry.storage !== "plugin" || !entry.save || !isPluginEnabled(entry.pluginId)) continue;
     const values = drafts[entry.pluginId];
     const previous = entry.read(previousState[entry.pluginId] ?? {});
     if (!values || JSON.stringify(values) === JSON.stringify(previous)) continue;
     const client = createPluginRpcClient(entry.pluginId);
-    try { onSaved(entry.pluginId, await entry.save(roleId, values, previous, client)); }
+    try { await onSaved(entry.pluginId, await entry.save(roleId, values, previous, client)); }
     finally { await client.dispose(); }
   }
 }
