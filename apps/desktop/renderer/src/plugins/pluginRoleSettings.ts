@@ -54,21 +54,29 @@ export function pluginRoleSettingsDirty(drafts: PluginRoleSettingsDraft, runtime
   ));
 }
 
-/** Replaces independent projections after plugin mutations while retaining other unsaved edits. */
+/** Reconciles independent projections, retaining fields edited since the supplied draft. */
 export function refreshPluginRoleDrafts(drafts: PluginRoleSettingsDraft, snapshot: PluginRoleSettingsDraft = {}, expected?: PluginRoleSettingsDraft) {
   const hydrated = { ...drafts };
   for (const entry of pluginRoleSettingsRegistry.list()) {
-    if (entry.storage === "plugin" && snapshot[entry.pluginId] !== undefined
-      && (expected === undefined || drafts[entry.pluginId] === undefined
-        || JSON.stringify(drafts[entry.pluginId]) === JSON.stringify(expected[entry.pluginId]))) {
-      hydrated[entry.pluginId] = entry.read(snapshot[entry.pluginId]);
+    if (entry.storage !== "plugin" || snapshot[entry.pluginId] === undefined) continue;
+    const values = { ...entry.read(snapshot[entry.pluginId]) };
+    const current = drafts[entry.pluginId];
+    if (expected !== undefined && current !== undefined) {
+      const previous = expected[entry.pluginId] ?? {};
+      for (const field of new Set([...Object.keys(current), ...Object.keys(previous)])) {
+        if (Object.hasOwn(current, field) === Object.hasOwn(previous, field)
+          && JSON.stringify(current[field]) === JSON.stringify(previous[field])) continue;
+        if (Object.hasOwn(current, field)) values[field] = current[field];
+        else delete values[field];
+      }
     }
+    hydrated[entry.pluginId] = values;
   }
   return JSON.stringify(hydrated) === JSON.stringify(drafts) ? drafts : hydrated;
 }
 
-/** Persists RPC-owned drafts after core save; the caller retains drafts on failure. */
-export async function savePluginRoleSettings(roleId: string, drafts: PluginRoleSettingsDraft, previousState: PluginRoleSettingsDraft, onSaved: (pluginId: string, snapshot: PluginRoleValues) => Promise<void>) {
+/** Persists RPC drafts; communication cleanup errors are reported separately from writes. */
+export async function savePluginRoleSettings(roleId: string, drafts: PluginRoleSettingsDraft, previousState: PluginRoleSettingsDraft, onSaved: (pluginId: string, snapshot: PluginRoleValues) => Promise<void>, onPostSaveError: (error: unknown) => void) {
   for (const entry of pluginRoleSettingsRegistry.list()) {
     if (entry.storage !== "plugin" || !entry.save || !isPluginEnabled(entry.pluginId)) continue;
     const values = drafts[entry.pluginId];
@@ -76,6 +84,9 @@ export async function savePluginRoleSettings(roleId: string, drafts: PluginRoleS
     if (!values || JSON.stringify(values) === JSON.stringify(previous)) continue;
     const client = createPluginRpcClient(entry.pluginId);
     try { await onSaved(entry.pluginId, await entry.save(roleId, values, previous, client)); }
-    finally { await client.dispose(); }
+    finally {
+      try { await client.dispose(); }
+      catch (error: unknown) { onPostSaveError(error); }
+    }
   }
 }

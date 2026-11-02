@@ -1,4 +1,4 @@
-import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, savePluginRoleSettings } from "../plugins/pluginRoleSettings";
+import { buildPluginRoleDraftUpdates, notifyPluginRoleSaved, refreshPluginRoleDrafts, savePluginRoleSettings } from "../plugins/pluginRoleSettings";
 import type React from "react";
 import { useRolePluginRefresh } from "./useRolePluginRefresh";
 import { waitForMinimumRoleCardBusy } from "./appState";
@@ -125,6 +125,7 @@ export function useRoleManagement({
       return;
     }
     const updated = res.payload.role as RoleRecord;
+    let committedRole = updated;
     // Core fields are already committed. Update their baseline and retire the
     // one-shot asset operations before attempting the independent plugin RPC.
     setRoles((current) => current.map((role) => role.id === updated.id ? updated : role));
@@ -146,14 +147,21 @@ export function useRoleManagement({
     await notifySaved();
     try {
       await savePluginRoleSettings(updated.id, nextRoleForm.pluginSettings, detailRole?.plugin_state ?? {}, async (pluginId, snapshot) => {
+        committedRole = { ...committedRole, plugin_state: { ...committedRole.plugin_state, [pluginId]: snapshot } };
         setRoles((current) => current.map((role) => role.id === updated.id
           ? { ...role, plugin_state: { ...role.plugin_state, [pluginId]: snapshot } } : role));
+        if (currentRoleId.current === updated.id) {
+          updateRoleForm((current) => {
+            const pluginSettings = refreshPluginRoleDrafts(current.pluginSettings, { [pluginId]: snapshot }, nextRoleForm.pluginSettings);
+            return pluginSettings === current.pluginSettings ? current : { ...current, pluginSettings };
+          });
+        }
         await notifySaved(pluginId);
-      });
+      }, (error) => postSaveErrors.push(errorMessage(error)));
     } catch (error: unknown) {
       // Keep failed drafts dirty even if refreshing the other persisted values fails.
       let detail = errorMessage(error);
-      try { await loadRolesFromBridge(); }
+      try { if (await loadRolesFromBridge() === null) detail += "；角色列表刷新失败"; }
       catch (refreshError: unknown) { detail += `；刷新失败：${errorMessage(refreshError)}`; }
       if (postSaveErrors.length) detail += `；已保存设置的后续处理失败：${postSaveErrors.join("；")}`;
       setSavingRole(false);
@@ -161,7 +169,8 @@ export function useRoleManagement({
       return;
     }
     try {
-      const { resolvedRole } = await refreshRolesAndResolveRole(updated);
+      const { resolvedRole, nextRoles } = await refreshRolesAndResolveRole(committedRole);
+      if (nextRoles === null) postSaveErrors.push("角色列表刷新失败");
       if (currentRoleId.current === updated.id) {
         await openRole(updated.id, resolvedRole, { recordHistory: false });
       }
