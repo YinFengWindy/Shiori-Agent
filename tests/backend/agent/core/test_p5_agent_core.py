@@ -100,11 +100,11 @@ async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                         peek_next_message_id=MagicMock(return_value="telegram:123:0"),
                         append_messages=AsyncMock(),
                     ),
-                    presence=None,
                 ),
             ),
             context_store=cast(ContextStore, context_store),
@@ -171,11 +171,11 @@ async def test_agent_core_process_coerces_empty_reply_before_commit():
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                         peek_next_message_id=MagicMock(return_value="cli:1:0"),
                         append_messages=AsyncMock(),
                     ),
-                    presence=None,
                 ),
             ),
             context_store=cast(ContextStore, context_store),
@@ -238,11 +238,11 @@ async def test_agent_core_before_reasoning_can_patch_context():
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                         peek_next_message_id=MagicMock(return_value="telegram:123:0"),
                         append_messages=AsyncMock(),
                     ),
-                    presence=None,
                 ),
             ),
             context_store=cast(ContextStore, context_store),
@@ -302,6 +302,7 @@ async def test_before_turn_abort_skips_reasoner_and_commit_and_dispatches():
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                     )
                 ),
@@ -354,6 +355,7 @@ async def test_before_reasoning_abort_skips_reasoner_and_commit_and_dispatches()
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                     )
                 ),
@@ -404,6 +406,7 @@ async def test_abort_does_not_dispatch_when_dispatch_outbound_false():
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                     )
                 ),
@@ -448,11 +451,11 @@ async def test_reasoner_exception_turn_returns_control_outbound():
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                         peek_next_message_id=MagicMock(return_value="telegram:123:0"),
                         append_messages=AsyncMock(),
                     ),
-                    presence=None,
                 ),
             ),
             context_store=cast(ContextStore, context_store),
@@ -493,11 +496,11 @@ async def test_memory_consolidation_failure_propagates_to_transport_error():
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                         peek_next_message_id=MagicMock(return_value="role:mira:30"),
                         append_messages=AsyncMock(),
                     ),
-                    presence=None,
                 ),
             ),
             context_store=cast(ContextStore, context_store),
@@ -554,11 +557,11 @@ async def test_after_turn_dispatch_exception_is_not_wrapped_by_control_outbound(
                 SessionServices,
                 SimpleNamespace(
                     session_manager=SimpleNamespace(
+                        presence=MagicMock(),
                         get_or_create=MagicMock(return_value=session),
                         peek_next_message_id=MagicMock(return_value="telegram:123:0"),
                         append_messages=AsyncMock(),
                     ),
-                    presence=None,
                 ),
             ),
             context_store=cast(ContextStore, context_store),

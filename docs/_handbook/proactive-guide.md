@@ -172,7 +172,7 @@ MCP server 通过 stdio 与 agent 通信，启动时 `McpClientPool.connect_all(
 
 ### 4. 写推送规则（`~/.shiori/workspace/roles/<role-id>/PROACTIVE_CONTEXT.md`）
 
-这是当前角色主被动 loop 共享的规则面板，文件不存在时 proactive loop 启动会按模板建一份。（注意：主 agent 的系统提示词 `prompts/agent.py` 里写的路径目前仍是工作区根目录的 `PROACTIVE_CONTEXT.md`，和 proactive loop 实际读取的角色目录不一致。）你通过**被动对话**让主 agent 帮你写和维护。proactive agent 每轮只读。
+这是当前角色主被动 loop 共享的规则面板，文件不存在时 proactive loop 启动会按模板建一份。主动插件通过 `PromptRendering` 向当前角色的被动回合提供这一路径和维护规则；停用插件后不会注入主动说明。你通过**被动对话**让主 agent 帮你写和维护。proactive agent 每轮只读。
 
 ```
 # Proactive Context

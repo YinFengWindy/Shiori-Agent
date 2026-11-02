@@ -10,7 +10,6 @@ from core.roles.affection_access import AffectionGetter
 from session.manager import Session, SessionManager
 from session.manager.helpers import role_id_from_session_key
 from session.manager.models import build_session_message
-from shiori_sdk.core.sessions import Presence
 
 
 class DesktopAppService:
@@ -23,13 +22,11 @@ class DesktopAppService:
         session_manager: SessionManager,
         conversation_service: ConversationService,
         affection: AffectionGetter,
-        presence: Presence | None = None,
     ) -> None:
         self.role_service = role_service
         self.session_manager = session_manager
         self.conversation_service = conversation_service
         self._affection = affection
-        self.presence = presence
 
     async def open_role_session(self, role_id: str):
         aggregate = await self.role_service.open_role_async(role_id)
@@ -164,11 +161,7 @@ class DesktopAppService:
             return session
         return await self._apply_post_persist_runtime_effects(
             session,
-            record_presence=(
-                self.presence.record_initiated_sent
-                if self.presence is not None
-                else None
-            ),
+            record_presence=self.session_manager.presence.record_initiated_sent,
             handle_relationship="proactive",
         )
 
@@ -205,9 +198,7 @@ class DesktopAppService:
         self.sync_desktop_session_thread(session, role_id=role_id)
         _ = await self._apply_post_persist_runtime_effects(
             session,
-            record_presence=(
-                self.presence.record_user_message if self.presence is not None else None
-            ),
+            record_presence=self.session_manager.presence.record_user_message,
             handle_relationship="user",
         )
         return persisted_message
@@ -256,8 +247,7 @@ class DesktopAppService:
         record_presence,
         handle_relationship,
     ) -> Session:
-        if record_presence is not None:
-            record_presence(session.key, utcnow())
+        record_presence(session.key, utcnow())
         affection = self._affection()
         if affection is not None and handle_relationship == "proactive":
             affection.handle_initiated_sent(session.key)

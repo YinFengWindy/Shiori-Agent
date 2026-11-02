@@ -8,7 +8,7 @@ from core.roles.store import RoleStore
 
 from typing import Any, cast
 from types import SimpleNamespace
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -327,7 +327,6 @@ async def test_proactive_media_commit_notifies_shared_session(tmp_path) -> None:
         TurnOrchestratorDeps(
             session=SessionServices(
                 session_manager=cast(Any, session_manager),
-                presence=None,
             ),
             outbound=outbound,
             event_bus=event_bus,
@@ -413,7 +412,6 @@ async def test_proactive_dispatch_error_is_not_converted_to_false(tmp_path) -> N
         TurnOrchestratorDeps(
             session=SessionServices(
                 session_manager=cast(Any, session_manager),
-                presence=None,
             ),
             outbound=_Outbound(),
         )
@@ -461,7 +459,6 @@ async def test_orchestrator_skip_runs_side_effects_without_dispatch():
                         get_or_create=lambda _key: _DummySession("telegram:123")
                     ),
                 ),
-                presence=None,
             ),
             outbound=_Outbound(),
         )
@@ -497,6 +494,10 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
             self._name = name
 
         async def run(self) -> None:
+            if self._name == "success_effect":
+                assert (
+                    session_manager.presence.last_initiated_at(session.key) is not None
+                )
             order.append(self._name)
 
     class _Outbound:
@@ -505,9 +506,6 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
             assert outbound.content == "hello"
             return DeliveryReceipt.sent()
 
-    presence = SimpleNamespace(
-        record_initiated_sent=lambda _key, _when: order.append("presence")
-    )
     initial_metadata = dict(session.metadata)
     session_manager = SessionManager(tmp_path)
     session = session_manager.get_or_create(session.key)
@@ -516,7 +514,6 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
         TurnOrchestratorDeps(
             session=SessionServices(
                 session_manager=cast(Any, session_manager),
-                presence=cast(Any, presence),
             ),
             outbound=_Outbound(),
         )
@@ -551,7 +548,10 @@ async def test_orchestrator_proactive_reply_persists_dispatches_and_runs_success
     assert sent is True
     assert session.messages[0]["proactive"] is True
     assert session.messages[0]["content"] == "hello"
-    assert order == ["side_effect", "dispatch", "presence", "success_effect"]
+    assert order == ["side_effect", "dispatch", "success_effect"]
+    assert (
+        SessionManager(tmp_path).presence.last_initiated_at("telegram:123") is not None
+    )
 
 
 @pytest.mark.asyncio
@@ -560,15 +560,11 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
 ):
     session = _DummySession("role:mira")
     session.metadata["role_id"] = "mira"
-    calls: list[str] = []
 
     class _Outbound:
         async def dispatch(self, outbound: OutboundDispatch) -> DeliveryReceipt | None:
             return DeliveryReceipt.sent()
 
-    presence = SimpleNamespace(
-        record_initiated_sent=lambda key, _when: calls.append(key),
-    )
     initial_metadata = dict(session.metadata)
     session_manager = SessionManager(tmp_path)
     session = session_manager.get_or_create(session.key)
@@ -577,7 +573,6 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
         TurnOrchestratorDeps(
             session=SessionServices(
                 session_manager=cast(Any, session_manager),
-                presence=cast(Any, presence),
             ),
             outbound=_Outbound(),
         )
@@ -598,7 +593,7 @@ async def test_orchestrator_proactive_reply_records_presence_by_role_when_availa
     )
 
     assert sent is True
-    assert calls == ["role:mira"]
+    assert SessionManager(tmp_path).presence.last_initiated_at("role:mira") is not None
 
 
 def _formal_result(owner, content="hello", media=None):
@@ -670,11 +665,10 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     monkeypatch.setattr("agent.turns.reply_sequence.wait_between_messages", pause)
     from unittest.mock import Mock
 
-    presence = SimpleNamespace(record_initiated_sent=Mock())
     relationship = SimpleNamespace(handle_initiated_sent=Mock())
     owner = TurnOrchestrator(
         TurnOrchestratorDeps(
-            session=SessionServices(manager, presence=presence),
+            session=SessionServices(manager),
             outbound=SimpleNamespace(dispatch=dispatch),
             event_bus=event_bus,
             role_lookup=_natural_chat_lookup(tmp_path, True),
@@ -724,7 +718,7 @@ async def test_natural_proactive_keeps_sent_prefix_and_finishes_one_logical_turn
     assert not reloaded.metadata.get("current_mood")
     success.assert_not_awaited()
     failure.assert_awaited_once()
-    presence.record_initiated_sent.assert_called_once_with("role:mira", ANY)
+    assert SessionManager(tmp_path).presence.last_initiated_at("role:mira") is not None
     relationship.handle_initiated_sent.assert_called_once_with("role:mira")
     await event_bus.aclose()
 

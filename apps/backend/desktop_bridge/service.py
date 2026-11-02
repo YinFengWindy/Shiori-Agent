@@ -30,7 +30,6 @@ from bus.events_lifecycle import InitiatedMessageCommitted, ReplyMessageCommitte
 from shiori_sdk.role_events import RoleCreated, RoleDeleted
 from shiori_sdk.memory.committed import TurnCommitted
 from shiori_sdk.memory.engine import MemoryEngine
-from shiori_sdk.core.sessions import Presence
 from conversation.listening import GroupListeningControl
 from conversation.listening_store import ListeningMessage
 from conversation.service import ConversationService
@@ -89,7 +88,6 @@ class DesktopBridgeService:
         config: Any = None,
         push_tool: MessagePushTool | None = None,
         affection: AffectionGetter,
-        presence: Presence | None = None,
         subagent_manager: Any | None = None,
         memory_optimizer: Callable[[], MemoryOptimizer | None] = lambda: None,
         role_runtime_registry: RoleRuntimeRegistry | None = None,
@@ -161,7 +159,6 @@ class DesktopBridgeService:
         self.role_service.add_role_deleted_listener(self._role_deleted_listener)
         self.role_service.add_role_created_listener(self._role_created_listener)
         self.conversation_service = ConversationService(session_manager)
-        self.presence = presence
         self.role_tasks = RoleTaskService(
             subagent_manager=subagent_manager,
             memory_optimizer=memory_optimizer,
@@ -172,7 +169,6 @@ class DesktopBridgeService:
             session_manager=session_manager,
             conversation_service=self.conversation_service,
             affection=affection,
-            presence=presence,
         )
         self.session_presenter = DesktopSessionPresenter(
             self.conversation_service,

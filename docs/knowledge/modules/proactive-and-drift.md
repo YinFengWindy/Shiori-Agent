@@ -75,3 +75,5 @@ Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` �
 - 主动投递必须有稳定的角色、会话和目标渠道。
 - 一条主动消息只提交一次权威角色会话、只投递到一个目标，并发出一次 `InitiatedMessageCommitted`（`source="proactive"`）；没有跨渠道重发。
 - 同一 tick 的裁定、工具步骤和最终结果应可追踪。
+
+主动说明由 `plugins/proactive/backend/role_prompt.py` 通过 `PromptRendering` 提供，使用当前角色的 `roles/<id>/PROACTIVE_CONTEXT.md`。核心 prompt 不再持有主动业务段。宿主 presence 只从 `SessionManager.presence` 获取；插件经 `SESSIONS.presence` 读取。场景观察的发布时机继续由 `SCENE_HOST.on_published` 保持，不能直接替换为更早的进程资源发布通知，见[评估](../../decisions/2026-11-02-p6b-publication-and-cleanup.md)。

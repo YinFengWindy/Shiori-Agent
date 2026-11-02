@@ -51,7 +51,6 @@ def _conversation(tmp_path):
         partial(
             orchestrator_for,
             session_manager=manager,
-            presence=None,
             push_tool=push,
             event_bus=bus,
             tools=ToolRegistry(),

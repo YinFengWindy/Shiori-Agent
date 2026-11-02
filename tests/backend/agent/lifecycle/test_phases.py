@@ -923,8 +923,7 @@ async def test_after_reasoning_applies_reasoning_finished_to_store_and_outbound(
     state.session = session
     state.extra_metadata["before_turn_flag"] = "bt"
     services = SimpleNamespace(
-        presence=Mock(),
-        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+        session_manager=SimpleNamespace(presence=Mock(), append_messages=AsyncMock()),
     )
     turn_result = TurnRunResult(
         reply="reply",
@@ -973,7 +972,6 @@ async def test_after_reasoning_carries_the_persisted_assistant_message_id_into_o
     state = TurnState(msg=msg, session_key=session_key, dispatch_outbound=True)
     state.session = session
     services = SimpleNamespace(
-        presence=None,
         session_manager=session_manager,
     )
     turn_result = TurnRunResult(
@@ -1017,8 +1015,7 @@ async def test_after_reasoning_persists_user_display_content_without_internal_me
     state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
     state.session = session
     services = SimpleNamespace(
-        presence=Mock(),
-        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+        session_manager=SimpleNamespace(presence=Mock(), append_messages=AsyncMock()),
     )
     turn_result = TurnRunResult(
         reply="reply",
@@ -1063,8 +1060,7 @@ async def test_after_reasoning_copies_thread_id_into_persisted_messages():
     state = TurnState(msg=msg, session_key=session.key, dispatch_outbound=True)
     state.session = session
     services = SimpleNamespace(
-        presence=Mock(),
-        session_manager=SimpleNamespace(append_messages=AsyncMock()),
+        session_manager=SimpleNamespace(presence=Mock(), append_messages=AsyncMock()),
     )
     turn_result = TurnRunResult(
         reply="reply",

@@ -19,7 +19,6 @@ def test_recent_user_messages_keep_only_the_users_own(tmp_path: Path) -> None:
         workspace=tmp_path,
         role_store=roles,
         session_manager=manager,
-        presence=manager.presence,
     )
     session = sources.get_session(sources.role_session_key("mira"))
     group = network_thread_id("mira", "qq", "gqq:7")

@@ -23,7 +23,6 @@ def stub_core_runtime():
             config=None,
             tools=ToolRegistry(),
             push_tool=None,
-            presence=None,
             affection=bound_affection(),
             role_runtime_registry=None,
             memory_runtime=SimpleNamespace(current_engine=lambda: None),

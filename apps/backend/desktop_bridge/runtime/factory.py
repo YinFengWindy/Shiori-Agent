@@ -25,7 +25,6 @@ def build_desktop_service(
         activate_transport=activate_transport,
         push_tool=runtime.push_tool,
         affection=runtime.affection,
-        presence=runtime.presence,
         subagent_manager=getattr(spawn, "manager", None),
         memory_optimizer=memory_optimizer_getter(runtime.plugin_manager),
         role_runtime_registry=registry,

@@ -357,7 +357,6 @@ async def proactive_host(
         bus=MessageBus(),
     )
     group_environment = GroupEnvironment(workspace, sessions.conversation_store)
-    presence = sessions.presence
     config = Config(provider="test", model="m", api_key="")
     affection_getter = AffectionGetter()
     affection_getter.bind(lambda: cast(Affection, affection))
@@ -376,7 +375,6 @@ async def proactive_host(
         partial(
             orchestrator_for,
             session_manager=sessions,
-            presence=presence,
             push_tool=push,
             event_bus=bus,
             tools=tools,
@@ -398,7 +396,6 @@ async def proactive_host(
             self.config = config
             self.provider = provider
             self.session_manager = sessions
-            self.presence = presence
             self.push_tool = push
             self.event_bus = bus
             self.tools = tools

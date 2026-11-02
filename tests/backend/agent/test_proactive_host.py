@@ -821,7 +821,6 @@ async def _assembly(
         partial(
             orchestrator_for,
             session_manager=sessions,
-            presence=sessions.presence,
             push_tool=push,
             event_bus=bus,
             tools=tools,

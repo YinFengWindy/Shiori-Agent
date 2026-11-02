@@ -101,7 +101,6 @@ class _AssemblyMixin:
         )
         self._session_services = deps.session_services or SessionServices(
             session_manager=deps.session_manager,
-            presence=deps.presence,
         )
 
         # 3. 最后把 passive chain 装起来。

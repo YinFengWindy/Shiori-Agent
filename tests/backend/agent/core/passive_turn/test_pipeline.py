@@ -131,7 +131,7 @@ async def runtime(tmp_path):
     def pipeline(reasoning, *, affection=None, outbound_port=None):
         built = PassiveTurnPipeline(
             AgentCoreDeps(
-                session=SimpleNamespace(session_manager=manager, presence=None),
+                session=SimpleNamespace(session_manager=manager),
                 context_store=SimpleNamespace(
                     prepare=AsyncMock(return_value=ContextBundle())
                 ),
@@ -409,7 +409,7 @@ def _isolation_pipeline(manager, *, input_token_threshold=75000):
     )
     pipeline = PassiveTurnPipeline(
         AgentCoreDeps(
-            session=SimpleNamespace(session_manager=manager, presence=None),
+            session=SimpleNamespace(session_manager=manager),
             context_store=SimpleNamespace(
                 prepare=AsyncMock(return_value=ContextBundle())
             ),

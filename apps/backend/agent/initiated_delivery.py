@@ -39,14 +39,12 @@ from shiori_sdk.core.conversation import (
     InitiatedReply,
     RoleReplyState,
 )
-from shiori_sdk.core.sessions import Presence
 
 
 def orchestrator_for(
     role_id: str,
     *,
     session_manager: SessionManager,
-    presence: Presence | None,
     push_tool: MessagePushTool,
     event_bus: EventBus | None,
     tools: ToolRegistry,
@@ -61,7 +59,6 @@ def orchestrator_for(
         TurnOrchestratorDeps(
             session=SessionServices(
                 session_manager=session_manager,
-                presence=presence,
                 conversation_service=ConversationService(session_manager),
             ),
             outbound=PushToolOutboundPort(
