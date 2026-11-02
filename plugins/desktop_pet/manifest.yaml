@@ -14,4 +14,4 @@ inject:
   - external_turns
   - background
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

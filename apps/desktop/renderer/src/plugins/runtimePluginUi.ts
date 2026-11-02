@@ -5,7 +5,7 @@ import { loadRuntimePluginModules } from "./runtimePluginModuleLoader";
 
 /** Loader boundaries keep module evaluation and CSS cleanup independently testable. */
 export type RuntimePluginUiHost = {
-  importModule: (url: string) => Promise<{ default: unknown }>;
+  importModule: (url: string) => Promise<Record<string, unknown>>;
   loadCss: (url: string) => Promise<() => void>;
   register: (module: PluginUiModule) => void;
   unregister: (pluginId: string) => void;

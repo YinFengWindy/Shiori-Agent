@@ -1,20 +1,31 @@
 import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { builtinPluginDirectories, PLUGIN_RENDERER_SOURCES } from "../../../scripts/plugin-distribution.mjs";
+import { builtinPluginDirectories, readPluginManifest, PLUGIN_RENDERER_SOURCES } from "../../../scripts/plugin-distribution.mjs";
+
+import { frontendExports } from "../../../scripts/plugin-frontend.mjs";
 
 const prefix = "virtual:shiori-builtin-plugins/";
 
 /** Generate imports before bundling, so external source never enters the host graph. */
 export async function builtinPluginEntrySource(pluginsRoot, kind) {
   if (!Object.hasOwn(PLUGIN_RENDERER_SOURCES, kind)) throw new Error(`Unknown plugin entry kind: ${kind}`);
-  const paths = (await builtinPluginDirectories(pluginsRoot))
-    .map((directory) => join(directory, PLUGIN_RENDERER_SOURCES[kind]))
-    .filter(existsSync);
+  const entries = [];
+  for (const directory of await builtinPluginDirectories(pluginsRoot)) {
+    const manifest = await readPluginManifest(directory);
+    const exports = await frontendExports(directory, manifest);
+    if (exports.length) {
+      if (exports.includes(kind)) entries.push({ path: join(directory, manifest.frontend.entry), exportName: kind });
+    } else {
+      // Temporary P7-4 source adapter, never a compatibility path for old APIs.
+      const path = join(directory, PLUGIN_RENDERER_SOURCES[kind]);
+      if (existsSync(path)) entries.push({ path, exportName: "default" });
+    }
+  }
   return {
-    paths,
+    paths: entries.map(({ path }) => path),
     code: [
-      ...paths.map((path, index) => `import * as entry${index} from ${JSON.stringify(path.replaceAll("\\", "/"))};`),
-      `export default {${paths.map((path, index) => `${JSON.stringify(path)}: entry${index}`).join(",")}};`,
+      ...entries.map(({ path }, index) => `import * as entry${index} from ${JSON.stringify(path.replaceAll("\\", "/"))};`),
+      `export default {${entries.map(({ path, exportName }, index) => `${JSON.stringify(path)}: {default:entry${index}.${exportName}}`).join(",")}};`,
     ].join("\n"),
   };
 }
@@ -39,7 +50,7 @@ export function builtinPluginEntries(pluginsRoot) {
       const changed = (path, includeEntries = false) => {
         const parts = relative(resolve(pluginsRoot), resolve(path)).replaceAll("\\", "/").split("/");
         const manifestChanged = parts.length === 2 && parts[1] === "manifest.yaml";
-        const entryChanged = includeEntries && Object.values(PLUGIN_RENDERER_SOURCES).includes(parts.slice(1).join("/"));
+        const entryChanged = includeEntries && /\.[cm]?[jt]sx?$/.test(parts.at(-1));
         if (parts[0] === ".." || (!manifestChanged && !entryChanged)) return;
         for (const id of ids) {
           const module = server.moduleGraph.getModuleById(`\0${id}`);

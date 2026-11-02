@@ -1514,6 +1514,11 @@ def _declares_channels(record: PluginRecord) -> bool:
 
 def _required_renderer_kinds(record: PluginRecord) -> frozenset[str]:
     """Returns the manifest's declared renderer kinds that gate ACTIVE display."""
+    frontend = record.manifest.metadata.get("frontend", {})
+    if isinstance(frontend, dict) and "exports" in frontend:
+        return frozenset(
+            kind for kind in _RENDERER_GATED_KINDS if kind in frontend["exports"]
+        )
     renderer = record.manifest.metadata.get("renderer", {})
     if not isinstance(renderer, dict):
         return frozenset()

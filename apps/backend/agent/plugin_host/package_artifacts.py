@@ -17,7 +17,9 @@ _JS_TOKENS = re.compile(
 )
 
 
-def validate_artifact(root: Path, value: object, field: str, suffix: str) -> str:
+def validate_artifact(
+    root: Path, value: object, field: str, suffix: str, *, export_name: str = "default"
+) -> str:
     """Check containment, required artifact extension, encoding and entry shape.
 
     Python is parsed without compilation/execution. ESM gets lexical default
@@ -43,12 +45,24 @@ def validate_artifact(root: Path, value: object, field: str, suffix: str) -> str
                 for left, right in zip(tokens, tokens[1:])
             )
             # Bundlers commonly emit `export { generated_name as default }`.
-            named_default = _has_named_default(tokens)
+            named_default = _has_named_export(tokens, export_name)
+            if export_name != "default":
+                direct_default = any(
+                    tokens[index : index + 3]
+                    in (
+                        ["export", "const", export_name],
+                        ["export", "function", export_name],
+                        ["export", "class", export_name],
+                        ["export", "let", export_name],
+                        ["export", "var", export_name],
+                    )
+                    for index in range(len(tokens))
+                )
             if not (direct_default or named_default):
                 raise PackageContractError(
                     "unsupported_format",
                     field,
-                    "ESM entry requires export default",
+                    f"ESM entry requires export {export_name}",
                     path=str(value),
                 )
             if any(
@@ -71,7 +85,7 @@ def validate_artifact(root: Path, value: object, field: str, suffix: str) -> str
     return str(value)
 
 
-def _has_named_default(tokens: list[str | None]) -> bool:
+def _has_named_export(tokens: list[str | None], export_name: str) -> bool:
     for index in range(len(tokens) - 1):
         if tokens[index : index + 2] != ["export", "{"]:
             continue
@@ -80,7 +94,13 @@ def _has_named_default(tokens: list[str | None]) -> bool:
             end += 1
         if end == len(tokens) or tokens[end] != "}":
             continue
-        for start in range(index + 2, end - 2):
+        for start in range(index + 2, end):
+            if (
+                tokens[start - 1] in {"{", ","}
+                and tokens[start] == export_name
+                and tokens[start + 1] in {",", "}"}
+            ):
+                return True
             # A literal remains an opaque token, so its contents cannot become
             # syntax or make separated identifiers appear adjacent.
             name = tokens[start]
@@ -88,7 +108,7 @@ def _has_named_default(tokens: list[str | None]) -> bool:
                 tokens[start - 1] in {"{", ","}
                 and name is not None
                 and re.fullmatch(r"[A-Za-z_$][\w$]*", name)
-                and tokens[start + 1 : start + 3] == ["as", "default"]
+                and tokens[start + 1 : start + 3] == ["as", export_name]
                 and tokens[start + 3] in {",", "}"}
             ):
                 return True

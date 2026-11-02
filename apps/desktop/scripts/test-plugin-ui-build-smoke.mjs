@@ -63,9 +63,11 @@ async function bundleContainsMarker(dir, needle) {
 
 async function main() {
   await mkdir(uiDir, { recursive: true });
-  await writeFile(join(pluginDir, "manifest.yaml"), `api: 4\nsdk: '>=4.0.0'\nid: ${pluginId}\n`, "utf8");
+  await writeFile(join(pluginDir, "manifest.yaml"), `api: 4\nsdk: '>=4.0.0'\nid: ${pluginId}\nfrontend: {entry: frontend.ts}\n`, "utf8");
+  await writeFile(join(pluginDir, "frontend.ts"), 'export { default as ui } from "./ui/index"; export { default as background } from "./background/index"; export { default as surface } from "./surface/index";', "utf8");
   await mkdir(externalDir, { recursive: true });
-  await writeFile(join(externalDir, "manifest.yaml"), `api: 4\nsdk: '>=4.0.0'\nid: ${pluginId}_external\ndistribution: external\n`, "utf8");
+  await writeFile(join(externalDir, "manifest.yaml"), `api: 4\nsdk: '>=4.0.0'\nid: ${pluginId}_external\ndistribution: external\nfrontend: {entry: frontend.ts}\n`, "utf8");
+  await writeFile(join(externalDir, "frontend.ts"), "INVALID EXTERNAL FRONTEND", "utf8");
   // A registration-time filter would still parse these invalid modules and fail.
   // A successful production build proves exclusion from all three dependency graphs.
   for (const [kind, extension] of [["ui", "tsx"], ["surface", "tsx"], ["background", "ts"]]) {

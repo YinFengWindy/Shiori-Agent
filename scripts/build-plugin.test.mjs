@@ -7,8 +7,33 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 import { buildPlugin } from "./build-plugin.mjs";
+import { pathToFileURL } from "node:url";
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+test("one frontend artifact carries named contributions without starting their effects", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "frontend-package-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const source = join(root, "source");
+  await mkdir(join(source, "backend"), { recursive: true });
+  await writeFile(join(source, "backend/plugin.py"), "async def setup(ctx):\n    pass\n", "utf8");
+  await writeFile(join(source, "manifest.yaml"), "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: frontend_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: entry.ts}\npeer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}\n", "utf8");
+  await writeFile(join(source, "entry.ts"), "import './style.css'; export const ui={pluginId:'frontend_demo'}; export const background={pluginId:'frontend_demo',setup(){throw Error('explicit start only')}}; export const surface={pluginId:'frontend_demo',surface:{component(){return null}}};", "utf8");
+  await writeFile(join(source, "style.css"), ".frontend-demo { display: flex; }", "utf8");
+  const built = await buildPlugin({ plugin: source, output: join(root, "output") });
+  const python = process.env.SHIORI_TEST_PYTHON ?? join(repository, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+  const script = "import json,sys\nfrom pathlib import Path\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\np=validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z: z.extractall(sys.argv[2])\nprint(json.dumps({'exports':[e.export_name for e in p.renderer], 'entry':p.manifest.frontend_entry}))";
+  const extracted = join(root, "extracted");
+  const { stdout } = await promisify(execFile)(python, ["-c", script, built.archive, extracted], { cwd: repository });
+  const contract = JSON.parse(stdout);
+  assert.deepEqual(contract.exports, ["background", "surface", "ui"]);
+  const namespace = await import(pathToFileURL(join(extracted, contract.entry)).href);
+  assert.equal(namespace.default, undefined);
+  assert.equal(namespace.ui.pluginId, "frontend_demo");
+  assert.equal(namespace.surface.surface.component(), null);
+  assert.throws(() => namespace.background.setup(), /explicit start only/);
+  assert.match(await readFile(join(extracted, "renderer/frontend.css"), "utf8"), /display: flex/);
+});
 
 test("independent ZIP builds preserve peers and pass the actual host package validator", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "build-plugin-"));
@@ -38,7 +63,7 @@ test("independent ZIP builds preserve peers and pass the actual host package val
   const first = await readFile(built.archive);
   assert.equal((await buildPlugin({ plugin: source, output })).sha256, built.sha256);
   assert.deepEqual(await readFile(built.archive), first);
-  const python = join(repository, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
+  const python = process.env.SHIORI_TEST_PYTHON ?? join(repository, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
   const script = "import json, sys\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\nfrom pathlib import Path\np = validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z:\n print(json.dumps({'id':p.manifest.id,'names':z.namelist(),'ui':z.read('renderer/ui.mjs').decode()}))\n";
   const { stdout } = await promisify(execFile)(python, ["-c", script, built.archive], { cwd: repository });
   const actual = JSON.parse(stdout);

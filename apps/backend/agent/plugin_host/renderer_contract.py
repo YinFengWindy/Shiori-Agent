@@ -16,6 +16,7 @@ class RendererEntry:
     kind: str
     entry: str
     css: tuple[str, ...]
+    export_name: str | None = None
 
 
 def validate_renderer(
@@ -25,6 +26,33 @@ def validate_renderer(
     declarations = object_field(
         raw.get("renderer", {}), "renderer", {"ui", "background", "surface"}
     )
+    frontend = raw.get("frontend", {})
+    named_exports: tuple[str, ...] = ()
+    if isinstance(frontend, dict) and "exports" in frontend:
+        if declarations:
+            raise PackageContractError(
+                "invalid_manifest",
+                "frontend",
+                "Frontend cannot also declare renderer entries",
+            )
+        named_exports = string_list(frontend.get("exports"), "frontend.exports")
+        if (
+            not named_exports
+            or len(set(named_exports)) != len(named_exports)
+            or set(named_exports) - {"ui", "background", "surface"}
+        ):
+            raise PackageContractError(
+                "invalid_manifest",
+                "frontend.exports",
+                "Expected unique named frontend contributions",
+            )
+        declarations = {name: frontend for name in named_exports}
+    elif frontend:
+        raise PackageContractError(
+            "invalid_manifest",
+            "frontend",
+            "Installed frontend requires compiled exports and css",
+        )
     peers = object_field(
         raw.get("peer_dependencies", {}), "peer_dependencies", {"react", "react-dom"}
     )
@@ -45,11 +73,23 @@ def validate_renderer(
         _ = compatible_range(version, expression, f"peer_dependencies.{name}")
     entries: list[RendererEntry] = []
     for kind, value in declarations.items():
-        field = f"renderer.{kind}"
-        entry = object_field(value, field, {"entry", "css"})
-        module = validate_artifact(root, entry.get("entry"), f"{field}.entry", ".mjs")
+        field = "frontend" if named_exports else f"renderer.{kind}"
+        entry = object_field(
+            value,
+            field,
+            {"entry", "css", "exports"} if named_exports else {"entry", "css"},
+        )
+        module = validate_artifact(
+            root,
+            entry.get("entry"),
+            f"{field}.entry",
+            ".mjs",
+            export_name=kind if named_exports else "default",
+        )
         css = string_list(entry.get("css"), f"{field}.css")
         for index, path in enumerate(css):
             _ = validate_artifact(root, path, f"{field}.css[{index}]", ".css")
-        entries.append(RendererEntry(kind, module, css))
+        entries.append(
+            RendererEntry(kind, module, css, kind if named_exports else None)
+        )
     return tuple(entries)

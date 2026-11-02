@@ -152,7 +152,7 @@ export function registerDesktopIpcHandlers(
           const grantFor = (pluginId: unknown, kind: "ui" | "background" | "surface") => {
             const entry = entries.find((candidate) => candidate.pluginId === pluginId && candidate.kind === kind);
             if (!entry) return undefined;
-            const base = { pluginId: entry.pluginId, entry: entry.entry, css: entry.css, activationToken: entry.activationToken };
+            const base = { pluginId: entry.pluginId, entry: entry.entry, css: entry.css, activationToken: entry.activationToken, ...(entry.exportName ? { exportName: entry.exportName } : {}) };
             return entry.error === undefined ? base : { ...base, error: entry.error };
           };
           response.payload.plugins = response.payload.plugins.map((plugin) => ({

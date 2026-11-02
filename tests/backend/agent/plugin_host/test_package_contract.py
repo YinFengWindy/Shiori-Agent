@@ -23,6 +23,20 @@ def test_valid_package_reads_version_and_every_renderer_entry(contract_package):
     assert [entry.kind for entry in result.renderer] == ["ui", "background", "surface"]
 
 
+def test_missing_named_frontend_export_refuses_the_whole_package(contract_package):
+    entry = contract_package / "frontend.mjs"
+    entry.write_text("export const ui = {};", encoding="utf-8")
+    _change(
+        contract_package,
+        renderer={},
+        frontend={"entry": "frontend.mjs", "css": [], "exports": ["ui", "background"]},
+    )
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    assert caught.value.diagnostic.field == "frontend.entry"
+    assert caught.value.diagnostic.code == "unsupported_format"
+
+
 @pytest.mark.parametrize("distribution", ["builtin", "external"])
 def test_package_accepts_host_supported_display_and_distribution_metadata(
     contract_package, distribution

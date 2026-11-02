@@ -14,6 +14,15 @@ test("the shipped Grok account UI enters the builtin registry without an externa
   assert.ok(entry.paths.includes(join(pluginsRoot, "grok_bot", "ui", "index.tsx")));
 });
 
+test("desktop pet's three contributions resolve through its declared frontend", async () => {
+  const pluginsRoot = fileURLToPath(new URL("../../../plugins", import.meta.url));
+  for (const kind of ["ui", "background", "surface"]) {
+    const entry = await builtinPluginEntrySource(pluginsRoot, kind);
+    assert.ok(entry.paths.includes(join(pluginsRoot, "desktop_pet", "frontend.ts")));
+    assert.ok(!entry.paths.some((path) => path.includes(join("desktop_pet", kind, "index."))));
+  }
+});
+
 test("all three registries import only builtins and react to development manifest changes", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "plugin-entries-"));
   t.after(() => rm(root, { recursive: true, force: true }));

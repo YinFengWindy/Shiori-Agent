@@ -346,14 +346,28 @@ def _parse_contributed_channels(
 
 
 def _parse_frontend(raw: dict[str, object], plugin_dir: Path) -> str | None:
-    """``frontend.entry``, a file inside the package. The host still globs kinds."""
+    """Source entry, or a compiled entry with build-derived exports and CSS."""
     if "frontend" not in raw:
         return None
     value = raw["frontend"]
     if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
         raise ManifestError("frontend 必须是对象")
-    if set(value) != {"entry"}:
-        raise ManifestError("frontend 只能包含 entry")
+    if "entry" not in value or set(value) - {"entry", "css", "exports"}:
+        raise ManifestError("frontend 只能包含 entry、css 和 exports")
+    if ("css" in value) != ("exports" in value):
+        raise ManifestError("已编译 frontend 必须同时包含 css 和 exports")
+    if "exports" in value:
+        exports = value["exports"]
+        css = value["css"]
+        if (
+            not isinstance(exports, list)
+            or not exports
+            or any(name not in ("ui", "background", "surface") for name in exports)
+            or len(set(exports)) != len(exports)
+            or not isinstance(css, list)
+            or any(not isinstance(path, str) for path in css)
+        ):
+            raise ManifestError("frontend exports 或 css 无效")
     entry = value.get("entry")
     if not isinstance(entry, str) or not entry.strip() or entry != entry.strip():
         raise ManifestError("frontend.entry 必须是非空相对路径")

@@ -1,10 +1,27 @@
 import { build } from "esbuild";
+import { frontendExports } from "./plugin-frontend.mjs";
 import { existsSync } from "node:fs";
 import { PLUGIN_RENDERER_SOURCES } from "./plugin-distribution.mjs";
 import { copyPackagePath, packageFile } from "./plugin-package-files.mjs";
 
 /** Compile independent ESM entries while preserving the host's SDK/React identities. */
 export async function buildPluginRenderer(source, destination, manifest) {
+  const exports = await frontendExports(source, manifest);
+  if (exports.length) {
+    const entry = "renderer/frontend.mjs";
+    const result = await build({
+      absWorkingDir: source, entryPoints: [packageFile(source, manifest.frontend.entry)],
+      outfile: packageFile(destination, entry), bundle: true, format: "esm", platform: "browser", target: "es2022",
+      jsx: "automatic", metafile: true,
+      external: ["react", "react-dom", "react/*", "react-dom/*", "@yinfengwindy/shiori-sdk"],
+      loader: { ".svg": "file", ".png": "file", ".jpg": "file", ".webp": "file", ".woff2": "file" },
+      assetNames: "assets/[name]-[hash]",
+    });
+    const css = Object.values(result.metafile.outputs).some((output) => output.cssBundle) ? ["renderer/frontend.css"] : [];
+    manifest.frontend = { entry, exports, css };
+    delete manifest.renderer;
+    return;
+  }
   const targets = new Set();
   for (const [kind, declaration] of Object.entries(manifest.renderer ?? {})) {
     if (!Object.hasOwn(PLUGIN_RENDERER_SOURCES, kind)) throw new Error(`Unknown renderer kind: ${kind}`);

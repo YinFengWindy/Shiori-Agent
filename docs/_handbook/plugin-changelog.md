@@ -6,6 +6,7 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 - P7-1（#962）：`shiori_sdk.session_keys` 提供纯函数 `role_session_key`、`is_role_session_key`、`role_id_from_session_key` 和 `ROLE_SESSION_PREFIX`。宿主、proactive 和渠道 helper 共用角色会话格式，不需要为拼 key 注入 `SESSION_STORE`。已有 `SESSION_STORE.role_session_key` 保留并委托到相同实现，数据 key 不迁移。生成和解析保留去外围空白的语义，识别函数仍按原始 key 检查前缀和非空后缀，不代替角色或规范 key 校验。
 - **breaking**（#963 P7-2）：删除 `PROACTIVE_HOST.builtin_skills_dir`。内置 Drift skill 随 proactive 的 Python wheel 和桌面插件资源分发，普通聊天经插件 `PromptRendering` 提供技能目录与显式激活内容；工作区同名技能继续优先。插件停用后不再提供这些技能，角色 drift 状态仍只写入原角色目录。
+- P7-3（#964）：`frontend.entry` 支持 `ui`、`background`、`surface` 具名导出，TypeScript SDK 提供 `PluginFrontendModule` 类型。外部构建将入口编译为一个 ESM，自动写入导出名与 CSS；包验证、共享依赖校验、资源授权和激活回执贯通这一入口。模块求值不启动贡献，各窗口只挂载对应导出。其余当前 4.0 插件的旧入口适配将在 P7-4 删除。
 
 - P6b-6（#907）：主动说明从核心提示词移到 proactive 的 `PromptRendering` 贡献，按当前角色给出 `roles/<id>/PROACTIVE_CONTEXT.md`；插件停用后不再注入。宿主 presence 收口到 `SessionManager.presence`，SDK `SESSIONS.presence` 不变。保留 `SCENE_HOST.on_published`：它等后台接手，时机晚于进程资源发布，见[评估](../decisions/2026-11-02-p6b-publication-and-cleanup.md)。
 

@@ -78,9 +78,32 @@
       "description": "前端入口文件。宿主在 P7 前仍按目录发现 ui / background / surface。",
       "type": "object",
       "additionalProperties": false,
-      "required": ["entry"],
+      "required": [
+        "entry"
+      ],
       "properties": {
-        "entry": { "$ref": "#/$defs/nonEmptyString" }
+        "entry": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "css": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "exports": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "ui",
+              "background",
+              "surface"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        }
       }
     },
     "renderer": {

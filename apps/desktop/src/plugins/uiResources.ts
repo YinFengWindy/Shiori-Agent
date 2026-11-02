@@ -43,7 +43,10 @@ export class PluginUiResources {
     for (const row of rows) {
       if (!row || typeof row !== "object" || row.source !== "workspace" || row.state !== "ACTIVE" || !row.enabled) continue;
       if (rows.filter((item) => item?.id === row.id).length !== 1) continue;
-      const renderer: Record<string, unknown> = row.renderer && typeof row.renderer === "object" ? row.renderer : {};
+      const frontend = row.frontend;
+      const renderer: Record<string, unknown> = frontend && typeof frontend === "object" && Array.isArray(frontend.exports)
+        ? Object.fromEntries(frontend.exports.map((name: string) => [name, { ...frontend, exportName: name }]))
+        : row.renderer && typeof row.renderer === "object" ? row.renderer : {};
       const kinds = rendererKinds.filter((kind) => Boolean(renderer[kind]));
       if (kinds.length === 0) continue;
       // Echoed back verbatim in `plugins.activation.report` (#262); shared by
@@ -71,11 +74,12 @@ export class PluginUiResources {
       }
       for (const kind of kinds) {
         try {
-          const descriptor = renderer[kind] as { entry?: unknown; css?: unknown } | undefined;
+          const descriptor = renderer[kind] as { entry?: unknown; css?: unknown; exportName?: unknown } | undefined;
           if (!descriptor || typeof descriptor.entry !== "string" || !Array.isArray(descriptor.css) || !descriptor.css.every((path: unknown) => typeof path === "string")) throw new Error("Invalid renderer descriptor");
           const css = descriptor.css as string[];
           const url = (path: string) => this.mintUrl(grant, path);
-          result.push({ pluginId: row.id, kind, entry: url(descriptor.entry), css: css.map(url), activationToken });
+          if (descriptor.exportName !== undefined && descriptor.exportName !== kind) throw new Error("Invalid frontend export");
+          result.push({ pluginId: row.id, kind, entry: url(descriptor.entry), css: css.map(url), activationToken, ...(descriptor.exportName ? { exportName: kind } : {}) });
         } catch (error) {
           result.push({ pluginId: String(row.id), kind, entry: "", css: [], error: error instanceof Error ? error.message : String(error), activationToken });
         }

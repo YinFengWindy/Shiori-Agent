@@ -11,6 +11,8 @@ export const pluginUiScheme = "shiori-plugin";
  */
 export type RuntimePluginUi = {
   pluginId: string;
+  /** Named contribution selected from a unified frontend namespace. */
+  exportName?: "ui" | "background" | "surface";
   entry: string;
   css: string[];
   error?: string;

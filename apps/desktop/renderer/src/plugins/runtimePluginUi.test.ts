@@ -2,6 +2,28 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { loadRuntimePluginUi } from "./runtimePluginUi";
 
+test("named frontend UI mounts independently and malformed exports clean up", async () => {
+  const mounted = new Set<string>();
+  const styles = new Set<string>();
+  const failures: unknown[] = [];
+  const dispose = await loadRuntimePluginUi([
+    { pluginId: "demo", entry: "one.mjs", css: ["one.css"], exportName: "ui" },
+    { pluginId: "broken", entry: "broken.mjs", css: ["broken.css"], exportName: "ui" },
+  ], {
+    importModule: async (entry) => entry === "one.mjs" ? { ui: { pluginId: "demo" }, background: { setup: () => assert.fail("UI must not start background") } } : { background: {} },
+    loadCss: async (url) => { styles.add(url); return () => { styles.delete(url); }; },
+    register: (module) => { mounted.add(module.pluginId); },
+    unregister: (id) => { mounted.delete(id); },
+    failed: (_entry, error) => { failures.push(error); },
+  });
+  assert.deepEqual([...mounted], ["demo"]);
+  assert.deepEqual([...styles], ["one.css"]);
+  assert.equal(failures.length, 1);
+  dispose();
+  assert.equal(mounted.size, 0);
+  assert.equal(styles.size, 0);
+});
+
 test("ESM or CSS failure cleans only its plugin and preserves the original diagnostic", async () => {
   const failure = new SyntaxError("bad plugin syntax");
   const events: unknown[] = [];

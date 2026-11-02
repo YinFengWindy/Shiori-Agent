@@ -22,7 +22,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `entry` | 外部包必填 | 包内 `.py` 后端入口；内置包默认 `backend/plugin.py` |
 | `inject` / `optional_inject` / `provides` | 否 | 服务 Key 名，见[服务 Key](#服务-key)。同一个名字不能同时在 `inject` 和 `optional_inject`；任何以 `host.` 开头的名字都拒绝 |
 | `contributes.channels` | 否 | 静态渠道声明；非空时 `inject` 必须含 `channels`。规则见[渠道插件](channel-plugins.md) |
-| `frontend.entry` | 否 | 包内前端入口文件（`ui/index.tsx` 这类）。P7 之前宿主仍按目录发现 `ui` / `background` / `surface` |
+| `frontend.entry` | 否 | 包内前端入口，具名导出 `ui` / `background` / `surface`。外部构建生成同一 ESM 的 `frontend.exports` 和 `frontend.css`，见[前端契约](plugin-frontend.md#入口与产物) |
 | `renderer` | 否 | 预编译的 `ui` / `background` / `surface` 入口，**临时保留到 P7**，见[前端契约](plugin-frontend.md#入口与产物) |
 | `peer_dependencies` | 声明 `renderer` 时必填 | `react` 与 `react-dom` 的范围，随 `renderer` 保留到 P7 |
 | `assets` | 否 | 必须存在的包内常规文件列表，默认 `[]` |

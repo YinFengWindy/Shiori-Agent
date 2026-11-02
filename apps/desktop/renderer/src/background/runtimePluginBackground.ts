@@ -6,7 +6,7 @@ import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./plugi
 
 /** Loader boundaries the plugin-host window's bootstrap supplies. */
 export type RuntimePluginBackgroundHost = {
-  importModule: (url: string) => Promise<{ default: unknown }>;
+  importModule: (url: string) => Promise<Record<string, unknown>>;
   loadCss: (url: string) => Promise<() => void>;
   succeeded?: (entry: RuntimePluginUi) => void;
   failed: (entry: RuntimePluginUi, error: unknown) => void;

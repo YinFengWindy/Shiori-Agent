@@ -21,7 +21,7 @@ export function loadRuntimePluginCss(url: string): Promise<() => void> {
 }
 
 /** Dynamically imports a granted plugin ESM entry (a `shiori-plugin://` URL). */
-export function importRuntimePluginModule(url: string): Promise<{ default: unknown }> {
+export function importRuntimePluginModule(url: string): Promise<Record<string, unknown>> {
   initializeRuntimePluginPeers();
   return import(/* @vite-ignore */ url);
 }

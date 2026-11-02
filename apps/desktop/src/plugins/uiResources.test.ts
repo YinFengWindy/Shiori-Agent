@@ -8,6 +8,24 @@ import { PluginUiResources } from "./uiResources";
 
 function hash(content: string) { return createHash("sha256").update(content).digest("hex"); }
 
+test("named exports share one approved resource and are revoked together", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shiori-frontend-"));
+  try {
+    const directory = join(root, "demo");
+    await mkdir(directory);
+    const source = "export const ui = {}; export const background = {}; export const surface = {};";
+    await writeFile(join(directory, "frontend.mjs"), source, "utf8");
+    const row = { id: "demo", source: "workspace", enabled: true, state: "ACTIVE", directory, activation_token: "attempt-1", content_hashes: { "frontend.mjs": hash(source) }, frontend: { entry: "frontend.mjs", css: [], exports: ["ui", "background", "surface"] } };
+    const resources = new PluginUiResources(root);
+    const grants = await resources.admit([row]);
+    assert.equal(new Set(grants.map((grant) => grant.entry)).size, 1);
+    assert.deepEqual(grants.map((grant) => grant.exportName), ["ui", "background", "surface"]);
+    assert.equal(await (await resources.load(grants[0].entry)).text(), source);
+    await resources.admit([{ ...row, state: "FAILED" }]);
+    for (const grant of grants) assert.equal((await resources.load(grant.entry)).status, 403);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("admission retains relative resources, stable URLs and revokes removed or untrusted packages", async () => {
   const root = await mkdtemp(join(tmpdir(), "shiori-ui-"));
   try {

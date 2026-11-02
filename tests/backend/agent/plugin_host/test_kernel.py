@@ -1769,7 +1769,10 @@ async def test_activation_gate_clears_only_once_every_declared_kind_confirms(tmp
     _write_renderer_gated_plugin(
         tmp_path / "gated",
         "gated",
-        renderer="renderer:\n  ui: {entry: x}\n  background: {entry: y}\n",
+        renderer="frontend: {entry: frontend.mjs, exports: [ui, background], css: []}\n",
+    )
+    (tmp_path / "gated/frontend.mjs").write_text(
+        "export const ui = {}; export const background = {};", encoding="utf-8"
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()

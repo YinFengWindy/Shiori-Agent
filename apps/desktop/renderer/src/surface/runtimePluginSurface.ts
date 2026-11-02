@@ -6,7 +6,7 @@ import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfa
 
 /** Loader boundaries a surface window's bootstrap supplies. */
 export type RuntimePluginSurfaceHost = {
-  importModule: (url: string) => Promise<{ default: unknown }>;
+  importModule: (url: string) => Promise<Record<string, unknown>>;
   loadCss: (url: string) => Promise<() => void>;
   failed: (entry: RuntimePluginUi, error: unknown) => void;
 };

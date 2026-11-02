@@ -2,9 +2,16 @@
 
 [插件指南](plugin-guide.md)的专题篇：插件 UI、后台模块和 surface 与宿主之间的 TypeScript 契约。类型的唯一来源是 `@yinfengwindy/shiori-sdk`（源码 `packages/sdk/src/`，契约类型在 `src/contract/`）；运行时导出清单是 `apps/desktop/src/plugins/uiContract.ts` 的 `pluginUiPeerExports`。生成的 [API 参考](plugin-api.md) 只覆盖 Python。与源码冲突时以源码为准。
 
-P7 会统一前端入口（`frontend.entry`），并删掉下面的 `renderer` / `peer_dependencies` 块；在那之前本篇描述的是现行做法。
+前端使用 `frontend.entry` 单入口；P7 迁移期间仍支持未迁移插件的旧 `renderer` 声明。共享 React 的版本约束继续校验。
 
 ## 入口与产物
+
+单 frontend 入口写 `frontend: { entry: frontend.ts }`，入口显式导出 `ui`、`background`、`surface` 中需要的贡献；可以直接从原有模块 re-export。贡献对象本身沿用各自 SDK 类型，合并模块类型为 `PluginFrontendModule`。不要在模块顶层启动后台任务、打开窗口或申请原生资源：三个环境都可能求值同一个入口，只有各自宿主会挂载对应导出。
+
+外部构建自动生成 `renderer/frontend.mjs`（名称只是产物路径，不是旧 manifest 字段），并将 manifest 改写为 `frontend: { entry, exports, css }`。`exports` 来自构建器的真实导出表；CSS 自动收集。React 与 SDK 仍保持 external，共享宿主实例，`peer_dependencies` 校验不变。安装后每个声明的导出都会检查，加载失败仍按原激活令牌回滚整插件。一个包只获取一份受信资源快照，各窗口从同一个 ESM 选择自己的导出。
+
+以下多入口声明只用于尚未迁移的当前 4.0 插件，P7-4 删除；新入口不同时声明 `renderer`。
+
 
 内置插件的源码入口按目录发现：`ui/index.tsx`、`background/index.ts`、`surface/index.tsx`，各自默认导出。外部包在 manifest 的 `renderer.<kind>` 下声明预编译产物：`entry` 是包内 `.mjs`，`css` 是 `.css` 列表（`[]` 表示没有样式）。每个声明的入口和样式都必须存在，缺一个整包在导入后端前就被拒。`node scripts/build-plugin.mjs --plugin plugins/<id> --output artifacts/plugins` 从源码入口编译出这些产物并打 ZIP（要求 `api: 4` 与 `distribution: external`）。
 

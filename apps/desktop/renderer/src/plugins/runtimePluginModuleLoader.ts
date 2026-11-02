@@ -8,7 +8,7 @@ import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
  * sharing the exact same load order and failure handling.
  */
 export type RuntimePluginModuleLoadHost<TModule> = {
-  importModule: (url: string) => Promise<{ default: unknown }>;
+  importModule: (url: string) => Promise<Record<string, unknown>>;
   loadCss: (url: string) => Promise<() => void>;
   /** Rejects a malformed contribution before `register` ever sees it. */
   validate: (value: unknown, pluginId: string) => asserts value is TModule;
@@ -48,7 +48,8 @@ export async function loadRuntimePluginModules<TModule>(
     try {
       if (entry.error) throw new Error(entry.error);
       for (const css of entry.css) styles.push(await host.loadCss(css));
-      const { default: module } = await host.importModule(entry.entry);
+      const namespace = await host.importModule(entry.entry);
+      const module = namespace[entry.exportName ?? "default"];
       host.validate(module, entry.pluginId);
       host.register(module);
       host.succeeded?.(entry);
