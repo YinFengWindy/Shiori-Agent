@@ -9,9 +9,10 @@ writes decisions into affection also starts at publication.
 from __future__ import annotations
 
 import logging
+from functools import partial
 
 from shiori_sdk.core.affection import AFFECTION
-from shiori_sdk.core.conversation import CONVERSATION
+from shiori_sdk.core.conversation import CONVERSATION, PromptRendering
 from shiori_sdk.core.markdown_memory import MARKDOWN_MEMORY
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.models import MAIN_MODEL
@@ -33,6 +34,7 @@ from shiori_sdk.roles import Roles, RoleView
 from shiori_sdk.runtime import PluginRuntimeContext
 
 from .plugin_config import ProactivePluginConfig
+from .role_prompt import append_proactive_prompt
 from .role_settings import ProactiveRoleSettings
 from .service import ProactiveBinding, ProactiveService
 from .turn.scene_subscription import SceneFollowupSubscription
@@ -53,6 +55,10 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     config = ProactivePluginConfig.model_validate(ctx.require(CONFIG).as_dict())
     events = ctx.require(EVENTS)
     roles = ctx.require(ROLES)
+    ctx.on(
+        PromptRendering,
+        partial(append_proactive_prompt, workspace=ctx.require(WORKSPACE), roles=roles),
+    )
     settings = ProactiveRoleSettings(roles)
     ctx.effect(
         "proactive.role_settings",

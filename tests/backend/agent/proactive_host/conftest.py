@@ -408,15 +408,13 @@ def make_proactive_pipeline(
         return True
 
     session_manager = SimpleNamespace(
+        presence=SimpleNamespace(record_initiated_sent=lambda _key, _when: None),
         workspace=Path("."),
         get_or_create=lambda _key: session,
         append_messages=AsyncMock(side_effect=append_messages),
     )
     session_svc = SessionServices(
         session_manager=cast(Any, session_manager),
-        presence=cast(
-            Any, SimpleNamespace(record_initiated_sent=lambda _key, _when: None)
-        ),
     )
 
     class _Outbound:

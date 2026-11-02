@@ -61,6 +61,7 @@ async def test_context_store_commit_persists_commits_and_dispatches():
         record_user_message=MagicMock(side_effect=lambda _key, _when: None)
     )
     session_manager = SimpleNamespace(
+        presence=presence,
         get_or_create=MagicMock(return_value=session),
         append_messages=AsyncMock(
             side_effect=lambda *_args, **_kwargs: order.append("persist")
@@ -124,7 +125,6 @@ async def test_context_store_commit_persists_commits_and_dispatches():
                 Any,
                 SimpleNamespace(
                     session_manager=session_manager,
-                    presence=presence,
                 ),
             ),
             context_store=cast(Any, context_store),
@@ -185,6 +185,7 @@ async def test_context_store_commit_persists_commits_and_dispatches():
 async def test_turn_committed_omits_user_message_when_user_turn_not_persisted():
     session = _DummySession("cli:direct")
     session_manager = SimpleNamespace(
+        presence=MagicMock(),
         get_or_create=MagicMock(return_value=session),
         append_messages=AsyncMock(),
     )
@@ -223,7 +224,6 @@ async def test_turn_committed_omits_user_message_when_user_turn_not_persisted():
                 Any,
                 SimpleNamespace(
                     session_manager=session_manager,
-                    presence=None,
                 ),
             ),
             context_store=cast(Any, context_store),
@@ -294,6 +294,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
         ),
     )
     session_manager = SimpleNamespace(
+        presence=presence,
         get_or_create=MagicMock(return_value=session),
         peek_next_message_id=MagicMock(return_value="telegram:456:0"),
         append_messages=AsyncMock(side_effect=lambda *a, **kw: order.append("persist")),
@@ -354,7 +355,6 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
                 Any,
                 SimpleNamespace(
                     session_manager=session_manager,
-                    presence=presence,
                 ),
             ),
             context_store=cast(ContextStore, context_store),

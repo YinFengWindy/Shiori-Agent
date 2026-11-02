@@ -250,8 +250,9 @@ class AfterReasoningPhase:
 
     def _record_user_activity(self, session_key: str) -> None:
         """用户本人发来消息：刷新在场，并让关系状态（孤独值、等待回复）响应。"""
-        if self._session_services.presence:
-            self._session_services.presence.record_user_message(session_key, utcnow())
+        self._session_services.session_manager.presence.record_user_message(
+            session_key, utcnow()
+        )
         affection = current_affection()
         if affection is not None:
             affection.handle_user_message(session_key)

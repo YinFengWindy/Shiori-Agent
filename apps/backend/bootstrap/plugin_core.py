@@ -144,7 +144,6 @@ class PluginCoreInputs:
     tools: ToolRegistry | None
     role_store: RoleStore | None
     session_manager: SessionManager | None
-    presence: Any | None = None
     role_runtime_registry: RoleRuntimeRegistry | None
     provider: LLMProvider | None
     model: str | None
@@ -267,7 +266,6 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
                     workspace=inputs.workspace,
                     role_store=inputs.role_store,
                     session_manager=inputs.session_manager,
-                    presence=inputs.presence,
                     role_runtime=inputs.role_runtime_registry,
                 ),
             )

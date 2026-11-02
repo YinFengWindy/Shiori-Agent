@@ -38,7 +38,6 @@ if TYPE_CHECKING:
     from bus.queue import MessageBus
     from core.memory.runtime import MemoryRuntime
     from session.manager import SessionManager
-    from shiori_sdk.core.sessions import Presence
 
 
 def configure_logging_stream(stream) -> None:
@@ -135,10 +134,6 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
     @property
     def memory_runtime(self) -> MemoryRuntime | None:
         return self.core.memory_runtime if self.core is not None else None
-
-    @property
-    def presence(self) -> Presence | None:
-        return self.core.presence if self.core is not None else None
 
     async def start(self) -> None:
         if self._started:

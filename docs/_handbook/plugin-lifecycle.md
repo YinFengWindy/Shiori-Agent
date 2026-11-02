@@ -78,7 +78,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 
 安装、更新、卸载外部包总是走代际替换或下次启动，见下文。
 
-场景插件在本代发布时开始观察（`SCENE_HOST.on_published`）。代内重载或代内启用时本代已经发布，新实例 setup 完立即开始观察，不用等下次代际替换。可选注入 `scene` 的 NovelAI 随 scene 的代内重载、启用和停用一起重新 setup，启用后立即登记场景需求，停用后不再持有旧的 scene。
+场景插件在本代后台接管时开始观察（`SCENE_HOST.on_published`）。它晚于进程资源发布：冷启动会等渠道启动和 dispatcher 任务建立，换代会等后台组接手；因此不等同于 `PROCESS_RESOURCES.on_published`，见[发布通知评估](../decisions/2026-11-02-p6b-publication-and-cleanup.md)。代内重载或代内启用时本代已经发布，新实例 setup 完立即开始观察，不用等下次代际替换。可选注入 `scene` 的 NovelAI 随 scene 的代内重载、启用和停用一起重新 setup，启用后立即登记场景需求，停用后不再持有旧的 scene。
 
 ## 启动时的配置迁移
 

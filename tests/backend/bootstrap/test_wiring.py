@@ -621,7 +621,6 @@ def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
                 record_recent_context=lambda key, ids, ownership: None,
             ),
         ),
-        presence=cast(Any, None),
         processing_state=cast(Any, SimpleNamespace()),
         event_bus=EventBus(),
         memory_runtime=cast(

@@ -197,7 +197,7 @@ async def test_cancel_after_the_reply_is_stored_still_runs_success_effects() -> 
     sender.send.return_value = True
     tick, state, acks = _sending_tick(sender=sender, event_bus=bus)
     task = asyncio.create_task(tick.run())
-    await announcing.wait()
+    await asyncio.wait_for(announcing.wait(), 2)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
@@ -222,7 +222,7 @@ async def test_cancel_during_the_send_runs_neither_effect() -> None:
     sender.send.side_effect = send
     tick, state, acks = _sending_tick(sender=sender)
     task = asyncio.create_task(tick.run())
-    await sending.wait()
+    await asyncio.wait_for(sending.wait(), 2)
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task

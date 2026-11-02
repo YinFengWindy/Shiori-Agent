@@ -37,7 +37,6 @@ async def test_bridge_publishes_role_created(tmp_path):
         group_listening=GroupListeningControl(
             ConversationService(sessions), lambda _channel: False
         ),
-        presence=sessions.presence,
     )
     try:
         bridge.role_service.create_role(

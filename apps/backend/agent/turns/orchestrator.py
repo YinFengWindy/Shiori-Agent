@@ -358,14 +358,11 @@ class TurnOrchestrator:
             if committed is not None:
                 committed.append(str(message["id"]))
             session = self._session.session_manager.get_or_create(session_key)
-            if self._session.presence:
-                role_id = str(
-                    getattr(session, "metadata", {}).get("role_id") or ""
-                ).strip()
-                self._session.presence.record_initiated_sent(
-                    role_session_key(role_id) if role_id else session_key,
-                    utcnow(),
-                )
+            role_id = str(getattr(session, "metadata", {}).get("role_id") or "").strip()
+            self._session.session_manager.presence.record_initiated_sent(
+                role_session_key(role_id) if role_id else session_key,
+                utcnow(),
+            )
             affection = current_affection()
             if affection is not None:
                 affection.handle_initiated_sent(session_key)
@@ -442,10 +439,9 @@ class TurnOrchestrator:
                 if not delivered:
                     return
                 role_id = str(plan.origin.metadata.get("role_id") or "")
-                if self._session.presence:
-                    self._session.presence.record_initiated_sent(
-                        role_session_key(role_id), utcnow()
-                    )
+                self._session.session_manager.presence.record_initiated_sent(
+                    role_session_key(role_id), utcnow()
+                )
                 affection = current_affection()
                 if affection is not None:
                     affection.handle_initiated_sent(session.key)

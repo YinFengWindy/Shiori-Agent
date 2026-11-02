@@ -243,7 +243,6 @@ async def test_committed_affection_change_is_recorded(
             workspace=tmp_path,
             role_store=RoleStore(tmp_path),
             session_manager=manager,
-            presence=manager.presence,
         )
     )
     relationship.affection.initialize("yin", value=50, reason="初识")

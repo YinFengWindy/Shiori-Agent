@@ -110,7 +110,7 @@ def phase(manager):
         AfterReasoningPhase(
             EventBus(),
             TurnEvents(EventBus(), core_kernel),
-            SimpleNamespace(session_manager=manager, presence=None),
+            SimpleNamespace(session_manager=manager),
         )
     )
 
@@ -607,7 +607,6 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
             workspace=tmp_path,
             role_store=RoleStore(tmp_path),
             session_manager=manager,
-            presence=presence,
         )
     )
     relationship.write_snapshot(
@@ -641,7 +640,7 @@ async def test_only_the_users_own_group_message_updates_relationship_state(
         {"chat_type": "group", "thread_id": group}
         | ({"sender_is_user": True} if sender_is_user else {})
     )
-    services = SimpleNamespace(session_manager=manager, presence=presence)
+    services = SimpleNamespace(session_manager=manager)
 
     with turn_getters(affection=relationship):
         await AfterReasoningPhase(

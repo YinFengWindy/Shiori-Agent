@@ -4,6 +4,9 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 ## 4.0.0
 
+- P6b-6（#907）：主动说明从核心提示词移到 proactive 的 `PromptRendering` 贡献，按当前角色给出 `roles/<id>/PROACTIVE_CONTEXT.md`；插件停用后不再注入。宿主 presence 收口到 `SessionManager.presence`，SDK `SESSIONS.presence` 不变。保留 `SCENE_HOST.on_published`：它等后台接手，时机晚于进程资源发布，见[评估](../decisions/2026-11-02-p6b-publication-and-cleanup.md)。
+
+
 - **breaking**（P6b-5，#907）：主动角色设置面板归 `plugins/proactive/ui`，通过 `roleSettings` 的 `storage: "plugin"` 挂载；核心 `roles.update` 拒绝 `proactive` 字段，前端 SDK 删除 `RoleProactiveConfig` / `RoleProactiveCandidate` 和角色响应中的该字段。插件投影进入 `plugin_state`，`plugin.proactive.settings_set` 通过 `ROLES.plugin_settings` 写原角色 JSON 的同一字段；核心不再解释其配置内容。
 - `roleSettings` 新增可选 `save(roleId, values, previous, client)` 与 props `devMode`。RPC 保存发生在核心保存之后，失败保留插件草稿、更新核心基线并提示部分成功；原有无 `save` 贡献的原子扩展事务不变。主动 RPC 只合并已编辑字段并保留最新 overrides 等未编辑内容；禁用插件后面板消失、数据保留。
 
