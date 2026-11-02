@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -10,6 +9,7 @@ from agent.prompting.token_estimate import estimate_input
 from agent.core.types import ChatMessage, HistoryMessage, to_tool_call_groups
 from agent.prompting import build_context_frame_content, build_context_frame_message
 from shiori_sdk.prompting import PromptSectionRender
+from shiori_sdk.skills import collect_skill_mentions as _collect_skill_mentions
 
 if TYPE_CHECKING:
     from agent.context import ContextBuilder
@@ -21,16 +21,9 @@ _LOG_PREVIEW_LIMIT = 160
 
 
 def collect_skill_mentions(content: str, skills: list[dict]) -> list[str]:
-    raw_names = re.findall(r"\$([a-zA-Z0-9_-]+)", content)
-    if not raw_names:
-        return []
-    available = {s["name"] for s in skills if isinstance(s.get("name"), str)}
-    seen: set[str] = set()
-    result: list[str] = []
-    for name in raw_names:
-        if name in available and name not in seen:
-            seen.add(name)
-            result.append(name)
+    result = _collect_skill_mentions(
+        content, (s["name"] for s in skills if isinstance(s.get("name"), str))
+    )
     if result:
         context_logger.info("检测到 $skill 提及，直接注入完整内容: %s", result)
     return result

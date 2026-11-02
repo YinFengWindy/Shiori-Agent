@@ -4,10 +4,26 @@ from dataclasses import replace
 from pathlib import Path
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from shiori_sdk.core.conversation import PromptRendering
+from shiori_sdk.core.conversation import PromptRendering, TurnStarting
 from shiori_sdk.prompting import PromptSectionRender
+from shiori_sdk.skills import collect_skill_mentions
 
 from .skill_resources import builtin_skills_dir, parse_skill_frontmatter
+
+
+async def select_skill_mentions(
+    event: TurnStarting, *, workspace: Path
+) -> TurnStarting:
+    """Activate mentioned package skills before the host prepares reasoning."""
+    owned_names = (
+        path.parent.name
+        for path in builtin_skills_dir().glob("*/SKILL.md")
+        if not (workspace / "skills" / path.parent.name / "SKILL.md").is_file()
+    )
+    mentions = collect_skill_mentions(event.content, owned_names)
+    return replace(
+        event, skill_names=tuple(dict.fromkeys((*event.skill_names, *mentions)))
+    )
 
 
 async def append_skill_prompt(

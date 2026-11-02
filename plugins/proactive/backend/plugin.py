@@ -12,7 +12,7 @@ import logging
 from functools import partial
 
 from shiori_sdk.core.affection import AFFECTION
-from shiori_sdk.core.conversation import CONVERSATION, PromptRendering
+from shiori_sdk.core.conversation import CONVERSATION, PromptRendering, TurnStarting
 from shiori_sdk.core.markdown_memory import MARKDOWN_MEMORY
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.models import MAIN_MODEL
@@ -36,7 +36,7 @@ from shiori_sdk.runtime import PluginRuntimeContext
 from .plugin_config import ProactivePluginConfig
 from .role_prompt import append_proactive_prompt
 from .role_settings import ProactiveRoleSettings
-from .skill_prompt import append_skill_prompt
+from .skill_prompt import append_skill_prompt, select_skill_mentions
 from .service import ProactiveBinding, ProactiveService
 from .turn.scene_subscription import SceneFollowupSubscription
 
@@ -56,6 +56,10 @@ async def setup(ctx: PluginRuntimeContext) -> None:
     config = ProactivePluginConfig.model_validate(ctx.require(CONFIG).as_dict())
     events = ctx.require(EVENTS)
     roles = ctx.require(ROLES)
+    ctx.on(
+        TurnStarting,
+        partial(select_skill_mentions, workspace=ctx.require(WORKSPACE)),
+    )
     ctx.on(
         PromptRendering,
         partial(append_skill_prompt, workspace=ctx.require(WORKSPACE)),

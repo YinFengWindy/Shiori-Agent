@@ -73,6 +73,122 @@ async def test_settings_rpc_writes_original_role_data_and_releases_projection(
     assert reloaded is not None and reloaded.proactive == saved.proactive
 
 
+async def test_user_skill_mentions_activate_complete_documents_and_follow_plugin_unload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise actual message preparation, plugin events and final model frames."""
+    import re
+    from dataclasses import replace
+
+    from agent.provider import LLMProvider, LLMResponse
+    from conversation.service import desktop_thread_id
+    from shiori_sdk.prompting import is_context_frame
+
+    selected_documents: list[list[tuple[str, str]]] = []
+
+    async def answer(_self, **kwargs):
+        if kwargs.get("response_format"):
+            return LLMResponse(content='{"mood":"平静","thought":"我想想。"}')
+        frames = [
+            message["content"]
+            for message in kwargs["messages"]
+            if isinstance(message.get("content"), str)
+            and is_context_frame(message["content"])
+        ]
+        # Parse complete skill documents from the latest assembled context
+        # frame. Catalog names or a title alone cannot satisfy this assertion.
+        selected_documents.append(
+            [
+                (name, body.strip())
+                for name, body in re.findall(
+                    r"### Skill: ([a-zA-Z0-9_-]+)\n\n(.*?)"
+                    r"(?=\n\n---\n\n### Skill: |\n\n## [a-z_]+\n|"
+                    r"\n\n</system-reminder>|$)",
+                    frames[-1] if frames else "",
+                    re.S,
+                )
+            ]
+        )
+        return LLMResponse(content="完成")
+
+    monkeypatch.setattr(LLMProvider, "chat", answer)
+    root = tmp_path / "plugins"
+    package = stage_plugin_package(plugin_directory("proactive"), root / "proactive")
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [root])
+    config = Config(
+        provider="openai",
+        model="test",
+        api_key="test",
+        base_url="http://127.0.0.1:1/v1",
+    )
+    config.model_registrations = [
+        replace(config.model_registrations[0], model_context_window=128000)
+    ]
+    workspace = tmp_path / "workspace"
+    roles = RoleStore(workspace)
+    for role_id in ("initial", "override", "disabled"):
+        roles.create_role(
+            role_id=role_id,
+            name=role_id,
+            system_prompt="test",
+            runtime_config={
+                "dialogue_model_registration_id": config.model_registrations[0].id
+            },
+        )
+    expected = {
+        name: (package / "skills" / name / "SKILL.md")
+        .read_text(encoding="utf-8")
+        .split("\n---", 1)[1]
+        .strip()
+        for name in ("meme-manage", "create-drift-skill")
+    }
+    app = AppRuntime(
+        config, workspace, features=RuntimeFeatures(enable_message_channels=False)
+    )
+    await app.start()
+    try:
+        assert app.core is not None and app.core.plugin_manager is not None
+
+        async def chat(role_id):
+            return await app._dispatcher.process_direct(
+                "$meme-manage $create-drift-skill $meme-manage $missing-skill",
+                channel="desktop",
+                chat_id=f"role:{role_id}",
+                metadata={
+                    "role_id": role_id,
+                    "thread_id": desktop_thread_id(role_id),
+                    "transport_channel": "desktop",
+                    "transport_chat_id": f"role:{role_id}",
+                },
+            )
+
+        assert await chat("initial") == "完成"
+        assert len(selected_documents[-1]) == 2
+        assert dict(selected_documents[-1]) == expected
+
+        override = workspace / "skills" / "meme-manage" / "SKILL.md"
+        override.parent.mkdir(parents=True)
+        override.write_text(
+            "---\nname: meme-manage\n---\n# 工作区技能\n\n只执行用户的自定义步骤。",
+            encoding="utf-8",
+        )
+        expected["meme-manage"] = "# 工作区技能\n\n只执行用户的自定义步骤。"
+        assert await chat("override") == "完成"
+        assert len(selected_documents[-1]) == 2
+        assert dict(selected_documents[-1]) == expected
+
+        await app.core.plugin_manager.set_enabled(
+            "proactive",
+            values={"enabled": False},
+            raw_values={"enabled": False},
+            drain_timeout=5,
+        )
+        assert await chat("disabled") == "完成"
+        assert selected_documents[-1] == [("meme-manage", expected["meme-manage"])]
+    finally:
+        await app.shutdown()
+
+
 async def test_disabling_proactive_and_optimizer_keeps_chat_and_core_presence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
