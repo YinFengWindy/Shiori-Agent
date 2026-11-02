@@ -37,14 +37,14 @@ test("own and declared peer calls/events share local names and isolate namespace
   const peer = await client.dependency("provider");
   assert.ok(peer);
   await peer.events.on("changed", () => heard.push("peer"));
-  fixture.emit("plugin.demo.changed");
-  fixture.emit("plugin.provider.changed");
-  fixture.emit("plugin.stranger.changed");
+  fixture.emit("demo.changed");
+  fixture.emit("provider.changed");
+  fixture.emit("stranger.changed");
   fixture.emit("changed");
-  fixture.emit("plugin.provider.changed", {}, "old");
+  fixture.emit("provider.changed", {}, "old");
   assert.deepEqual(heard, ["own", "peer"]);
   await peer.call("read", { x: 1 });
-  assert.deepEqual(fixture.calls.at(-1), { method: "plugin.provider.read", payload: { x: 1, __plugin_context: { plugin_id: "demo", generation: "g1" } } });
+  assert.deepEqual(fixture.calls.at(-1), { method: "provider.read", payload: { x: 1, __plugin_context: { plugin_id: "demo", generation: "g1" } } });
   assert.equal(await peer.background.call("sync"), "done");
   await assert.rejects(client.call("plugin.provider.read"), { code: "plugin_invalid_name" });
   await client.dispose();
@@ -85,7 +85,7 @@ for (const end of ["dispose", "bridge.exit"] as const) {
     await new Promise<void>((resolve) => setImmediate(resolve));
     if (end === "dispose") await client.dispose();
     else fixture.emit("bridge.exit");
-    await assert.rejects(pending, { code: "plugin_unavailable" });
+    await assert.rejects(pending, { code: "plugin_unavailable", details: { reason: end === "dispose" ? "context_disposed" : "bridge_exited" } });
     assert.equal(fixture.listeners.size, 0);
     complete();
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -122,7 +122,7 @@ test("readiness and a no-op runtime notification keep subscriptions and pending 
   await client.events.on("changed", () => { heard += 1; });
   fixture.emit("plugins.changed", { generation: 1, plugin_id: "another", kind: "ui" });
   fixture.emit("runtime.applied", { changed: false });
-  fixture.emit("plugin.demo.changed");
+  fixture.emit("demo.changed");
   assert.equal(heard, 1);
   assert.deepEqual(await client.call("read"), { ok: true });
   await client.dispose();
@@ -136,11 +136,41 @@ test("an in-generation reload closes only the reloaded plugins' contexts (#857)"
   await bystander.events.on("changed", () => { heard += 1; });
   assert.deepEqual(await reloaded.call("read"), { ok: true });
   fixture.emit("plugins.reloaded", { generation: 1, plugin_ids: ["demo"] });
-  await assert.rejects(reloaded.call("read"), { code: "plugin_unavailable" });
-  fixture.emit("plugin.pet.changed");
+  await assert.rejects(reloaded.call("read"), { code: "plugin_reloading", message: "插件正在重载", details: { reason: "plugin_reloading" } });
+  fixture.emit("pet.changed");
   assert.equal(heard, 1);
   assert.deepEqual(await bystander.call("read"), { ok: true });
   await bystander.dispose();
+});
+
+test("reload rejects an in-flight RPC, drops its late result and permits a new client", async () => {
+  const fixture = host();
+  let complete!: () => void;
+  const gate = new Promise<void>((resolve) => { complete = resolve; });
+  const client = createPluginCommunicationClient("demo", { ...fixture.options, invoke: async (request) => {
+    if (request.method === "demo.read") await gate;
+    return fixture.options.invoke(request);
+  } });
+  let delivered = false;
+  const pending = client.call("read").then((result) => { delivered = true; return result; });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  fixture.emit("plugins.reloaded", { plugin_ids: ["demo"], disabled_plugin_ids: [] });
+  await assert.rejects(pending, { code: "plugin_reloading", message: "插件正在重载" });
+  complete();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(delivered, false);
+  const next = createPluginCommunicationClient("demo", fixture.options);
+  assert.deepEqual(await next.call("read"), { ok: true });
+  await next.dispose();
+});
+
+test("a disabled plugin retains its specific reason after later disposal", async () => {
+  const fixture = host();
+  const client = createPluginCommunicationClient("demo", fixture.options);
+  await client.call("read");
+  fixture.emit("plugins.reloaded", { plugin_ids: ["demo"], disabled_plugin_ids: ["demo"] });
+  await client.dispose();
+  await assert.rejects(client.call("read"), { code: "plugin_unavailable", message: "插件已停用", details: { reason: "plugin_disabled" } });
 });
 
 test("unmount while open is pending rejects the caller and closes its late context", async () => {
@@ -196,8 +226,8 @@ test("background handler failures are returned to the exact request and disposal
   const client = createPluginCommunicationClient("demo", { ...fixture.options, background: true });
   await client.handle("sync", async () => { throw new Error("binding failed"); });
   const owner = fixture.calls[0].payload.owner;
-  fixture.emit("plugin.demo.__request", { owner: "another", name: "sync", request_id: "wrong" });
-  fixture.emit("plugin.demo.__request", { owner, name: "sync", request_id: "right" });
+  fixture.emit("demo.__request", { owner: "another", name: "sync", request_id: "wrong" });
+  fixture.emit("demo.__request", { owner, name: "sync", request_id: "right" });
   await new Promise((resolve) => setImmediate(resolve));
   const replies = fixture.calls.filter((call) => call.method.endsWith(".reply"));
   assert.equal(replies.length, 1);

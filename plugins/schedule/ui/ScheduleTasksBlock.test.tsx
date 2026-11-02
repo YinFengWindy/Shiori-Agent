@@ -57,9 +57,9 @@ describe("ScheduleTasksBlock", () => {
     try {
       assert.match(view.container.textContent ?? "", /计划任务1喝水/);
       jobs.push(job("job-2", "天气"));
-      await act(async () => fake.emit({ id: "", type: "event", method: "plugin.schedule.tasks.changed", payload: { role_id: "yin" } }));
+      await act(async () => fake.emit({ id: "", type: "event", method: "schedule.tasks.changed", payload: { role_id: "yin" } }));
       assert.equal(calls.length, 1);
-      await act(async () => fake.emit({ id: "", type: "event", method: "plugin.schedule.tasks.changed", payload: { role_id: "mira" } }));
+      await act(async () => fake.emit({ id: "", type: "event", method: "schedule.tasks.changed", payload: { role_id: "mira" } }));
       assert.deepEqual(calls.map((call) => call.payload), [{ role_id: "mira" }, { role_id: "mira" }]);
       assert.match(view.container.textContent ?? "", /计划任务2喝水/);
     } finally {
@@ -108,7 +108,7 @@ describe("ScheduleTasksBlock", () => {
       await mounted.render(block(""));
       assert.match(mounted.container.textContent ?? "", /读取失败/);
       backend.failReads = false;
-      await act(async () => fake.emit({ id: "", type: "event", method: "plugin.schedule.tasks.changed", payload: { role_id: "yin" } }));
+      await act(async () => fake.emit({ id: "", type: "event", method: "schedule.tasks.changed", payload: { role_id: "yin" } }));
       assert.doesNotMatch(mounted.container.textContent ?? "", /读取失败/);
       assert.match(mounted.container.textContent ?? "", /计划任务1喝水/);
     } finally {

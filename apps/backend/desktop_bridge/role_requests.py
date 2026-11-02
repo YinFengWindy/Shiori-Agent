@@ -183,7 +183,7 @@ class DesktopRoleRequestHandler:
                 "deleted_accounts": deleted_accounts,
             }
         # `roles.pets.import` / `.remove` / `.select` used to live here. They are
-        # now `plugin.desktop_pet.pets.*`, registered by the plugin that owns
+        # now `desktop_pet.pets.*`, registered by the plugin that owns
         # them (#181-D), so the core bridge no longer knows what a pet package
         # is — and the desktop's package manager, which is now plugin UI, can
         # only reach its own namespace anyway.

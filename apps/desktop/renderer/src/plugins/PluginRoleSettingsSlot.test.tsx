@@ -28,7 +28,7 @@ test("role settings get the role id, its mood catalog, a scoped client and host 
     assert.equal(button.dataset.hasHost, "true");
     assert.equal(button.dataset.moods, "平静,开心");
     await act(async () => button.click());
-    const save = requests.find((request) => request.method === "plugin.neutral-card.live.save");
+    const save = requests.find((request) => request.method === "neutral-card.live.save");
     assert.equal(save?.payload.role_id, "one");
     assert.equal(requests.some((request) => request.method === "roles.update"), false);
     await view.render(slot("two"));

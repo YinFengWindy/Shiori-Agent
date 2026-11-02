@@ -25,9 +25,9 @@
 
 `pluginId` 必须等于 manifest 的 ID。声明已退役的 `roleMemory`（宿主自己渲染记忆页，记忆插件只提供 `roles.memory.*` RPC）或 `roleUi`（改用 `roleSettings` 卡片，私有设置放 `storage: "plugin"` 的对话框里用 `usePrivateAutosave`）的 UI 模块校验失败。代码不能依赖 Vite glob、宿主源码相对导入或宿主重新构建。
 
-`roleAffection` 挂在角色详情，`chatAffection` 挂在聊天状态栏。宿主只在该插件启用且登记了组件时挂载，两者都注入 `client` 与 `host`。props 只有定位标识：`roleAffection` 是 `{roleId, bridgeReady}`，`chatAffection` 是 `{roleId}`，宿主按角色给 `chatAffection` 加 key，换角色即重新挂载。槽里显示的数据都由插件自己取：好感插件用 `client.call("history" | "chat_status" | "stage_prompts_get" | "stage_prompts_set")`，在 `host.onEvent` 收到本角色的 `session.updated`（宿主在回合、主动消息、渠道回合存下后广播它，好感记账在此之前完成）或插件自己发的 `plugin.affection.chat_status.changed`（寂寞心跳、关系快照刷新之后）时重新读取 `chat_status`，不从宿主页面导入，宿主也不读、不转发这些数据。
+`roleAffection` 挂在角色详情，`chatAffection` 挂在聊天状态栏。宿主只在该插件启用且登记了组件时挂载，两者都注入 `client` 与 `host`。props 只有定位标识：`roleAffection` 是 `{roleId, bridgeReady}`，`chatAffection` 是 `{roleId}`，宿主按角色给 `chatAffection` 加 key，换角色即重新挂载。槽里显示的数据都由插件自己取：好感插件用 `client.call("history" | "chat_status" | "stage_prompts_get" | "stage_prompts_set")`，在 `host.onEvent` 收到本角色的 `session.updated`（宿主在回合、主动消息、渠道回合存下后广播它，好感记账在此之前完成）或插件自己发的 `affection.chat_status.changed`（寂寞心跳、关系快照刷新之后）时重新读取 `chat_status`，不从宿主页面导入，宿主也不读、不转发这些数据。
 
-`roleTasks` 挂在聊天右栏的「任务」面板，宿主只在该插件启用且登记了组件时挂载，注入 `client` 与 `host`。props 是 `{roleId, view, onViewChange}`（`PluginRoleTasksComponentProps`）：`view` 为空时组件作为任务列表的一组，排在宿主的后台任务、记忆维护之前；`onViewChange(非空值)` 后宿主把整个面板交给组件，组件按自己定义的 `view` 画详情、表单等视图，自带头部，返回时 `onViewChange("")`。宿主只保存 `view`、不解读它，面板按角色加 key，换角色即清空。组件在两种位置之间移动时会重新挂载。计划任务插件经 `client.call("list" | "create" | "update" | "cancel")` 读写，在 `host.onEvent` 收到本角色的 `plugin.schedule.tasks.changed` 时重新读取。面板外观用 SDK 的 `chatSidebarPanelClass`、`chatSidebarHeaderClass`、`chatSidebarScrollableClass` 与 `DetailRow`；列表里的组头、计数和任务行用 `roleTaskGroupHeadClass`、`roleTaskGroupCountClass`、`roleTaskRowClass`、`roleTaskRowTitleClass`、`roleTaskRowSummaryClass`，与宿主自己的任务组一致。
+`roleTasks` 挂在聊天右栏的「任务」面板，宿主只在该插件启用且登记了组件时挂载，注入 `client` 与 `host`。props 是 `{roleId, view, onViewChange}`（`PluginRoleTasksComponentProps`）：`view` 为空时组件作为任务列表的一组，排在宿主的后台任务、记忆维护之前；`onViewChange(非空值)` 后宿主把整个面板交给组件，组件按自己定义的 `view` 画详情、表单等视图，自带头部，返回时 `onViewChange("")`。宿主只保存 `view`、不解读它，面板按角色加 key，换角色即清空。组件在两种位置之间移动时会重新挂载。计划任务插件经 `client.call("list" | "create" | "update" | "cancel")` 读写，在 `host.onEvent` 收到本角色的 `schedule.tasks.changed` 时重新读取。面板外观用 SDK 的 `chatSidebarPanelClass`、`chatSidebarHeaderClass`、`chatSidebarScrollableClass` 与 `DetailRow`；列表里的组头、计数和任务行用 `roleTaskGroupHeadClass`、`roleTaskGroupCountClass`、`roleTaskRowClass`、`roleTaskRowTitleClass`、`roleTaskRowSummaryClass`，与宿主自己的任务组一致。
 
 ## 对等依赖与 import map
 
@@ -56,7 +56,9 @@ UI 组件、surface 和后台模块都收到注入的 `client`（`PluginRpcClien
 - `client.background.call(name, payload)`：调本插件后台模块用 `ctx.rpc.handle` 登记的方法。
 - `client.services.list(contract)` / `client.services.call({plugin_id, service_id}, method, payload)`：按契约发现并调用其它插件用 `SERVICES` 发布的服务。不需要静态依赖，也不授予对方私有 RPC 的访问权；提供方或调用方已退役报 `plugin_service_unavailable`，方法未发布报 `plugin_service_method_unavailable`，不会悄悄换成别的提供方。
 
-保留的同伴和已退役上下文发起的调用报 `plugin_unavailable`。组件在注入的 `client` 变化时要重建订阅：真正的运行时发布或桥接重启会替换全部上下文，`plugins.reloaded` 只替换点名的插件；`runtime.applied` 的 `changed: false` 刷新和 `plugins.changed` 不替换仍然 `ACTIVE` 的插件的上下文。
+局部方法和事件名在 wire 上统一为 `<pluginId>.<name>`，不接受旧 `plugin.<id>.*` 别名。宿主 `plugin.config.*`、`plugins.*` 和其他宿主顶层命名空间不能作为插件 ID。保留的同伴和已退役上下文发起的调用报 `plugin_unavailable`；重载时的本地在途调用报 `plugin_reloading`（“插件正在重载”）。错误的 `details.reason` 区分 `context_disposed`、`plugin_disabled`、`bridge_exited`、`runtime_replaced` 和 `plugin_reloading`，首次失效原因不被后续 dispose 覆盖，迟到结果不会交给新实例。
+
+组件在注入的 `client` 变化时要重建订阅：真正的运行时发布或桥接重启会替换全部上下文，`plugins.reloaded` 只替换点名的插件，payload 的 `disabled_plugin_ids` 标明其中已经停用的插件；`runtime.applied` 的 `changed: false` 刷新和 `plugins.changed` 不替换仍然 `ACTIVE` 的插件的上下文。后台的 `hostEvents` 不接收带 `pluginGeneration` 的插件事件；插件事件走 `events` 或依赖 client。
 
 ## host 服务
 

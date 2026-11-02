@@ -69,7 +69,7 @@ export type PluginNavPageSidebarProps = {
  * role's asset library is open, and whether the host is currently in a state
  * where input must be refused (bridge down, or a save in flight). Everything
  * the panel *shows* is its own data, fetched through its own
- * `plugin.<id>.*` client — the host does not thread a plugin's domain
+ * `<pluginId>.*` client — the host does not thread a plugin's domain
  * through `RoleRecord` on its behalf, which is the coupling #181 exists to
  * remove.
  *

@@ -2,7 +2,7 @@
 
 ``PluginRpc`` is the ``host.rpc`` core service over the generation's
 ``PluginRpcRegistry``; each plugin's ``RpcCapability`` registers methods under
-``plugin.<id>.`` with the bridge's ``MethodPolicy`` and pushes plugin events to
+``<pluginId>.`` with the bridge's ``MethodPolicy`` and pushes plugin events to
 the renderer through the event bus.
 """
 
@@ -16,6 +16,8 @@ from agent.plugin_host.bridge_events import PluginBridgeEvent
 from agent.plugin_host.communication import communication_name
 from agent.plugin_host.core_keys import PluginBinding
 from agent.plugin_host.rpc import PluginRpcRegistry, RpcHandler
+from agent.plugin_host.rpc_names import HOST_RPC_NAMESPACES
+from shiori_sdk.rpc import PluginRpcError
 from bus.event_bus import EventBus
 from desktop_bridge.method_policy import Handler, MethodPolicy
 
@@ -35,7 +37,7 @@ class PluginRpc:
 
 
 class RpcCapability:
-    """ctx.rpc：向 ``plugin.<id>.<method>`` 命名空间登记桥接可调用方法。
+    """ctx.rpc：向 ``<pluginId>.<method>`` 命名空间登记桥接可调用方法。
 
     并发/准入语义复用桌面桥接的 ``MethodPolicy``；未声明时回落到保守默认
     （非只读并发、非豁免准入），由插件按需通过参数放宽。卸载/回滚时经
@@ -58,9 +60,9 @@ class RpcCapability:
         """Reports transport delivery, not individual renderer consumption."""
         self._effects.ensure_active(f"event:{name}")
         communication_name(name)
-        event = PluginBridgeEvent(
-            f"plugin.{self._plugin_id}.{name}", payload, self._registry
-        )
+        if self._plugin_id in HOST_RPC_NAMESPACES:
+            raise PluginRpcError("plugin_invalid_name", "插件不能使用宿主命名空间")
+        event = PluginBridgeEvent(f"{self._plugin_id}.{name}", payload, self._registry)
         await self._event_bus.emit(event)
         return event.dispatched
 
@@ -72,8 +74,8 @@ class RpcCapability:
         concurrency: Concurrency | None = None,
         admission_exempt: bool = False,
     ) -> None:
-        """Serves ``plugin.<id>.<name>`` with ``handler`` until the plugin stops."""
-        full_name = f"plugin.{self._plugin_id}.{name}"
+        """Serves ``<pluginId>.<name>`` with ``handler`` until the plugin stops."""
+        full_name = f"{self._plugin_id}.{communication_name(name)}"
         self._effects.ensure_active(f"rpc:{full_name}")
         policy = MethodPolicy(
             concurrency=concurrency or Concurrency.MUTATION,

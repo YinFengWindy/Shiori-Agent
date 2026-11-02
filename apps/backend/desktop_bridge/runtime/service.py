@@ -359,8 +359,12 @@ class ReloadableDesktopService:
         for a generation swap and refresh-only saves, so nothing else (roles,
         other plugins) refreshes.
         """
+        active = self.app.core.plugin_manager.active_plugin_ids
+        disabled = tuple(
+            plugin_id for plugin_id in plugin_ids if plugin_id not in active
+        )
         task = self._reload_events.spawn(
-            self._notify_reloaded(operation_id, generation, plugin_ids),
+            self._notify_reloaded(operation_id, generation, plugin_ids, disabled),
             name="plugins-reloaded-event",
         )
         self._pending_reload_events[operation_id] = task
@@ -372,7 +376,11 @@ class ReloadableDesktopService:
         task.add_done_callback(forget)
 
     async def _notify_reloaded(
-        self, operation_id: str, generation: int, plugin_ids: tuple[str, ...]
+        self,
+        operation_id: str,
+        generation: int,
+        plugin_ids: tuple[str, ...],
+        disabled_plugin_ids: tuple[str, ...],
     ) -> None:
         entry = self._current
         if generation != entry.lease.generation:
@@ -382,7 +390,11 @@ class ReloadableDesktopService:
                 "id": operation_id,
                 "type": "event",
                 "method": "plugins.reloaded",
-                "payload": {"generation": generation, "plugin_ids": list(plugin_ids)},
+                "payload": {
+                    "generation": generation,
+                    "plugin_ids": list(plugin_ids),
+                    "disabled_plugin_ids": list(disabled_plugin_ids),
+                },
             }
         )
 
@@ -444,7 +456,7 @@ class ReloadableDesktopService:
     def _plugin_rpc_registry(self) -> "PluginRpcRegistry[MethodPolicy]":
         """Returns the active generation's plugin RPC registry.
 
-        Only called for ``plugin.<id>.<method>`` requests (see
+        Only called for ``<pluginId>.<method>`` requests (see
         ``resolve_plugin_method_policy``); other methods never touch
         ``self.app.core``.
         """

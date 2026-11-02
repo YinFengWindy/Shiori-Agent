@@ -1,7 +1,7 @@
 import { PluginBridgeError, type BridgeEvent, type PluginEventHandler, type PluginPeer, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { PluginBackgroundMethods } from "./pluginBackgroundMethods";
-import { pluginContextReplaced } from "./pluginRuntimeChanged";
-import { PluginCommunicationLifetime } from "./pluginCommunicationLifetime";
+import { pluginContextEndReason } from "./pluginRuntimeChanged";
+import { PluginCommunicationLifetime, type PluginCommunicationEndReason } from "./pluginCommunicationLifetime";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 
 /** Creates one disposable UI/surface/background context over the existing bridge. */
@@ -44,10 +44,10 @@ export function createPluginCommunicationClient(pluginId: string, options: {
     if (token !== currentGeneration) throw new PluginBridgeError("插件运行代际已替换", "plugin_unavailable");
     return result;
   };
-  const closeContext = (remote = true) => {
+  const closeContext = (remote = true, reason: PluginCommunicationEndReason = "context_disposed") => {
     if (closing) return closing;
     disposed = true;
-    lifetime.dispose();
+    lifetime.dispose(reason);
     unsubscribe?.();
     currentGeneration = "";
     subscriptions.clear();
@@ -63,15 +63,16 @@ export function createPluginCommunicationClient(pluginId: string, options: {
     return closing;
   };
   function onEvent(event: BridgeEvent) {
-    if (pluginContextReplaced(event, pluginId)) {
+    const reason = pluginContextEndReason(event, pluginId);
+    if (reason) {
       // An exited process owns no contexts. Calling it to close one would
       // implicitly start a replacement bridge solely for cleanup. A reloaded
       // plugin's owners are already gone on the backend; closing is a no-op.
-      void closeContext(event.method !== "bridge.exit").catch(() => undefined);
+      void closeContext(event.method !== "bridge.exit", reason).catch(() => undefined);
       return;
     }
     if (disposed || !currentGeneration || event.pluginGeneration !== currentGeneration) return;
-    if (event.method === `plugin.${pluginId}.__request` && event.payload.owner === owner) {
+    if (event.method === `${pluginId}.__request` && event.payload.owner === owner) {
       // This is the transport boundary. Provider errors travel in the reply;
       // transport loss is observable by the caller's bounded request timeout.
       const token = currentGeneration;
@@ -79,7 +80,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
       return;
     }
     for (const entry of subscriptions) {
-      if (event.method === `plugin.${entry.target}.${entry.name}`) entry.handler(event.payload, event);
+      if (event.method === `${entry.target}.${entry.name}`) entry.handler(event.payload, event);
     }
   }
   const peer = (target: string): PluginPeer => ({
@@ -87,7 +88,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
       validateName(name);
       const token = await connect();
       assertActive();
-      const result = await lifetime.wait(invoke<T>(`plugin.${target}.${name}`, {
+      const result = await lifetime.wait(invoke<T>(`${target}.${name}`, {
         ...payload, __plugin_context: { plugin_id: pluginId, generation: token },
       }, callOptions));
       assertActive();

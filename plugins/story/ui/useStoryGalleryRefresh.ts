@@ -7,7 +7,7 @@ export function useStoryGalleryRefresh(active: boolean, refresh: () => Promise<v
   useEffect(() => {
     if (!active) return;
     return host.onEvent((event) => {
-      if (event.method !== "plugin.story.resource.changed") return;
+      if (event.method !== "story.resource.changed") return;
       void refresh().catch((error: unknown) => {
         reportError(error, "CG 集刷新失败，请重试");
       });

@@ -16,7 +16,7 @@ from tests.support.plugin_kernel import host_kernel
 async def test_the_sidebar_and_role_tab_methods_reach_the_loaded_plugin(
     tmp_path: Path,
 ) -> None:
-    """The renderer calls ``plugin.affection.<method>``; each must be registered."""
+    """The renderer calls ``affection.<method>``; each must be registered."""
     root = tmp_path / "plugins"
     stage_plugin_package(plugin_directory("affection"), root / "affection")
     workspace = tmp_path / "workspace"
@@ -34,7 +34,7 @@ async def test_the_sidebar_and_role_tab_methods_reach_the_loaded_plugin(
     )
     await kernel.load_all()
     try:
-        resolved = rpc.resolve("plugin.affection.chat_status")
+        resolved = rpc.resolve("affection.chat_status")
         assert resolved is not None
         status = await resolved[1]({"role_id": "mira"})
         assert status == {
@@ -44,10 +44,10 @@ async def test_the_sidebar_and_role_tab_methods_reach_the_loaded_plugin(
             "loneliness": 0.0,
         }
         # Reading the summary settles decay, so it writes and is not read-only.
-        assert rpc.policy_for("plugin.affection.chat_status").concurrency is (
+        assert rpc.policy_for("affection.chat_status").concurrency is (
             Concurrency.MUTATION
         )
         for method in ("history", "stage_prompts_get", "stage_prompts_set"):
-            assert rpc.resolve(f"plugin.affection.{method}") is not None
+            assert rpc.resolve(f"affection.{method}") is not None
     finally:
         await kernel.terminate_all(force=True)

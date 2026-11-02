@@ -27,18 +27,18 @@ test("Story gallery refresh follows plugin events and releases its subscription 
   const view = await mountTestComponent(render(true));
   try {
     assert.equal(listeners.size, 1);
-    await emit("plugin.other.resource.changed");
+    await emit("other.resource.changed");
     assert.equal(refreshes, 0);
-    await emit("plugin.story.resource.changed");
+    await emit("story.resource.changed");
     assert.equal(refreshes, 1);
-    await emit("plugin.story.resource.changed");
+    await emit("story.resource.changed");
     assert.equal(errors.length, 1);
     assert.ok(errors[0]?.cause instanceof Error);
     assert.equal(errors[0].cause.message, "gallery failed");
     assert.equal(errors[0].summary, "CG 集刷新失败，请重试");
     await view.render(render(false));
     assert.equal(listeners.size, 0);
-    await emit("plugin.story.resource.changed");
+    await emit("story.resource.changed");
     assert.equal(refreshes, 2);
   } finally { await view.cleanup(); }
 });

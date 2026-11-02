@@ -3,7 +3,7 @@ import { errorMessage, useLatestRef, type PluginHostServices, type PluginRpcClie
 import type { ScheduledTask, ScheduleTaskFormData } from "./types";
 
 /** The plugin's own event after a role's jobs changed, started or finished running. */
-export const scheduleTasksChangedEvent = "plugin.schedule.tasks.changed";
+export const scheduleTasksChangedEvent = "schedule.tasks.changed";
 
 /** A mutation in flight; `taskId` is empty while creating. */
 export type ScheduleOperation = { kind: "create" | "update" | "cancel"; taskId: string } | null;

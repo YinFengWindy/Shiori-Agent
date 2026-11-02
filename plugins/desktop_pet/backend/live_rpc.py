@@ -1,4 +1,4 @@
-"""``plugin.desktop_pet.live.*`` RPCs: settings, run control and run status.
+"""``desktop_pet.live.*`` RPCs: settings, run control and run status.
 
 Every method takes ``role_id``. ``live.config.set`` changes only the fields it
 is given (``room_id``, ``reply_interval_seconds``, ``wait_timeout_seconds``),

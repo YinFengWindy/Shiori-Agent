@@ -26,6 +26,8 @@ class RpcCapability(Protocol):
 
     ``admission_exempt`` keeps bounded control RPCs (such as dismissal) available
     while ordinary backend admission is paused for a settings transaction.
+    Method and event names are local to the plugin; their wire names are
+    ``<pluginId>.<name>``. Host management namespaces are reserved.
     """
 
     def register(

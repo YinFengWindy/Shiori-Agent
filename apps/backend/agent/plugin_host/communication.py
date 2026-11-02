@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from agent.plugin_host.bridge_events import PluginBridgeEvent
 from shiori_sdk.rpc import PluginRpcError
-from agent.plugin_host.renderer_requests import RendererRequests
+from agent.plugin_host.renderer_requests import CommunicationEndReason, RendererRequests
 
 if TYPE_CHECKING:
     from agent.plugin_host.rpc import PluginRpcRegistry
@@ -156,7 +156,7 @@ class PluginCommunication:
         request_id, request = self._requests.create(owner, provider)
         try:
             event = PluginBridgeEvent(
-                f"plugin.{target}.__request",
+                f"{target}.__request",
                 {
                     "owner": provider,
                     "request_id": request_id,
@@ -181,20 +181,24 @@ class PluginCommunication:
                 # Transport failure may win the race with owner retirement.
                 _ = request.future.exception()
 
-    def remove_owner(self, owner: str) -> None:
+    def remove_owner(
+        self, owner: str, *, reason: CommunicationEndReason = "context_disposed"
+    ) -> None:
         """Unregisters one context and cancels calls owned by either side of it."""
         self._owners.pop(owner, None)
         self._renderers.pop(owner, None)
         self._handlers = {
             key: value for key, value in self._handlers.items() if value != owner
         }
-        self._requests.cancel(owner)
+        self._requests.cancel(owner, reason=reason)
 
-    def remove_plugin(self, plugin_id: str) -> None:
+    def remove_plugin(
+        self, plugin_id: str, *, reason: CommunicationEndReason = "context_disposed"
+    ) -> None:
         """Reclaims registrations when plugin setup fails or its scope is disposed."""
         for owner, target in list(self._owners.items()):
             if target == plugin_id:
-                self.remove_owner(owner)
+                self.remove_owner(owner, reason=reason)
 
     def retire(self) -> None:
         """Ends renderer rendezvous immediately; ordinary leased chat can still drain."""
@@ -202,4 +206,4 @@ class PluginCommunication:
         self._handlers.clear()
         self._owners.clear()
         self._renderers.clear()
-        self._requests.cancel()
+        self._requests.cancel(reason="runtime_replaced")

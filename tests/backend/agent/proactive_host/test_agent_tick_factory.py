@@ -164,7 +164,7 @@ async def test_natural_drift_uses_shared_messages_and_preserves_thinking(
         return {"message_id": f"sent-{len(routed)}"}
 
     def rpc(method):
-        assert method == "plugin.telegram.account.send"
+        assert method == "telegram.account.send"
         return "telegram", account_send
 
     owner._account_delivery = AccountDelivery(

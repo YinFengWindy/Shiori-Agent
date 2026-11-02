@@ -1,4 +1,4 @@
-"""``plugin.novelai.*`` RPC handlers: manual generation, history and prompt tags.
+"""``novelai.*`` RPC handlers: manual generation, history and prompt tags.
 
 Ports the desktop bridge's former ``novelai.*`` static methods (previously
 ``desktop_bridge.image_service.DesktopImageService`` /
@@ -25,7 +25,7 @@ from .store import NovelAIStore
 
 
 class NovelAIRpcHandlers:
-    """Owns the request/response shaping for every ``plugin.novelai.*`` method."""
+    """Owns the request/response shaping for every ``novelai.*`` method."""
 
     def __init__(
         self,
@@ -42,7 +42,7 @@ class NovelAIRpcHandlers:
         self._regenerating_message_media: set[tuple[str, str, int]] = set()
 
     async def generate(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.novelai.generate``: run one manual txt2img/img2img request."""
+        """``novelai.generate``: run one manual txt2img/img2img request."""
 
         request = GenerateImageRequest(
             prompt=str(payload.get("prompt") or ""),
@@ -79,12 +79,12 @@ class NovelAIRpcHandlers:
         return {"result": result.to_public_payload()}
 
     async def status(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.novelai.status``: whether a usable token is configured."""
+        """``novelai.status``: whether a usable token is configured."""
 
         return self._service.token_readiness().to_payload()
 
     async def regenerate_message_media(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.novelai.regenerateMessageMedia``: replace one message's image in place."""
+        """``novelai.regenerateMessageMedia``: replace one message's image in place."""
 
         session_key = str(payload.get("session_key") or "").strip()
         message_id = str(payload.get("message_id") or "").strip()
@@ -125,14 +125,14 @@ class NovelAIRpcHandlers:
         return {"result": result.to_public_payload(), **projection}
 
     async def history(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.novelai.history``: recent generation records for one role."""
+        """``novelai.history``: recent generation records for one role."""
 
         limit = int(payload.get("limit") or 20)
         role_id = self._role_id(payload)
         return {"records": self._store.list_records(limit=limit, role_id=role_id)}
 
     async def prompt_tags_list(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.novelai.prompt_tags.list``: the editable prompt-tag catalog."""
+        """``novelai.prompt_tags.list``: the editable prompt-tag catalog."""
 
         return {
             "entries": [
@@ -141,12 +141,12 @@ class NovelAIRpcHandlers:
         }
 
     async def prompt_tags_upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.novelai.prompt_tags.upsert``: validate and save one entry."""
+        """``novelai.prompt_tags.upsert``: validate and save one entry."""
 
         return {"entry": self._prompt_tag_store.upsert(payload).to_dict()}
 
     async def prompt_tags_delete(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.novelai.prompt_tags.delete``: delete one entry."""
+        """``novelai.prompt_tags.delete``: delete one entry."""
 
         self._prompt_tag_store.delete(str(payload.get("id") or ""))
         return {}

@@ -56,7 +56,7 @@ export function canSubmitStudioForm(form: ImageStudioFormState): boolean {
   return parsePositiveInteger(form.customWidth) != null && parsePositiveInteger(form.customHeight) != null;
 }
 
-/** The `plugin.novelai.generate` payload for this form and resolved model. */
+/** The `novelai.generate` payload for this form and resolved model. */
 export function buildGeneratePayload(form: ImageStudioFormState, model: string): Record<string, unknown> {
   const mode = resolveStudioMode(form);
   const custom = form.sizePreset === "custom";

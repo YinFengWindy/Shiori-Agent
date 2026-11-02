@@ -39,7 +39,7 @@ async def test_settings_rpc_writes_original_role_data_and_releases_projection(
         projected = presenter.serialize(role)
         assert "proactive" not in projected
         assert projected["plugin_state"]["proactive"]["proactiveProfile"] == "quiet"
-        resolved = app.core.plugin_rpc.resolve("plugin.proactive.settings_set")
+        resolved = app.core.plugin_rpc.resolve("proactive.settings_set")
         assert resolved is not None
         await resolved[1]({"role_id": "mira", "values": {"proactiveEnabled": True}})
         saved = RoleStore(workspace).get_role("mira")

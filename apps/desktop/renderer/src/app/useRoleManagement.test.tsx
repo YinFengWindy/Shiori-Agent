@@ -62,7 +62,7 @@ async function fixture(enablePet = false) {
       stored.set(current.id, updated);
       return { payload: { role: updated } };
     }
-    assert.equal(method, "plugin.proactive.settings_set");
+    assert.equal(method, "proactive.settings_set");
     if (delay) await delay;
     if (fail) return { error: { message: "主动推送设置保存失败", code: "invalid_settings" }, payload: {} };
     const latest = stored.get(current.id)!;

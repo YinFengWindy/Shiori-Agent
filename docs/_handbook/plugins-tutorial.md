@@ -97,7 +97,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 | `accounts` | `ACCOUNTS` | `register` / `register_saved` / `report` 等：向宿主登记通信账号及其归属（见[渠道插件](channel-plugins.md)） |
 | `services` | `SERVICES` | `register(service_id, contract=, label=, methods=)`：发布可被 renderer 按契约发现、调用的 JSON 服务方法（如语音 `shiori.asr.v1` / `shiori.tts.v1`，见[宿主服务的约定](plugin-guide.md#宿主服务的约定)与[前端调用](plugin-frontend.md#注入的-client)） |
 | `avatars` | `AVATARS` | `refresh(kind, channel, id, fetch)`：到期时在后台用插件的下载把发送者或群的平台头像交给宿主缓存，`fetch` 返回 None 即记为无头像；卸载取消在途获取（见[渠道插件](channel-plugins.md)） |
-| `rpc` | `RPC` | 注册 `plugin.<id>.<method>`，发送同命名空间事件 |
+| `rpc` | `RPC` | 注册 `<id>.<method>`，发送同命名空间事件 |
 | `background` | `BACKGROUND` | `spawn` 管理作用域任务；`spawn_runtime` 另保留当前 runtime lease，卸载取消并等待任务。不是内核的 `spawn` |
 | `kv` | `KV` | 工作区 `plugin-data/<id>/kv.json` 中的私有状态 |
 | `config` | `CONFIG` | 本代插件配置快照（`as_dict()`、`resolve_reference(value)`） |
@@ -225,7 +225,7 @@ async def setup(ctx):
 
 ## 桌面 RPC、事件与 UI
 
-Python 后端 `ctx.require(RPC).register("label.get", handler)` 注册 `plugin.example.label.get`。前端插件组件得到已绑定自身命名空间的 `client.call("label.get")`，不自行拼宿主 IPC。`await ctx.require(RPC).emit("updated", payload)` 通过 `PluginBridgeEvent` 与所属 generation 的服务下发 `plugin.example.updated`，旧代事件不会冒充新代。
+Python 后端 `ctx.require(RPC).register("label.get", handler)` 注册 `example.label.get`。前端插件组件得到已绑定自身命名空间的 `client.call("label.get")`，不自行拼宿主 IPC。`await ctx.require(RPC).emit("updated", payload)` 通过 `PluginBridgeEvent` 与所属 generation 的服务下发 `example.updated`，旧代事件不会冒充新代。
 
 主窗口在构建时发现 `plugins/*/ui/index.tsx`，默认导出 `PluginUiModule`：
 
@@ -259,7 +259,7 @@ const pet = await client.dependency("desktop_pet");
 if (pet) await pet.background.call("sync", { forceVisible: false });
 ```
 
-`dependency(id)` 对已声明但缺失、停用、失败的提供方返回 `null`；未声明时抛出 `plugin_dependency_undeclared`。拿到的 peer 同样提供 `call`、`events.on`、`background.call`，不会接受 `plugin.<id>.*` 全局名称。每次操作应重新取得当前注入 client 的 peer；旧代 peer 不会自动连接到新代。提供方在获取后停用时，调用以 `plugin_unavailable` 失败。只在用户操作或状态变化时重试，避免错误循环。
+`dependency(id)` 对已声明但缺失、停用、失败的提供方返回 `null`；未声明时抛出 `plugin_dependency_undeclared`。拿到的 peer 同样提供 `call`、`events.on`、`background.call`，不会接受 `<id>.*` 全局名称。每次操作应重新取得当前注入 client 的 peer；旧代 peer 不会自动连接到新代。提供方在获取后停用时，调用以 `plugin_unavailable` 失败。只在用户操作或状态变化时重试，避免错误循环。
 
 renderer 后台（TypeScript 的 `BackgroundCtx`）通过 `await ctx.rpc.handle("sync", async payload => ...)` 注册自身方法，UI/surface 的 `background.call` 等待其完成，处理失败原样保留稳定错误码与消息。方法只由后台注册，同名重复注册立即报错。请求最多并发 128 个，15 秒未响应以 `plugin_timeout` 失败；等待 renderer 不占用后端 RPC 的调度容量，后台可在处理方法里继续 `await ctx.rpc.call(...)`。
 

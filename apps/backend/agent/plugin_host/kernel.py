@@ -1224,10 +1224,24 @@ class PluginKernel:
         }
         return [by_id[plugin_id] for plugin_id in plugin_ids]
 
-    def _reload_steps(self) -> ReloadSteps:
+    def _reload_steps(self, *, disabled: frozenset[str] = frozenset()) -> ReloadSteps:
+        async def dispose(handle: PluginHandle) -> list[Exception]:
+            # This runs only after drain succeeds. An abandoned drain keeps
+            # the existing renderer owners usable. Revoke before setup can
+            # register the successor, retaining the transition's exact cause.
+            self._rpc.communication.remove_plugin(
+                handle.plugin_id,
+                reason=(
+                    "plugin_disabled"
+                    if handle.plugin_id in disabled
+                    else "plugin_reloading"
+                ),
+            )
+            return await self._dispose_handle(handle)
+
         return ReloadSteps(
             drain=self._drain_closure,
-            dispose=self._dispose_handle,
+            dispose=dispose,
             activate=self._activate_reloaded,
             retain=self._retain_process_resources,
         )
@@ -1348,7 +1362,9 @@ class PluginKernel:
                 values=values,
                 raw_values=raw_values,
                 tables=tables,
-                steps=self._reload_steps(),
+                steps=self._reload_steps(
+                    disabled=frozenset(toggled) if not enabled else frozenset()
+                ),
                 drain_timeout=drain_timeout,
                 commit=commit,
             )

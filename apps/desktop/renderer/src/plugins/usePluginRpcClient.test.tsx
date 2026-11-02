@@ -30,7 +30,7 @@ test("mounted contributions renew client subscriptions on real generation change
   };
   try {
     assert.equal(listeners.size, 2, "the owner and active RPC client each hold one subscription");
-    await act(async () => { emit("plugin.demo.changed"); emit("plugins.changed", { plugin_id: "demo" }); emit("runtime.applied", { changed: false }); });
+    await act(async () => { emit("demo.changed"); emit("plugins.changed", { plugin_id: "demo" }); emit("runtime.applied", { changed: false }); });
     assert.equal(clients.length, 1);
     assert.equal(listeners.size, 2);
     token = "g2";
@@ -38,7 +38,7 @@ test("mounted contributions renew client subscriptions on real generation change
     assert.equal(clients.length, 2);
     assert.equal(listeners.size, 2, "generation changes replace the old client subscription");
     await assert.rejects(clients[0].call("read"), { code: "plugin_unavailable" });
-    emit("plugin.demo.changed");
+    emit("demo.changed");
     assert.equal(received, 2);
     await act(async () => { emit("bridge.exit"); });
     assert.equal(clients.length, 2, "exit cannot start a client that implicitly reconnects");
@@ -52,13 +52,13 @@ test("mounted contributions renew client subscriptions on real generation change
       const beforeUnmount: number = received;
       await view.render(null);
       assert.equal(listeners.size, 0, "unmount releases the owner and its RPC client");
-      emit("plugin.demo.changed");
+      emit("demo.changed");
       assert.equal(received, beforeUnmount);
       await assert.rejects(previousClient.call("read"), { code: "plugin_unavailable" });
 
       await view.render(<Contribution />);
       assert.equal(listeners.size, 2, "remount does not accumulate subscriptions");
-      emit("plugin.demo.changed");
+      emit("demo.changed");
       assert.equal(received, beforeUnmount + 1);
     }
   } finally { await view.cleanup(); }

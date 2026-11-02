@@ -180,9 +180,9 @@ describe("applyPluginUiModules", () => {
     }
 
     // Every call the plugin makes — from either slot — is confined to
-    // "plugin.demo.*"; the plugin never supplies (and cannot override) that
+    // "demo.*"; the plugin never supplies (and cannot override) that
     // prefix itself.
-    assert.deepEqual(calls, ["plugins.communication.open", "plugin.demo.readSomething", "plugins.communication.open", "plugin.demo.doSomething"]);
+    assert.deepEqual(calls, ["plugins.communication.open", "demo.readSomething", "plugins.communication.open", "demo.doSomething"]);
   });
 
   it("registers a nav.page's optional Sidebar bound with a client, and passes selectBlockedReason through untouched", () => {

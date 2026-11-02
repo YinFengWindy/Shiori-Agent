@@ -3,7 +3,7 @@ import { errorMessage, type PluginHostServices, type PluginRpcClient } from "@yi
 import { readAffectionChatStatus, type AffectionChatStatus } from "./chatStatus";
 
 /** The plugin's own event after a role's data changed outside a turn (heartbeat, snapshot refresh). */
-export const affectionStatusChangedEvent = "plugin.affection.chat_status.changed";
+export const affectionStatusChangedEvent = "affection.chat_status.changed";
 
 /**
  * The role's sidebar data, re-read whenever it may have changed.

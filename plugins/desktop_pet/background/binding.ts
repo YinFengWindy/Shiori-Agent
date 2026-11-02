@@ -9,7 +9,7 @@ const actionStates = new Set<string>([
 ]);
 
 /**
- * Turns a `plugin.desktop_pet.binding.get` response into a binding, or `null`.
+ * Turns a `desktop_pet.binding.get` response into a binding, or `null`.
  *
  * `null` covers every "nothing to show" case in one answer — no pet-enabled
  * role, no selected package, a package whose spritesheet the host would not

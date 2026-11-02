@@ -1217,7 +1217,7 @@ Target `shiori_sdk.rpc.RpcCapability`.
 
 #### `shiori_sdk.rpc.RpcCapability`
 
-Registers a handler owned by the current plugin scope. ``admission_exempt`` keeps bounded control RPCs (such as dismissal) available while ordinary backend admission is paused for a settings transaction.
+Registers a handler owned by the current plugin scope. ``admission_exempt`` keeps bounded control RPCs (such as dismissal) available while ordinary backend admission is paused for a settings transaction. Method and event names are local to the plugin; their wire names are ``<pluginId>.<name>``. Host management namespaces are reserved.
 
 - `register(name: str, handler: RpcHandler, *, concurrency: rpc.Concurrency = <Concurrency.MUTATION: 'mutation'>, admission_exempt: bool = False) -> None`
 

@@ -13,8 +13,8 @@ test("bridge timeout policy keeps command classes explicit", () => {
   assert.equal(bridgeRequestTimeoutMs("plugins.communication.services.list", 20_000), 20_000);
   assert.equal(bridgeTimeoutPolicy.startup, 60_000);
   assert.equal(bridgeRequestTimeoutMs("roles.list"), bridgeTimeoutPolicy.defaultRequest);
-  assert.equal(bridgeRequestTimeoutMs("plugin.sample.slow", 300_000), 300_000);
-  assert.equal(bridgeRequestTimeoutMs("plugin.sample.slow"), bridgeTimeoutPolicy.defaultRequest);
-  assert.throws(() => bridgeRequestTimeoutMs("plugin.sample.slow", -1));
+  assert.equal(bridgeRequestTimeoutMs("sample.slow", 300_000), 300_000);
+  assert.equal(bridgeRequestTimeoutMs("sample.slow"), bridgeTimeoutPolicy.defaultRequest);
+  assert.throws(() => bridgeRequestTimeoutMs("sample.slow", -1));
   assert.equal(bridgeRequestTimeoutMs("runtime.apply", 1), null);
 });

@@ -36,7 +36,7 @@ from .tools import CancelScheduleTool, ListSchedulesTool, ScheduleTool
 # methods change incompatibly, so a reload builds a fresh scheduler.
 _RESOURCE_KEY = "scheduler-v1"
 # Renderer event after a role's jobs changed or ran
-# (``plugin.schedule.tasks.changed``, payload ``{role_id}``).
+# (``schedule.tasks.changed``, payload ``{role_id}``).
 TASKS_CHANGED_EVENT = "tasks.changed"
 
 

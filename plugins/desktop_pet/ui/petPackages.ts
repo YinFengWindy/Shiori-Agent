@@ -1,4 +1,4 @@
-/** One pet package as `plugin.desktop_pet.pets.list` reports it. */
+/** One pet package as `desktop_pet.pets.list` reports it. */
 export type PetPackageRow = {
   id: string;
   displayName: string;

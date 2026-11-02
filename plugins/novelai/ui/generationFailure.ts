@@ -21,7 +21,7 @@ export type GenerationFailure = {
   opensSettings: boolean;
 };
 
-/** Token readiness as reported by `plugin.novelai.status` before any generation is attempted. */
+/** Token readiness as reported by `novelai.status` before any generation is attempted. */
 export type NovelAiReadiness = {
   configured: boolean;
   /** `missing` (empty) or `placeholder` (an unset `${ENV}` reference); empty when configured. */

@@ -37,6 +37,13 @@ def test_missing_named_frontend_export_refuses_the_whole_package(contract_packag
     assert caught.value.diagnostic.code == "unsupported_format"
 
 
+def test_package_cannot_claim_a_host_rpc_namespace(contract_package):
+    _change(contract_package, id="roles")
+    with pytest.raises(PackageContractError) as rejected:
+        validate_package(contract_package)
+    assert rejected.value.diagnostic.code == "invalid_manifest"
+
+
 @pytest.mark.parametrize("distribution", ["builtin", "external"])
 def test_package_accepts_host_supported_display_and_distribution_metadata(
     contract_package, distribution

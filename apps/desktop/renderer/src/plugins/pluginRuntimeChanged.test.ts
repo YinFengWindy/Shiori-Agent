@@ -17,7 +17,7 @@ test("readiness refreshes only the roster, while publications refresh both", () 
   assert.equal(pluginRuntimeChanged(event), false);
   assert.equal(pluginRosterChanged(event), true);
   assert.equal(pluginRosterChanged({ ...event, method: "runtime.applied" }), true);
-  assert.equal(pluginRosterChanged({ ...event, method: "plugin.demo.changed" }), false);
+  assert.equal(pluginRosterChanged({ ...event, method: "demo.changed" }), false);
 });
 
 test("an in-generation reload replaces only the reloaded plugins' contexts (#857)", () => {

@@ -1,4 +1,4 @@
-"""``plugin.desktop_pet.bilibili.*`` RPCs for the pet role's Bilibili login.
+"""``desktop_pet.bilibili.*`` RPCs for the pet role's Bilibili login.
 
 There is deliberately no method that accepts cookies: QR login is the only way
 credentials enter the plugin.

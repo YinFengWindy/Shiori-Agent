@@ -4,6 +4,8 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 ## 4.0.0
 
+- **breaking**（P7-5，#966）：插件 RPC、事件和后台请求的 wire 名从 `plugin.<id>.<method>` 改为 `<pluginId>.<method>`，没有旧前缀别名；插件侧的 scoped client / RPC 注册仍传局部名称。宿主 `plugin.config.*`、`plugins.*` 等管理命名空间保留，冲突插件 ID 在准入时拒绝。通信处置保留原因：重载为 `plugin_reloading`（“插件正在重载”），其余为 `plugin_unavailable` 并带 `details.reason`（`context_disposed` / `plugin_disabled` / `bridge_exited` / `runtime_replaced`）。重载发布继续使用 `plugins.reloaded`，payload 的 `disabled_plugin_ids` 区分停用与重挂；无变化的配置发布保持 client。
+
 - P7-1（#962）：`shiori_sdk.session_keys` 提供纯函数 `role_session_key`、`is_role_session_key`、`role_id_from_session_key` 和 `ROLE_SESSION_PREFIX`。宿主、proactive 和渠道 helper 共用角色会话格式，不需要为拼 key 注入 `SESSION_STORE`。已有 `SESSION_STORE.role_session_key` 保留并委托到相同实现，数据 key 不迁移。生成和解析保留去外围空白的语义，识别函数仍按原始 key 检查前缀和非空后缀，不代替角色或规范 key 校验。
 - **breaking**（#963 P7-2）：删除 `PROACTIVE_HOST.builtin_skills_dir`。内置 Drift skill 随 proactive 的 Python wheel 和桌面插件资源分发，普通聊天经插件 `PromptRendering` 提供技能目录与显式激活内容；工作区同名技能继续优先。插件停用后不再提供这些技能，角色 drift 状态仍只写入原角色目录。
 - P7-3（#964）：`frontend.entry` 支持 `ui`、`background`、`surface` 具名导出，TypeScript SDK 提供 `PluginFrontendModule` 类型。外部构建将入口编译为一个 ESM，自动写入导出名与 CSS；包验证、共享依赖校验、资源授权和激活回执贯通这一入口。模块求值不启动贡献，各窗口只挂载对应导出。其余当前 4.0 插件的旧入口适配将在 P7-4 删除。

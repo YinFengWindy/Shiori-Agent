@@ -5,8 +5,12 @@ from desktop_bridge.method_policy import (
     Handler,
     OwnerRouting,
     method_policy,
+    resolve_plugin_method_policy,
 )
 from shiori_sdk.rpc import Concurrency
+from agent.plugin_host.rpc import PluginRpcRegistry
+from bus.event_bus import EventBus
+from desktop_bridge.method_policy import MethodPolicy
 
 
 def test_unregistered_methods_keep_conservative_defaults():
@@ -77,3 +81,34 @@ def test_presence_report_is_app_level_and_never_blocked_by_reload_or_writes():
     assert policy.handler is Handler.DESKTOP_PRESENCE
     assert policy.admission_exempt
     assert policy.concurrency is Concurrency.READ_ONLY
+
+
+def test_plugin_namespace_uses_its_policy_without_reclassifying_host_methods():
+    registry = PluginRpcRegistry[MethodPolicy](EventBus())
+
+    async def slow(payload):
+        return {}
+
+    registry.register(
+        "provider.slow",
+        "provider",
+        slow,
+        MethodPolicy(concurrency=Concurrency.INTEGRATION, admission_exempt=True),
+    )
+    policy = resolve_plugin_method_policy("provider.slow", lambda: registry)
+    assert policy.concurrency is Concurrency.INTEGRATION
+    assert policy.admission_exempt
+    assert (
+        resolve_plugin_method_policy("roles.list", lambda: registry).concurrency
+        is Concurrency.READ_ONLY
+    )
+    assert (
+        resolve_plugin_method_policy("plugin.config.set", lambda: registry).handler
+        is Handler.PLUGIN_CONFIG
+    )
+    assert (
+        resolve_plugin_method_policy(
+            "plugin.provider.slow", lambda: registry
+        ).concurrency
+        is Concurrency.MUTATION
+    )

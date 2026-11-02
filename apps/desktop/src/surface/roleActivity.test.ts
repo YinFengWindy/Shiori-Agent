@@ -26,7 +26,7 @@ test("incremental and full session updates preserve proactive notification seman
 });
 
 test("unknown events and envelopes without an attributable role/session are ignored", () => {
-  for (const item of [event("chat.delta", {}), event("chat.delta", { session_key: "foreign" }), event("chat.delta", { session_key: "role:" }), event("plugin.example.changed", { role_id: "mira", session_key: "role:mira" })]) {
+  for (const item of [event("chat.delta", {}), event("chat.delta", { session_key: "foreign" }), event("chat.delta", { session_key: "role:" }), event("example.changed", { role_id: "mira", session_key: "role:mira" })]) {
     assert.equal(surfaceRoleActivity(item), null);
   }
 });

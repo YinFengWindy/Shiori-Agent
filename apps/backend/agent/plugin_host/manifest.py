@@ -15,6 +15,7 @@ from shiori_sdk.channels.chat_types import (
     parse_chat_type,
 )
 from agent.plugin_host.versions import satisfies
+from agent.plugin_host.rpc_names import HOST_RPC_NAMESPACES
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,8 @@ def _parse_manifest(
     if any(not isinstance(key, str) for key in raw):
         raise ManifestError("manifest keys must be strings")
     plugin_id = str(raw.get("id") or raw.get("name") or directory_name)
+    if plugin_id in HOST_RPC_NAMESPACES:
+        raise ManifestError(f"插件 id 使用了宿主保留命名空间: {plugin_id}")
     distribution = raw.get("distribution", "builtin")
     if not isinstance(distribution, str) or distribution not in ("builtin", "external"):
         raise ManifestError("distribution 必须是 builtin / external 之一")

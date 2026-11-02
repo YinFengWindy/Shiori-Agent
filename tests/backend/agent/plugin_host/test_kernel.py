@@ -872,7 +872,7 @@ async def test_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Path)
     kernel = make_kernel([tmp_path], event_bus=bus, rpc=rpc)
     await kernel.load_all()
 
-    resolved = rpc.resolve("plugin.rpcdemo.ping")
+    resolved = rpc.resolve("rpcdemo.ping")
     assert resolved is not None
     _, handler = resolved
     assert await handler({"value": 1}) == {"pong": 1}
@@ -880,7 +880,7 @@ async def test_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Path)
     _ = await kernel.unload("rpcdemo")
 
     # 插件卸载后其 RPC 方法立即不可调用
-    assert rpc.resolve("plugin.rpcdemo.ping") is None
+    assert rpc.resolve("rpcdemo.ping") is None
 
 
 _HOST_SERVICES_PLUGIN = """

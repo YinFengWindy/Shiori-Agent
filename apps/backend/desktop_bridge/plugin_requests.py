@@ -1,4 +1,4 @@
-"""窄 handler：把 ``plugin.<id>.<method>`` 分发到插件经 RPC capability 注册的处理函数。
+"""窄 handler：把 ``<pluginId>.<method>`` 分发到插件经 RPC capability 注册的处理函数。
 
 未注册方法与 ``plugin.config.*`` 一律返回 None，交由 ``DesktopBridgeService``
 的兜底逻辑报 ``unknown_method``；``plugin.config.*`` 需要设置事务，由
@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
+from agent.plugin_host.rpc_names import plugin_method_owner
 
 if TYPE_CHECKING:
     from agent.plugin_host.rpc import PluginRpcRegistry
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class DesktopPluginRequestHandler:
-    """路由 ``plugin.<id>.<method>`` 到内核 RPC 注册表登记的处理函数。"""
+    """路由 ``<pluginId>.<method>`` 到内核 RPC 注册表登记的处理函数。"""
 
     def __init__(self, registry: "PluginRpcRegistry[MethodPolicy] | None") -> None:
         self._registry = registry
@@ -30,12 +31,10 @@ class DesktopPluginRequestHandler:
             return await self._registry.communication.handle(
                 method.removeprefix("plugins.communication."), payload
             )
-        if not method.startswith("plugin."):
-            return None
-        if method.startswith("plugin.config."):
+        target = plugin_method_owner(method)
+        if target is None:
             return None
         context = payload.get("__plugin_context")
-        target = method.split(".", 2)[1]
         if isinstance(context, dict):
             from shiori_sdk.rpc import PluginRpcError
 

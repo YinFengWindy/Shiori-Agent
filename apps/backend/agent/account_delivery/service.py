@@ -235,7 +235,7 @@ class AccountDelivery:
         return ResolvedAccountTarget(channel, role_id, target, route, access)
 
     async def _call(self, plugin_id: str, method: str, payload: dict[str, Any]):
-        resolved = self._rpc.resolve(f"plugin.{plugin_id}.{method}")
+        resolved = self._rpc.resolve(f"{plugin_id}.{method}")
         if resolved is None or resolved[0] != plugin_id:
             raise RuntimeError(f"插件 {plugin_id} 未提供此能力")
         return await resolved[1](payload)
