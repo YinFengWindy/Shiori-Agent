@@ -57,6 +57,8 @@ UI 组件、surface 和后台模块都收到注入的 `client`（`PluginRpcClien
 
 组件在注入的 `client` 变化时要重建订阅：真正的运行时发布或桥接重启会替换全部上下文，`plugins.reloaded` 只替换点名的插件，payload 的 `disabled_plugin_ids` 标明其中已经停用的插件；`runtime.applied` 的 `changed: false` 刷新和 `plugins.changed` 不替换仍然 `ACTIVE` 的插件的上下文。后台的 `hostEvents` 不接收带 `pluginGeneration` 的插件事件；插件事件走 `events` 或依赖 client。
 
+宿主的贡献绑定按同一实例代次重挂插件子树：包括设置、导航、角色卡、图片动作和 surface 的错误边界；宿主持有的角色草稿不随之清空。同代码重载复用已求值模块和 CSS，只重建插件实例与后台 scope；无变化保存和无关插件重载保留原实例。代内重载失败或要求重启时，按后端的实际发布结果处理，不提前宣布重挂成功。
+
 ## host 服务
 
 绑定的组件（`navPage` 及其侧栏、自定义 `settingsSection`、`roleAssets`、`accountDetail`）除了 `client` 还收到 `host` prop（`PluginHostServices`）；内置插件也可以在组件树深处用 `usePluginHostServices()` 读同一个对象。完整成员以 `PluginHostServices` / `PluginHostUi` 类型为准：

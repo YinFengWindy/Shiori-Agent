@@ -63,6 +63,7 @@ export class SpeechServer {
     const texts = messages.map((message) => String(record(message).content ?? ""));
     let content: string;
     if (texts[0].includes("首版 SELF.md")) content = "# 我是谁\n\n## 我的性格与形象\n我愿意认真倾听。\n\n## 我对你的理解\n我正在认识你。\n\n## 我们的关系\n我们刚刚相识。";
+    else if (texts[0].includes("初始好感度")) content = JSON.stringify({ value: 0, reason: "我们刚刚相识。" });
     else if (record(body.response_format ?? {}).type === "json_object") content = JSON.stringify({ mood: "happy", thought: "我听到了你的问候，想认真回应。" });
     else {
       assert.ok(texts.some((text) => text.includes("语音组合测试第")), "Unexpected model request");

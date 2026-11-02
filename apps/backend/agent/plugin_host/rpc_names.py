@@ -17,6 +17,7 @@ HOST_RPC_NAMESPACES = frozenset(
         "roles",
         "runtime",
         "session",
+        "system",
         "window",
     }
 )

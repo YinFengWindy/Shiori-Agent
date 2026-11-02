@@ -111,8 +111,10 @@ export class PluginNativeSessions {
   private close(token: string) {
     if (!this.sessions.delete(token)) return;
     this.options.keys.release(token);
-    if (this.capture?.token === token) { this.capture = null; this.options.recorder.dispose(); }
-    if (this.playback?.token === token) { this.playback = null; this.options.player.dispose(); }
-    if (!this.sessions.size) this.options.recorder.dispose();
+    // Completed/stopped operations no longer occupy a slot, but their idle
+    // native windows still belong to this session pool until its last owner leaves.
+    const lastOwner = !this.sessions.size;
+    if (this.capture?.token === token || lastOwner) { this.capture = null; this.options.recorder.dispose(); }
+    if (this.playback?.token === token || lastOwner) { this.playback = null; this.options.player.dispose(); }
   }
 }

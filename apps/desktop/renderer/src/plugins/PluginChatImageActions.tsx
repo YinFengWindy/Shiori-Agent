@@ -1,4 +1,4 @@
-import { usePluginRpcClient } from "./usePluginRpcClient";
+import { usePluginRpcScope } from "./usePluginRpcClient";
 import type { ComponentType } from "react";
 import type { PluginChatImageActionProps } from "@yinfengwindy/shiori-sdk";
 import { pluginChatImageActionsRegistry } from "./pluginFeatureRegistry";
@@ -13,6 +13,6 @@ export function PluginChatImageActions(props: Omit<PluginChatImageActionProps, "
 }
 
 function PluginImageAction({ pluginId, Component, ...props }: Omit<PluginChatImageActionProps, "client"> & { pluginId: string; Component: ComponentType<PluginChatImageActionProps> }) {
-  const client = usePluginRpcClient(pluginId);
-  return <Component {...props} client={client} />;
+  const { client, generation } = usePluginRpcScope(pluginId);
+  return <Component key={generation} {...props} client={client} />;
 }

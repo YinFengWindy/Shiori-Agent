@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { act, useEffect } from "react";
-import { usePluginHostServices, type PluginRoleSettingsProps } from "@yinfengwindy/shiori-sdk";
+import { act, useEffect, useState } from "react";
+import { usePluginHostServices, type BridgeEvent, type PluginRoleSettingsProps } from "@yinfengwindy/shiori-sdk";
 import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { PluginRoleSettingsSlot } from "./PluginRoleSettingsSlot";
 import { pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
@@ -34,4 +34,41 @@ test("role settings get the role id, its mood catalog, a scoped client and host 
     await view.render(slot("two"));
     assert.deepEqual(disposed, ["one"]);
   } finally { await view.cleanup(); pluginRoleSettingsRegistry.unregister("neutral-card"); resetPluginEnabledStateForTests(); }
+});
+
+test("same-code reload remounts only its role card while retaining the host's draft", async () => {
+  const listeners = new Set<(event: BridgeEvent) => void>();
+  function Card({ values, onChange }: PluginRoleSettingsProps) {
+    const [privateValue, setPrivateValue] = useState(0);
+    return <button onClick={() => { setPrivateValue((value) => value + 1); onChange({ note: "edited draft" }); }}>
+      {String(values.note)}:{privateValue}
+    </button>;
+  }
+  function Editor() {
+    const [drafts, setDrafts] = useState({ sample: { note: "initial" }, sibling: { note: "other" } });
+    return <PluginRoleSettingsSlot roleId="mira" moodCatalog={[]} drafts={drafts} onChange={(next) => setDrafts({ sample: { note: String(next.sample.note) }, sibling: { note: String(next.sibling.note) } })} />;
+  }
+  for (const pluginId of ["sample", "sibling"]) pluginRoleSettingsRegistry.register({ pluginId, storage: "plugin", read: () => ({}), Component: Card });
+  setPluginEnabledSnapshot(["sample", "sibling"].map((id) => ({ id, enabled: true, state: "ACTIVE" })));
+  const view = await mountTestComponent(<Editor />, { windowGlobals: { miraDesktop: {
+    onEvent: (listener: (event: BridgeEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  } } });
+  const emit = async (method: string, payload: Record<string, unknown>) => act(async () => {
+    for (const listener of [...listeners]) listener({ id: "event", type: "event", method, payload });
+  });
+  try {
+    for (const button of Array.from(view.container.querySelectorAll("button"))) await act(async () => button.click());
+    assert.deepEqual(Array.from(view.container.querySelectorAll("button"), (button) => button.textContent), ["edited draft:1", "edited draft:1"]);
+    await emit("runtime.applied", { changed: false });
+    await emit("plugins.reloaded", { plugin_ids: ["unrelated"] });
+    assert.deepEqual(Array.from(view.container.querySelectorAll("button"), (button) => button.textContent), ["edited draft:1", "edited draft:1"]);
+    await emit("plugins.reloaded", { plugin_ids: ["sample"] });
+    assert.deepEqual(Array.from(view.container.querySelectorAll("button"), (button) => button.textContent), ["edited draft:0", "edited draft:1"]);
+    assert.equal(listeners.size, 2);
+  } finally {
+    await view.cleanup();
+    for (const id of ["sample", "sibling"]) pluginRoleSettingsRegistry.unregister(id);
+    resetPluginEnabledStateForTests();
+  }
+  assert.equal(listeners.size, 0);
 });

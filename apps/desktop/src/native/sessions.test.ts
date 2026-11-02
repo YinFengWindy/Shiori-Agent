@@ -94,3 +94,17 @@ test("revoking one plugin leaves other plugins' sessions and pending opens intac
   f.options.authorize = async (value) => value;
   await f.sessions.call(7, kept, "audio.devices");
 });
+
+test("completed playback resources are reclaimed when the last native owner leaves", async () => {
+  const f = fixture();
+  const playerResources = new Set<object>();
+  f.options.player.play = async () => { playerResources.add({}); };
+  f.options.player.dispose = () => { playerResources.clear(); };
+  const first = await f.sessions.open(7, context);
+  const other = await f.sessions.open(7, { ...context, plugin_id: "other", owner: "other" });
+  await f.sessions.call(7, first, "audio.play", { audio_base64: "AQ==", format: "wav" });
+  await f.sessions.call(7, first, "close");
+  assert.equal(playerResources.size, 1, "another owner can still reuse the idle native player");
+  await f.sessions.call(7, other, "close");
+  assert.equal(playerResources.size, 0, "idle resources must not outlive every native owner");
+});

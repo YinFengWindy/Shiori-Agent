@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { createElement, isValidElement, type ReactElement } from "react";
+import { act, createElement, isValidElement, useEffect, useState, type ReactElement } from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PluginUiModule, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import type { BridgeEvent, PluginInjectedProps, PluginUiModule, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { applyPluginUiModules } from "./pluginUiModuleContract.js";
 import { PluginUiRegistry } from "./pluginUiRegistry.js";
 import { pluginHostServicesFor } from "./pluginHostServices.js";
@@ -28,6 +29,43 @@ function renderElement<TProps>(
 }
 
 describe("applyPluginUiModules", () => {
+  it("remounts a bound settings instance and cannot apply a retired client's late result", async () => {
+    const registry = new PluginUiRegistry();
+    const listeners = new Set<(event: BridgeEvent) => void>();
+    let release!: () => void;
+    const oldResponse = new Promise<void>((resolve) => { release = resolve; });
+    let reads = 0;
+    function Settings({ client }: PluginInjectedProps) {
+      const [count, setCount] = useState(0);
+      const [value, setValue] = useState("pending");
+      useEffect(() => {
+        void client.call<{ value: string }>("read").then((result) => setValue(result.value)).catch(() => {});
+      }, [client]);
+      return createElement("button", { onClick: () => setCount((previous) => previous + 1) }, `${count}:${value}`);
+    }
+    applyPluginUiModules({ sample: { ui: { pluginId: "sample", settingsSection: { kind: "component", label: "Sample", component: Settings } } } }, registry);
+    const Entry = registry.getSettingsSubsection("plugins", "sample")!.Component;
+    const view = await mountTestComponent(createElement(Entry, { subsectionId: "sample" }), { windowGlobals: { miraDesktop: {
+      onEvent: (listener: (event: BridgeEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+      invoke: async ({ method }: { method: string }) => {
+        let value = "fresh";
+        if (method === "sample.read" && reads++ === 0) { await oldResponse; value = "retired"; }
+        return { error: null, payload: method.endsWith(".open") ? { generation: "g1" } : { value } };
+      },
+    } } });
+    try {
+      await act(async () => view.container.querySelector("button")!.click());
+      assert.equal(view.container.textContent, "1:pending");
+      await act(async () => {
+        for (const listener of [...listeners]) listener({ id: "reload", type: "event", method: "plugins.reloaded", payload: { plugin_ids: ["sample"] } });
+      });
+      assert.equal(view.container.textContent, "0:fresh");
+      await act(async () => { release(); await oldResponse; });
+      assert.equal(view.container.textContent, "0:fresh");
+    } finally { release(); await view.cleanup(); }
+    assert.equal(listeners.size, 0);
+  });
+
   it("binds and unloads account.detail for its provider", () => {
     const registry = new PluginUiRegistry();
     function AccountControls() { return null; }

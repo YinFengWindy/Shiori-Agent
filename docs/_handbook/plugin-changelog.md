@@ -4,6 +4,8 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 ## 4.0.0
 
+- P7-6（#967）：同代码插件重载会重挂受影响的设置/导航/角色设置/图片动作/surface 子树，并重置 surface 错误边界；组件私有状态重新创建，宿主角色草稿和持久偏好保留。复用已求值模块与 CSS，无变化配置及无关插件重载不重挂旁观实例。真实 Electron 验收保留通用音频能力：使用生成的 WebAudio 输入和 loopback 协议服务，经过实际语音插件、聊天分发、采集/播放、取消和重复启停；不代表物理麦克风、真实模型或冻结包验证。
+
 - **breaking**（P7-5，#966）：插件 RPC、事件和后台请求的 wire 名从 `plugin.<id>.<method>` 改为 `<pluginId>.<method>`，没有旧前缀别名；插件侧的 scoped client / RPC 注册仍传局部名称。宿主 `plugin.config.*`、`plugins.*` 等管理命名空间保留，冲突插件 ID 在准入时拒绝。通信处置保留原因：重载为 `plugin_reloading`（“插件正在重载”），其余为 `plugin_unavailable` 并带 `details.reason`（`context_disposed` / `plugin_disabled` / `bridge_exited` / `runtime_replaced`）。重载发布继续使用 `plugins.reloaded`，payload 的 `disabled_plugin_ids` 区分停用与重挂；无变化的配置发布保持 client。
 - **breaking** P7-4（#965）：所有内置前端统一具名导出和单份构建清单；外部包只接受单个 `frontend` 契约，删除 `renderer` 与顶层 `peer_dependencies`。源码 npm `peerDependencies` 进入构建产物 `frontend.peers`，React/React DOM/SDK 均在安装前校验。桥接只下发单个 `frontend_grant`，各窗口选择自身贡献，激活、信任和资源撤销边界保持。通用录音和播放按已确认 D12 修订留在宿主。
 

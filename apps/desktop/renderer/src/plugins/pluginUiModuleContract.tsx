@@ -1,7 +1,7 @@
 import type { PluginFrontendModule } from "@yinfengwindy/shiori-sdk";
 import type React from "react";
 import { PluginHostServicesProvider, type PluginInjectedProps, type PluginUiModule } from "@yinfengwindy/shiori-sdk";
-import { usePluginRpcClient } from "./usePluginRpcClient";
+import { usePluginRpcScope } from "./usePluginRpcClient";
 import { pluginHostServicesFor } from "./pluginHostServices";
 import { affectionUiRegistry } from "./affectionUiRegistry";
 import { roleTasksUiRegistry } from "./roleTasksUiRegistry";
@@ -29,9 +29,9 @@ function bindPluginClient<TBaseProps extends object>(
 ): React.ComponentType<TBaseProps> {
   const host = pluginHostServicesFor(pluginId);
   return function PluginClientBoundComponent(props: TBaseProps) {
-    const client = usePluginRpcClient(pluginId);
+    const { client, generation } = usePluginRpcScope(pluginId);
     return <PluginHostServicesProvider services={host}>
-      <Component {...props} client={client} host={host} />
+      <Component key={generation} {...props} client={client} host={host} />
     </PluginHostServicesProvider>;
   };
 }

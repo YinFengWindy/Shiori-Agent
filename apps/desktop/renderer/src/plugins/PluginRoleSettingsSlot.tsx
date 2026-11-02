@@ -3,7 +3,7 @@ import { pluginRoleSettingsRegistry } from "./pluginFeatureRegistry";
 import { pluginHostServicesFor } from "./pluginHostServices";
 import type { PluginRoleSettingsDraft } from "./pluginRoleSettings";
 import { usePluginEnabledState } from "./usePluginEnabledState";
-import { usePluginRpcClient } from "./usePluginRpcClient";
+import { usePluginRpcScope } from "./usePluginRpcClient";
 
 type SlotProps = {
   roleId: string | null;
@@ -41,8 +41,8 @@ function PluginRoleSettingsEntry({ entry, roleId, moodCatalog, values, snapshot,
   devMode?: boolean;
   onChange: (values: PluginRoleValues) => void;
 }) {
-  const client = usePluginRpcClient(entry.pluginId);
+  const { client, generation } = usePluginRpcScope(entry.pluginId);
   return <PluginHostServicesProvider services={pluginHostServicesFor(entry.pluginId)}>
-    <entry.Component roleId={roleId} client={client} moodCatalog={moodCatalog} values={values} snapshot={snapshot} disabled={disabled} devMode={devMode} onChange={onChange} />
+    <entry.Component key={generation} roleId={roleId} client={client} moodCatalog={moodCatalog} values={values} snapshot={snapshot} disabled={disabled} devMode={devMode} onChange={onChange} />
   </PluginHostServicesProvider>;
 }

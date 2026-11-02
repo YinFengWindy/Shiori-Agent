@@ -13,7 +13,7 @@ export async function prepareSpeech(app: SpeechApp, url: string, assets: { pet: 
   assert.deepEqual(builtin.map((row) => [row.id, row.state]).sort(), [["gpt_sovits_tts", "DISABLED"], ["sensevoice_asr", "DISABLED"]]);
   await app.evidence.add("built-in-providers-default-disabled", builtin);
   await app.settings();
-  for (const row of builtin) await app.page!.getByRole("switch", { name: `启用 ${row.display_name}`, exact: true }).click();
+  for (const row of builtin) await app.page!.getByRole("switch", { name: `启用 ${row.name}`, exact: true }).click();
   await app.state("ACTIVE");
   await app.pluginCall("sensevoice_asr", "settings.set", { url, device: "cpu", model: "sensevoice" });
   await app.pluginCall("gpt_sovits_tts", "settings.set", { url, version: "v2ProPlus", gpt_weights: "fixture/s1v3.ckpt", sovits_weights: "fixture/s2Gv2ProPlus.pth" });
