@@ -176,6 +176,8 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 
 在场心跳在 `SESSIONS.presence`：`record_user_message`、`last_user_at`、`record_initiated_sent`、`last_initiated_at`，以及跨全部会话的 `most_recent_user_at`。表列仍是 `last_user_at` / `last_proactive_at`。`role:` 会话用原 key，其他会话在有 `metadata.role_id` 时记到 `role:<id>`；宿主自己的心跳写入方（被动回合、桌面、主动投递）也走这个对象。
 
+角色会话 key 的纯函数在 `shiori_sdk.session_keys`：`role_session_key(role_id)` 生成现有的 `role:<id>`；`role_id_from_session_key(key)` 解析角色，非角色会话返回空字符串；`is_role_session_key(key)` 按原始 key 的前缀和非空后缀识别。生成和解析会去外围空白，识别函数不会归一化；这些 helper 不验证角色存在或 key 是否规范。仅需要格式转换的插件直接导入，不必注入 `SESSION_STORE`，原有 `SESSION_STORE.role_session_key` 方法仍可用。
+
 角色命名空间在 `ROLES.plugin_settings(role_id, namespace)`。目前只有 `proactive`，其它名字抛 `KeyError`。宿主只保存不透明对象；主动插件负责校验和清理已退役的 `candidates`（#427）、`agent.model` 与 `drift.enabled`。核心 `roles.update` 不接受 proactive 字段。渲染侧的 `roleSettings` 槽已经存在，不是这次新加的。
 
 `CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。`CONVERSATION.reply_state(role_id)` 读该代角色会话的心情目录和已存心情时间，调用方在工作开始时抄进 `InitiatedReply`。部分回复已经落库后调用方被取消，仍返回已落库的部分，取消在下一次 `await` 时再抛出。`InitiatedReply` 与 `PROACTIVE_HOST` 一样，在 P6b-4b 主动循环接上之前仍可增删字段，4.0 发版时定稿。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口：自然回复作用域、补全、工具与 MCP、目标选择、会话历史和投递都从这里走；在已打开的自然计划里，`deliver` 经该计划发出本轮草稿。除 `PROACTIVE_HOST` 与 `InitiatedReply` 外，4.x 不能再给这些 Protocol 加方法；这两处在主动循环搬进插件之前仍可增删，4.0 发版时定稿。

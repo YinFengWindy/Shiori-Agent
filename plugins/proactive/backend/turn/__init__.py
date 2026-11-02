@@ -15,7 +15,7 @@ from ..context import AgentTickContext
 from ..gateway import GatewayResult
 from ..cancellation import finish_started
 from ..results import RoleReplyContext
-from ..session_key import role_id_from_session_key
+from shiori_sdk.session_keys import role_id_from_session_key
 from shiori_sdk.core.proactive_host import NaturalReplyInvalidated
 
 from .delivery import (

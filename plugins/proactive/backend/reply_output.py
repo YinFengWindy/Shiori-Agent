@@ -11,7 +11,7 @@ from typing import Any
 from .results import InvalidRoleReply, RoleReply
 from .context import AgentTickContext
 from .outbound_text import normalize_outbound_text
-from .session_key import role_id_from_session_key
+from shiori_sdk.session_keys import role_id_from_session_key
 from shiori_sdk.core.proactive_host import ProactiveHost
 
 logger = logging.getLogger(__name__)

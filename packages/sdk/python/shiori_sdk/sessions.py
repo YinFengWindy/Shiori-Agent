@@ -14,7 +14,14 @@ class PluginSessions(Protocol):
     """Metadata, original media and atomic replacement with host-owned presentation."""
 
     def get_or_create(self, key: str) -> SessionView: ...
-    def role_session_key(self, role_id: str) -> str: ...
+    def role_session_key(self, role_id: str) -> str:
+        """Build the key using ``shiori_sdk.session_keys.role_session_key``.
+
+        Consumers that only need key construction or parsing can import the
+        pure helpers directly without injecting this service.
+        """
+        ...
+
     def original_media_path(self, value: str) -> str: ...
     def get_message_media(
         self, *, session_key: str, message_id: str, media_index: int

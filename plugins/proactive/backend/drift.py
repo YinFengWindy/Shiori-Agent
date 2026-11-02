@@ -39,7 +39,7 @@ from .drift_tools import (
     build_drift_tool_registry,
 )
 from .reply_output import correct_push_call, reply_schemas
-from .session_key import role_id_from_session_key
+from shiori_sdk.session_keys import role_id_from_session_key
 
 if TYPE_CHECKING:
     from .memory_profile import MemoryProfile as MemoryProfileApi

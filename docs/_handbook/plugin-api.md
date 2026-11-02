@@ -1264,6 +1264,9 @@ Metadata, original media and atomic replacement with host-owned presentation.
 
 - `get_or_create(key: str) -> sessions.SessionView`
 - `role_session_key(role_id: str) -> str`
+
+  Build the key using ``shiori_sdk.session_keys.role_session_key``. Consumers that only need key construction or parsing can import the pure helpers directly without injecting this service.
+
 - `original_media_path(value: str) -> str`
 - `get_message_media(*, session_key: str, message_id: str, media_index: int) -> str`
 - `async replace_message_media(*, session_key: str, message_id: str, media_index: int, expected_path: str, new_path: str) -> dict[str, object]`

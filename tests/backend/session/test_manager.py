@@ -67,6 +67,23 @@ def test_manager_open_role_session_records_role_metadata(tmp_path: Path):
     assert role_session.metadata["role_name"] == "Mira"
 
 
+def test_role_key_helpers_reopen_the_existing_stored_session(tmp_path: Path):
+    from shiori_sdk.session_keys import role_session_key
+
+    manager = SessionManager(tmp_path)
+    stored = manager.get_or_create("role:mira")
+    stored.add_message("user", "existing conversation")
+    manager.save(stored)
+    manager.invalidate(stored.key)
+
+    reopened = manager.get_or_create(role_session_key(" mira "))
+
+    assert [(message["role"], message["content"]) for message in reopened.messages] == [
+        ("user", "existing conversation")
+    ]
+    assert manager.role_session_key(" mira ") == reopened.key
+
+
 def test_get_history_returns_empty_when_window_is_zero():
     session = Session("cli:1")
     session.add_message("user", "hello")
