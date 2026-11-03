@@ -71,6 +71,15 @@ class PluginCommunication:
             )
         return self._resolve(target) is not None
 
+    def authorize_context(
+        self, caller: str, target: str, generation: str, owner: str
+    ) -> bool:
+        """Reject a revoked renderer owner, including within the same generation."""
+        available = self.authorize(caller, target, generation)
+        if not owner or self._owners.get(owner) != caller:
+            raise PluginRpcError("plugin_invalid_owner", "插件调用上下文不匹配或已失效")
+        return available
+
     async def handle(self, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Handles transport operations independently of plugin backend RPC policies."""
         if operation == "disconnect":
@@ -94,10 +103,14 @@ class PluginCommunication:
             if generation == self.generation:
                 self.remove_owner(owner)
             return {}
-        if operation in {"services.list", "services.call", "native.authorize"}:
-            self.authorize(caller, caller, generation)
-            if not owner or self._owners.get(owner) != caller:
-                raise PluginRpcError("plugin_invalid_owner", "插件调用上下文不匹配")
+        service_operation = operation in {
+            "services.list",
+            "services.call",
+            "native.authorize",
+        }
+        target = caller if service_operation else str(payload.get("target") or caller)
+        available = self.authorize_context(caller, target, generation, owner)
+        if service_operation:
             if operation == "native.authorize":
                 return {"plugin_id": caller, "generation": self.generation}
             if operation == "services.list":
@@ -118,14 +131,10 @@ class PluginCommunication:
                 and self._owners.get(owner) == caller
                 and self._resolve(caller) is not None,
             )
-        target = str(payload.get("target") or caller)
-        available = self.authorize(caller, target, generation)
         if operation == "resolve":
             return {"available": available}
         if not available:
             raise PluginRpcError("plugin_unavailable", f"插件 {target} 不可用")
-        if not owner:
-            raise PluginRpcError("plugin_invalid_request", "插件通信缺少调用方标识")
         if operation == "reply":
             self._requests.reply(str(payload.get("request_id") or ""), owner, payload)
             return {}

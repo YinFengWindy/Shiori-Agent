@@ -44,7 +44,7 @@ test("own and declared peer calls/events share local names and isolate namespace
   fixture.emit("provider.changed", {}, "old");
   assert.deepEqual(heard, ["own", "peer"]);
   await peer.call("read", { x: 1 });
-  assert.deepEqual(fixture.calls.at(-1), { method: "provider.read", payload: { x: 1, __plugin_context: { plugin_id: "demo", generation: "g1" } } });
+  assert.deepEqual(fixture.calls.at(-1), { method: "provider.read", payload: { x: 1, __plugin_context: { plugin_id: "demo", generation: "g1", owner: fixture.calls[0].payload.owner } } });
   assert.equal(await peer.background.call("sync"), "done");
   await assert.rejects(client.call("plugin.provider.read"), { code: "plugin_invalid_name" });
   await client.dispose();

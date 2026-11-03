@@ -130,8 +130,12 @@ test("ctx.surfaces binds the plugin id ahead of every call", async () => {
 
 test("ctx.rpc scopes calls to <pluginId>.* and returns the unwrapped payload", async () => {
   const requests: unknown[] = [];
+  let owner: unknown;
   const invoke: DesktopInvoke = (request) => {
-    if (request.method === "plugins.communication.open") return Promise.resolve({ id: "open", type: "response", method: request.method, payload: { generation: "g1" }, error: null });
+    if (request.method === "plugins.communication.open") {
+      owner = request.payload.owner;
+      return Promise.resolve({ id: "open", type: "response", method: request.method, payload: { generation: "g1" }, error: null });
+    }
     requests.push(request);
     return Promise.resolve({ id: "x", type: "response", method: request.method, payload: { ok: true }, error: null });
   };
@@ -139,7 +143,7 @@ test("ctx.rpc scopes calls to <pluginId>.* and returns the unwrapped payload", a
 
   const result = await ctx.rpc.call<{ ok: boolean }>("doThing", { a: 1 });
 
-  assert.deepEqual(requests, [{ method: "demo.doThing", payload: { a: 1, __plugin_context: { plugin_id: "demo", generation: "g1" } } }]);
+  assert.deepEqual(requests, [{ method: "demo.doThing", payload: { a: 1, __plugin_context: { plugin_id: "demo", generation: "g1", owner } } }]);
   assert.deepEqual(result, { ok: true });
 });
 

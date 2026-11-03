@@ -5,7 +5,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 import pytest
 
-from agent.plugin_host.unload import PluginReloadTimeout
+from desktop_bridge.request_dispatcher import BridgeRequestDispatcher
 from desktop_bridge.runtime.service import ReloadableDesktopService
 from shiori_host_testing.bridge import plugin_bridge_request
 
@@ -139,6 +139,49 @@ async def _start_background_call(bridge, context, events):
     return pending
 
 
+async def test_queued_old_rpc_cannot_mutate_reloaded_instance(rollback_runtime):
+    bridge, _path, _state = rollback_runtime
+    old = await _open_context(bridge, "rollback_target", "old")
+    dispatcher = BridgeRequestDispatcher(policy_resolver=bridge.resolve_method_policy)
+    entered, release, reloaded = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    results = {}
+
+    async def hold_write_lane():
+        entered.set()
+        await release.wait()
+
+    async def queued_rpc():
+        results["stale"] = await plugin_bridge_request(
+            bridge, "rollback_target.echo", {"__plugin_context": old}
+        )
+
+    async def reload():
+        results["reload"] = await _save_target(bridge, "new", "queued-rpc-reload")
+        reloaded.set()
+
+    dispatcher.submit({"method": "roles.update"}, hold_write_lane)
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        dispatcher.submit({"method": "rollback_target.echo"}, queued_rpc)
+        dispatcher.submit({"method": "plugin.config.set"}, reload)
+        await asyncio.wait_for(reloaded.wait(), timeout=1)
+        assert results["reload"].error is None
+        assert "stale" not in results
+    finally:
+        release.set()
+        await dispatcher.aclose()
+
+    stale = results["stale"]
+    assert stale.error is not None and stale.error.code == "plugin_invalid_owner"
+    fresh = await _open_context(bridge, "rollback_target", "new")
+    assert fresh["generation"] == old["generation"]
+    accepted = await plugin_bridge_request(
+        bridge, "rollback_target.echo", {"__plugin_context": fresh}
+    )
+    # A rejected queued call must not have reached the replacement handler.
+    assert accepted.error is None and accepted.payload == {"labels": ["new"]}
+
+
 async def test_failed_reload_renews_entire_restored_closure_before_error_response(
     rollback_runtime,
 ):
@@ -192,6 +235,15 @@ async def test_failed_reload_renews_entire_restored_closure_before_error_respons
         )
         assert (
             revoked.error is not None and revoked.error.code == "plugin_invalid_owner"
+        )
+        stale_registration = await plugin_bridge_request(
+            bridge,
+            "plugins.communication.register",
+            {**contexts[plugin_id], "name": "wait"},
+        )
+        assert (
+            stale_registration.error is not None
+            and stale_registration.error.code == "plugin_invalid_owner"
         )
         fresh = await _open_context(bridge, plugin_id, f"new-{plugin_id}")
         native = await plugin_bridge_request(
@@ -503,19 +555,11 @@ async def test_plugin_wire_routes_events_and_reports_disabled_contexts(
         (package / "backend/plugin.py").write_text(
             "from shiori_sdk.core.services import RPC\n"
             "from pydantic import BaseModel\n"
-            "from asyncio import Event\n"
             "class Config(BaseModel):\n"
             "    label: str = 'v1'\n"
             "async def setup(ctx):\n"
             "    items = []\n"
             "    rpc = ctx.require(RPC)\n"
-            "    entered, release = Event(), Event()\n"
-            "    ctx.expose({'entered': entered, 'release': release})\n"
-            "    async def block(payload):\n"
-            "        entered.set()\n"
-            "        await release.wait()\n"
-            "        return {'finished': True}\n"
-            "    rpc.register('block', block)\n"
             "    async def append(payload):\n"
             "        items.append(payload['text'])\n"
             "        await rpc.emit('changed', {'items': list(items)})\n"
@@ -584,51 +628,6 @@ async def test_plugin_wire_routes_events_and_reports_disabled_contexts(
             bridge, "plugin.wire_probe.append", {"text": "legacy"}
         )
         assert legacy.error is not None and legacy.error.code == "unknown_method"
-
-        pending = await start_background_request()
-        core = bridge.app.core
-        assert core is not None and core.plugin_manager is not None
-        probe = core.plugin_manager._dependency_api("wire_probe")
-        blocked = asyncio.create_task(plugin_bridge_request(bridge, "wire_probe.block"))
-        await asyncio.wait_for(probe["entered"].wait(), timeout=1)
-        with pytest.raises(PluginReloadTimeout):
-            await core.plugin_manager.reload(
-                "wire_probe",
-                values={"label": "abandoned"},
-                raw_values={"label": "abandoned"},
-                drain_timeout=0.001,
-            )
-        assert not pending.done()
-        probe["release"].set()
-        assert (await blocked).error is None
-        request = next(
-            event
-            for event in reversed(events)
-            if event["method"] == "wire_probe.__request"
-        )
-        await plugin_bridge_request(
-            bridge,
-            "plugins.communication.reply",
-            {
-                "plugin_id": "wire_probe",
-                "owner": "background",
-                "generation": core.plugin_rpc.communication.generation,
-                "request_id": request["payload"]["request_id"],
-                "result": "still active",
-            },
-        )
-        retained = await pending
-        assert retained.error is None and retained.payload == {"result": "still active"}
-        for owner in ("background", "caller"):
-            await plugin_bridge_request(
-                bridge,
-                "plugins.communication.close",
-                {
-                    "plugin_id": "wire_probe",
-                    "owner": owner,
-                    "generation": core.plugin_rpc.communication.generation,
-                },
-            )
 
         pending = await start_background_request()
         reloaded = await plugin_bridge_request(

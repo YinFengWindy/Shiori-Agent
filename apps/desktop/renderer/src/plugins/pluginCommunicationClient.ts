@@ -89,7 +89,7 @@ export function createPluginCommunicationClient(pluginId: string, options: {
       const token = await connect();
       assertActive();
       const result = await lifetime.wait(invoke<T>(`${target}.${name}`, {
-        ...payload, __plugin_context: { plugin_id: pluginId, generation: token },
+        ...payload, __plugin_context: { plugin_id: pluginId, generation: token, owner },
       }, callOptions));
       assertActive();
       if (token !== currentGeneration) throw new PluginBridgeError("插件运行代际已替换", "plugin_unavailable");

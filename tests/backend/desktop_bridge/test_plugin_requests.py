@@ -23,8 +23,11 @@ async def test_registered_peer_rpc_runs_only_for_the_current_declared_caller():
     policy = MethodPolicy(concurrency=Concurrency.INTEGRATION)
     registry.register("provider.append", "provider", append, policy)
     router = DesktopPluginRequestHandler(registry)
-    generation = registry.communication.generation
-    context = {"plugin_id": "consumer", "generation": generation}
+    opened = await router.handle(
+        "plugins.communication.open", {"plugin_id": "consumer", "owner": "document"}
+    )
+    assert opened is not None
+    context = {"plugin_id": "consumer", "owner": "document", **opened}
     assert await router.handle(
         "provider.append", {"text": "accepted", "__plugin_context": context}
     ) == {"items": ["accepted"]}

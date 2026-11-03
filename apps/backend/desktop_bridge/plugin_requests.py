@@ -38,10 +38,11 @@ class DesktopPluginRequestHandler:
         if isinstance(context, dict):
             from shiori_sdk.rpc import PluginRpcError
 
-            if not self._registry.communication.authorize(
+            if not self._registry.communication.authorize_context(
                 str(context.get("plugin_id") or ""),
                 target,
                 str(context.get("generation") or ""),
+                str(context.get("owner") or ""),
             ):
                 raise PluginRpcError("plugin_unavailable", f"插件 {target} 不可用")
             payload = {

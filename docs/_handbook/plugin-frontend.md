@@ -53,7 +53,7 @@ UI 组件、surface 和后台模块都收到注入的 `client`（`PluginRpcClien
 - `client.background.call(name, payload)`：调本插件后台模块用 `ctx.rpc.handle` 登记的方法。
 - `client.services.list(contract)` / `client.services.call({plugin_id, service_id}, method, payload)`：按契约发现并调用其它插件用 `SERVICES` 发布的服务。不需要静态依赖，也不授予对方私有 RPC 的访问权；提供方或调用方已退役报 `plugin_service_unavailable`，方法未发布报 `plugin_service_method_unavailable`，不会悄悄换成别的提供方。
 
-局部方法和事件名在 wire 上统一为 `<pluginId>.<name>`，不接受旧 `plugin.<id>.*` 别名。宿主 `plugin.config.*`、`plugins.*` 和其他宿主顶层命名空间不能作为插件 ID。保留的同伴和已退役上下文发起的调用报 `plugin_unavailable`；重载时的本地在途调用报 `plugin_reloading`（“插件正在重载”）。错误的 `details.reason` 区分 `context_disposed`、`plugin_disabled`、`bridge_exited`、`runtime_replaced` 和 `plugin_reloading`，首次失效原因不被后续 dispose 覆盖，迟到结果不会交给新实例。
+局部方法和事件名在 wire 上统一为 `<pluginId>.<name>`，不接受旧 `plugin.<id>.*` 别名。宿主 `plugin.config.*`、`plugins.*` 和其他宿主顶层命名空间不能作为插件 ID。已退役的本地 client 调用报 `plugin_unavailable`；重载时的本地在途调用报 `plugin_reloading`（“插件正在重载”）。这些本地失效错误的 `details.reason` 区分 `context_disposed`、`plugin_disabled`、`bridge_exited`、`runtime_replaced` 和 `plugin_reloading`，首次失效原因不被后续 dispose 覆盖，迟到结果不会交给新实例。后端 RPC 与后台通信还校验 `open` 登记的 owner：即使局部重载保留 generation，已经排队或迟到的旧 owner 请求也会在执行前以 `plugin_invalid_owner` 拒绝，不修改新实例或抢占其后台方法；`close` 和文档断开的清理保持幂等。
 
 组件在注入的 `client` 变化时要重建订阅：真正的运行时发布或桥接重启会替换全部上下文，`plugins.reloaded` 只替换点名的插件，payload 的 `disabled_plugin_ids` 标明其中已经停用的插件；`runtime.applied` 的 `changed: false` 刷新和 `plugins.changed` 不替换仍然 `ACTIVE` 的插件的上下文。后台的 `hostEvents` 不接收带 `pluginGeneration` 的插件事件；插件事件走 `events` 或依赖 client。
 
