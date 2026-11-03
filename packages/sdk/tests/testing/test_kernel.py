@@ -250,3 +250,23 @@ async def test_stop_releases_instances_excluded_by_a_later_plan() -> None:
     assert await harness.stop() == []
     assert disposed == ["first"]
     assert kernel.get(SERVICE) is None
+
+
+async def test_stop_uses_current_dependencies_after_incremental_starts() -> None:
+    """An earlier optional consumer must keep its later provider during cleanup."""
+    disposed: list[tuple[str, bool]] = []
+
+    async def consumer(ctx: Context) -> None:
+        ctx.effect(lambda: disposed.append(("consumer", ctx.get(SERVICE) is not None)))
+
+    async def provider(ctx: Context) -> None:
+        ctx.provide(SERVICE, object())
+        ctx.effect(lambda: disposed.append(("provider", True)))
+
+    harness = KernelHarness()
+    _ = await harness.start(PluginSpec("consumer", consumer, optional=("service",)))
+    _ = await harness.start(PluginSpec("provider", provider, provides=("service",)))
+
+    assert await harness.stop() == []
+    assert disposed == [("consumer", True), ("provider", True)]
+    assert harness.kernel.get(SERVICE) is None
