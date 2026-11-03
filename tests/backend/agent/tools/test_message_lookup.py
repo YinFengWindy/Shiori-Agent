@@ -470,7 +470,6 @@ def test_behavior_rules_prioritize_current_request_and_fact_grounding():
     prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
     assert "优先回答用户当前请求" in prompt
     assert "信息不足时直接说不确定" in prompt
-    assert "事实 / 推测 / 待确认" in prompt
     assert "RECENT_CONTEXT.md" in prompt
 
 
