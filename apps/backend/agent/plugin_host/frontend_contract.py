@@ -8,6 +8,9 @@ from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.package_artifacts import validate_artifact
 from agent.plugin_host.package_schema import object_field, string_list, compatible_range
 
+# Guaranteed frontend ABI minimum, independent of the developer npm tree.
+REACT_API_VERSION = "19.2.0"
+
 
 @dataclass(frozen=True)
 class FrontendEntry:
@@ -41,10 +44,9 @@ def validate_frontend(root: Path, raw: dict[str, object]) -> FrontendEntry | Non
         "frontend.peers",
         {"react", "react-dom", "@yinfengwindy/shiori-sdk"},
     )
-    # Guaranteed frontend ABI versions, independent of the developer npm tree.
     versions = {
-        "react": "19.2.0",
-        "react-dom": "19.2.0",
+        "react": REACT_API_VERSION,
+        "react-dom": REACT_API_VERSION,
         "@yinfengwindy/shiori-sdk": __version__,
     }
     if set(peers) != set(versions):

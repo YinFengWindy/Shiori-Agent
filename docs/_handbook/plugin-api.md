@@ -1267,16 +1267,6 @@ Metadata, original media and atomic replacement with host-owned presentation.
 - `get_message_media(*, session_key: str, message_id: str, media_index: int) -> str`
 - `async replace_message_media(*, session_key: str, message_id: str, media_index: int, expected_path: str, new_path: str) -> dict[str, object]`
 
-### `storage`
-
-Target `shiori_sdk.extensions.PrivateStorage`.
-
-#### `shiori_sdk.extensions.PrivateStorage`
-
-Delegate migration to the host owner and use its returned destination. Files for one plugin share the owner's selected directory. The canonical layout is given by storage.plugin_data_dir; consumers must honor the actual migration result when the owner selects a different storage root.
-
-- `migrate_data(workspace: pathlib.Path, plugin_id: str, name: str, source: pathlib.Path) -> pathlib.Path`
-
 ### `tool_turn`
 
 Target `Callable[[], processes.ToolTurn]`.

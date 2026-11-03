@@ -103,7 +103,6 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 | `config` | `CONFIG` | 本代插件配置快照（`as_dict()`、`resolve_reference(value)`） |
 | `dependencies` | `DEPENDENCIES` | 读取已声明提供方的本代公开 API |
 | `runtime` | `RUNTIME` | 本代是否重载、前代是否活动，以及收尾任务登记 |
-| `storage` | `STORAGE` | 宿主负责的插件私有文件迁移（`migrate_data`） |
 | `workspace` / `roles` / `session_store` | `WORKSPACE` / `ROLES` / `SESSION_STORE` | 工作区目录、角色快照/素材、会话元数据/素材替换；不导出完整存储聚合。回滚最近一轮被动回合是另一个 Key：`inject: [sessions]` 对应 `shiori_sdk.core.sessions.SESSIONS` |
 | `scene` | `SCENE` | 可选。场景插件提供。`request` 返回释放函数，交给 `ctx.effect`。没有提供方时 `get` 为 None，聊天照常 |
 | `models` | `MODELS` | 按角色持有的 chat/vision 模型快照 |
@@ -290,7 +289,7 @@ SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir�
 
 仓库开发使用 `uv sync --dev`，再 `uv run pytest plugins/example/tests`。仓库外验收运行 `uv run python -m scripts.verify_plugin_tests --plugins example --output <仓库外新目录>`：从副本构建非 editable wheel，在独立环境运行真实插件测试，检查模块来源，并确认 await 后故意失败的异步断言真正执行。完整步骤见 [插件测试](../agents/plugin-testing.md) 与各包 `TESTING.md`。
 
-插件私有状态在 `workspace/plugin-data/<id>/`。通用 KV 是该目录下的 `kv.json`（`agent/plugin_host/kv.py`），缺文件时为空存储，启动不读取包目录或旧 `workspace/plugins/`。`default_memory` 的 `config.local.toml` 与默认库 `memory2.db`、observe 的 `observe.db` 也在各自目录；显式 `db_path` 保持不变。SDK 3.1.x 的 `PrivateStorage.migrate_data` 仍可调用，宿主只返回这个目录下的目标路径，不复制旧文件。数据库经宿主租约打开，已有连接占用时拒绝再次打开。
+插件私有状态在 `workspace/plugin-data/<id>/`。通用 KV 是该目录下的 `kv.json`（`agent/plugin_host/kv.py`），缺文件时为空存储，启动不读取包目录或旧 `workspace/plugins/`。`default_memory` 的 `config.local.toml` 与默认库 `memory2.db`、observe 的 `observe.db` 也在各自目录；显式 `db_path` 保持不变。私有路径由 `shiori_sdk.storage.plugin_data_dir(workspace, plugin_id)` 生成；SDK 4.0 删除了旧 `storage` 注入与 `migrate_data`，不再保留空迁移接口，也不复制旧目录。数据库经宿主租约打开，已有连接占用时拒绝再次打开。
 
 `default_memory/recall_inspector.jsonl` 写在该插件数据根。meme 图库在 `plugin-data/meme/library/`；共享 `common_emojis.json` 与角色素材仍属宿主。
 

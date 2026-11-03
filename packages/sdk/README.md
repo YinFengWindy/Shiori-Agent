@@ -18,7 +18,11 @@ for plugin layout, `inject` service declarations and packaging.
 
 Breaking major. Manifests declare `api: 4` and `sdk: ">=4.0.0"`. There is no
 `runtime_api` version. Within 4.x, existing keys do not gain methods. See the
-plugin guide. The 3.1.x notes below are history for the last published release.
+plugin guide. The unused `STORAGE` key and `PrivateStorage.migrate_data` are
+removed before this major is published. Resolve private paths with
+`shiori_sdk.storage.plugin_data_dir` and use `KV` for JSON state; the memory
+port retains `resolve_config` and `open_database`. The 3.1.x notes below are
+history for the last published release.
 
 ### 3.1.2 migration
 
@@ -361,10 +365,9 @@ then the session; an empty `MEMORY_ENGINE` rolls back the session only.
 A command plugin that calls another plugin's export injects `dependencies` and
 reads `ctx.require(DEPENDENCIES)` on each call.
 
-Observe injects `background`, `workspace` and `crash_reporting`. The migration
-port (`STORAGE`, `inject: [storage]`) is shared with memory construction when
-declared. The host owns receipt/lease handling, the active
-error session, installed package and external plugin code roots, and the
+Observe injects `background`, `workspace` and `crash_reporting`. It resolves
+its own database under `plugin_data_dir(workspace, "observe")`. The host owns
+the active error session, installed package and external plugin code roots, and the
 process-global hook stack behind `CRASH_REPORTING` (`install` / `uninstall`,
 `session_key`, `top_frame`). The plugin owns fingerprinting, deduplication,
 flush and SQLite. Register collector cleanup before installing hooks; stop
@@ -388,10 +391,11 @@ Global hook restoration and real lifecycle ordering stay in host integration tes
 
 
 `shiori_sdk.storage.plugin_data_dir` and `PLUGIN_DATA_DIRNAME` own the pure canonical
-private-data layout and portable plugin-ID validation; host migration and SDK fakes
-use the same helper. `PrivateStorage.migrate_data` returns the authoritative target.
-Observe passes that resolved database path to both writer and public telemetry reader,
-so an injected storage root remains consistent and reads never create storage.
+private-data layout and portable plugin-ID validation. Host code, plugins and SDK
+fakes use the same helper. Observe passes its canonical database path to both
+writer and public telemetry reader; resolving the path does not create storage.
+Memory plugins use `MEMORY.storage.resolve_config` for their local config and
+`open_database` for host-managed database leases. Neither port copies legacy data.
 
 ## Role, generation and native services
 
@@ -415,9 +419,8 @@ provider blocks the plugin before `setup`.
 
 `Roles.read_scope()` keeps a plugin's multi-read namespace reconciliation atomic
 against canonical role edits. Plugins retain their schemas and policies; only
-host storage operations cross this boundary. `PrivateStorage.migrate_data`
-returns the authoritative directory and is mandatory when constructing plugin
-catalogs. Neither plugins nor SDK fakes recreate the host's migration owner.
+host storage operations cross this boundary. Plugin catalogs resolve their private
+files with `plugin_data_dir`; the host does not migrate or copy old catalog roots.
 
 Shared prompt-section, scene-observation, RPC-error and MCP values have one SDK
 definition. `files`, `media`, `errors` and `redaction` contain standalone helpers

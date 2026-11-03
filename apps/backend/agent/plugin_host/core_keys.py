@@ -121,10 +121,9 @@ plugin's ``config``, so each generation requires it when it is constructed.
 class HostBuilt:
     """Marker for a public key the host builds per plugin during setup.
 
-    ``config``, ``kv``, ``dependencies``, ``runtime``, ``services`` and
-    ``storage`` do not exist until the assembly layer constructs that
-    plugin's context. The kernel still needs a provider so planning does
-    not block a plugin that injects one. ``PluginRuntimeContext.require``
+    ``config``, ``kv``, ``dependencies``, ``runtime`` and ``services`` do not
+    exist until the assembly layer constructs that plugin's context. The kernel
+    still needs a provider so planning does not block a plugin that injects one. ``PluginRuntimeContext.require``
     replaces this marker with the plugin's object. It is not a service.
 
     Remove it once kernel planning can tell a host-built per-plugin key from
@@ -157,7 +156,6 @@ HOST_BUILT_KEYS: tuple[Key[Any], ...] = (
     services.DEPENDENCIES,
     services.RUNTIME,
     services.SERVICES,
-    services.STORAGE,
 )
 
 

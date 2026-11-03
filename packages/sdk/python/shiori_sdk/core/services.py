@@ -26,7 +26,6 @@ from shiori_sdk.extensions import (
     BackgroundTasks,
     ConfigValues,
     Dependencies,
-    PrivateStorage,
 )
 from shiori_sdk.external_turns import ExternalTurns
 from shiori_sdk.http import HttpClient
@@ -125,6 +124,3 @@ RUNTIME: Key[RuntimeLifecycle] = Key("runtime")
 
 SERVICES: Key[PluginServices] = Key("services")
 """Publish a discoverable service contract."""
-
-STORAGE: Key[PrivateStorage] = Key("storage")
-"""Host-owned migration of this plugin's files."""

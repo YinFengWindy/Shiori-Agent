@@ -50,12 +50,11 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `effect(label, dispose)` | 登记卸载时的清理；`dispose` 可同步可异步 |
 | `expose(api)` | 把本插件的 Python 接口交给同一代里声明了依赖它的插件（对方用 `DEPENDENCIES` 取） |
 
-上下文上**没有** `spawn`、`on_drain`、`log`、`config`、`data_dir`。它们都是服务：
+上下文上**没有** `spawn`、`on_drain`、`log`、`config`、`data_dir`。改用下列接口：
 
 - 后台任务：`ctx.require(BACKGROUND).spawn(coro, name=...)`；需要保留调用方运行租约直到任务结束的用 `spawn_runtime`。卸载时取消，不排空。
-- `RUNTIME.on_drain` 只等待已接受的工作，可重复调用，也可能在放弃重载后继续存活；不得在回调里拆资源，清理登记到 `ctx.effect`。
-- 重载前的排空：`ctx.require(RUNTIME).on_drain(callback)`；`RUNTIME.was_active` 为 `True` 表示这个插件在本次 setup 之前已经在运行：代内重载重新拉起的实例、可选依赖的提供方代内启停时随之重新 setup 的实例都是这样，换代时上一代处于 `ACTIVE` 的插件也是这样；首次启动和从停用状态启用时为 `False`。用它跳过只该做一次的启动恢复。语义见[生命周期](plugin-lifecycle.md#代内重载)。
-- 配置：`ctx.require(CONFIG)`；私有数据目录与迁移：`STORAGE`；工作区目录：`WORKSPACE`。
+- 重载前的排空：`ctx.require(RUNTIME).on_drain(callback)`。回调只等待已接受的工作，可重复调用，实例也可能在放弃重载后继续存活；不得在回调里拆资源，清理登记到 `ctx.effect`。`RUNTIME.was_active` 为 `True` 表示这个插件在本次 setup 之前已经在运行：代内重载重新拉起的实例、可选依赖的提供方代内启停时随之重新 setup 的实例都是这样，换代时上一代处于 `ACTIVE` 的插件也是这样；首次启动和从停用状态启用时为 `False`。用它跳过只该做一次的启动恢复。语义见[生命周期](plugin-lifecycle.md#代内重载)。
+- 配置：`ctx.require(CONFIG)`；工作区目录：`ctx.require(WORKSPACE)`。私有数据路径用 `shiori_sdk.storage.plugin_data_dir(workspace, plugin_id)`，通用 JSON 状态用 `ctx.require(KV)`，不复制旧目录。
 - 日志：用标准库 `logging`。
 
 这些 Key 都在 `shiori_sdk.core.services`，必须先写进 manifest 的 `inject` / `optional_inject`。

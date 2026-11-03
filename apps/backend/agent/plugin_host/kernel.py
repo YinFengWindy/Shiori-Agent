@@ -22,7 +22,6 @@ from uuid import uuid4
 from agent.plugin_host.services import ScopedPluginServices
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.kv import PluginKVStore
-from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.core_keys import (
     HOST_BRIDGE,
     HOST_CONFIG_REFERENCES,
@@ -901,7 +900,6 @@ class PluginKernel:
                 self._dependency_api,
                 optional_declared=manifest.optional_dependencies,
             ),
-            storage=PluginStorage(),
             kv=self._open_kv(handle.plugin_id) if "kv" in injected else None,
             runtime=PluginRuntimeLifecycle(
                 settings.is_reload or reactivated,

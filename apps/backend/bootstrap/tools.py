@@ -627,6 +627,8 @@ def build_core_runtime(
         background_result_runner or loop.process_background_result,
     )
     plugin_rpc: PluginRpcRegistry[MethodPolicy] = PluginRpcRegistry(event_bus)
+    # Keep this local: desktop_bridge.__init__ imports server and AppRuntime,
+    # whose bootstrap.app -> tools import must finish before that cycle opens.
     from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
 
     plugin_dirs = _resolve_plugin_dirs(workspace)
