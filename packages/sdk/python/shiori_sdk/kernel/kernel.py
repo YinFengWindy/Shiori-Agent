@@ -231,7 +231,11 @@ class Kernel:
         failure: PluginDiagnostic | None = None,
         error: BaseException | None = None,
     ) -> list[Exception]:
-        """Release a scope, leaving FAILED and PluginFailed for an explicit failure."""
+        """Releases a scope and records STOPPED, or FAILED with ``failure``.
+
+        Failed deactivation retains the cause and cleanup errors and emits
+        ``PluginFailed`` instead of ``PluginStopped``. An absent scope is a no-op.
+        """
         if plugin_id not in self._scopes:
             return []
         errors = await self._release(plugin_id)

@@ -48,6 +48,6 @@ R2：重载替换或启停过程中的尚未启动成员短暂显示 BLOCKED / `
 |---|---|---|---|
 | agent/plugin_host/*.py | 31 | 4785 | 3515 |
 | desktop_bridge/runtime/plugin_*.py | 10 | 1651 | 1263 |
-| shiori_sdk/kernel/*.py | 7 | 1043 | 688 |
+| shiori_sdk/kernel/*.py | 7 | 1047 | 688 |
 
 内核仍以 700 代码行为硬门禁。宿主 `kernel.py` 此时仍超过 600 物理行，按 T6 沿既定职责边界拆分；本阶段不迁移通信链、不新增层或 SDK Key。

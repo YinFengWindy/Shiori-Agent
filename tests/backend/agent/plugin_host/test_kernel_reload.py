@@ -1289,18 +1289,28 @@ async def test_failed_enabled_provider_still_conflicts_with_a_newly_enabled_one(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["setup", "renderer"])
 async def test_conflict_replanning_cannot_retry_an_unclean_failed_provider(
-    probe, tmp_path
+    probe, tmp_path, failure_stage
 ):
     _write(
         tmp_path,
         "first",
-        "provides: [shared.engine]\n",
+        "provides: [shared.engine]\n"
+        + (
+            "frontend: {entry: frontend.mjs, exports: [ui], css: []}\n"
+            if failure_stage == "renderer"
+            else ""
+        ),
         "import sys\n\nasync def setup(ctx):\n"
         "    sys.modules['reload_probe'].events.append(('setup', 'first'))\n"
         "    def stuck(): raise RuntimeError('cleanup failed')\n"
         "    ctx.effect('stuck', stuck)\n"
-        "    raise RuntimeError('setup failed')\n",
+        + (
+            "    raise RuntimeError('setup failed')\n"
+            if failure_stage == "setup"
+            else ""
+        ),
     )
     _write(
         tmp_path,
@@ -1317,6 +1327,14 @@ async def test_conflict_replanning_cannot_retry_an_unclean_failed_provider(
         ),
     )
     await kernel.load_all()
+    if failure_stage == "renderer":
+        failed = _failures(kernel)
+        first_view = kernel.view("first")
+        assert first_view is not None
+        assert await kernel.fail_renderer_entry(
+            "first", "ui", "renderer failed", first_view.activation_token
+        )
+        assert failed == ["first"]
     assert _states(kernel)["first"] == "RESTART_REQUIRED"
     try:
         for enabled in (True, False):
@@ -1324,9 +1342,13 @@ async def test_conflict_replanning_cannot_retry_an_unclean_failed_provider(
             _ = await kernel.set_enabled(
                 "second", values=table, raw_values=dict(table), drain_timeout=5
             )
-            assert _states(kernel)["first"] == "RESTART_REQUIRED"
+            view = kernel.view("first")
+            assert view is not None and view.state == "RESTART_REQUIRED"
+            assert view.diagnostic is not None
+            assert view.diagnostic.code == "rollback_cleanup_failed"
             first = kernel.kernel.status("first")
-            assert first is not None and first.cleanup_errors
+            assert first is not None and first.state is KernelState.FAILED
+            assert first.cleanup_errors
             if enabled:
                 second = kernel.kernel.status("second")
                 assert second is not None and second.diagnostic is not None
@@ -1378,48 +1400,6 @@ async def test_renderer_reports_wait_for_reload_and_recheck_activation_tokens(
         assert tools.get_tool("bystander_busy") is None
     finally:
         probe.release.set()
-        await kernel.terminate_all(force=True)
-
-
-@pytest.mark.asyncio
-async def test_renderer_cleanup_failure_survives_conflict_planning(probe, tmp_path):
-    _write(
-        tmp_path,
-        "first",
-        "provides: [shared.engine]\nfrontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
-        "import sys\nasync def setup(ctx):\n"
-        "    sys.modules['reload_probe'].events.append(('setup', 'first'))\n"
-        "    def stuck(): raise RuntimeError('cleanup failed')\n"
-        "    ctx.effect('stuck', stuck)\n",
-    )
-    _write(
-        tmp_path,
-        "second",
-        "provides: [shared.engine]\n",
-        "async def setup(ctx): pass\n",
-    )
-    kernel = host_kernel(
-        [tmp_path],
-        settings=PluginGenerationSettings(
-            plugin_configs={"second": {"enabled": False}}
-        ),
-    )
-    await kernel.load_all()
-    failed = _failures(kernel)
-    try:
-        assert await kernel.fail_renderer_entry(
-            "first", "ui", "renderer failed", kernel.view("first").activation_token
-        )
-        assert failed == ["first"]
-        for enabled in (True, False):
-            await set_plugin_enabled(kernel, "second", enabled)
-            view = kernel.view("first")
-            assert view.state == "RESTART_REQUIRED"
-            assert view.diagnostic.code == "rollback_cleanup_failed"
-            status = kernel.kernel.status("first")
-            assert status.state is KernelState.FAILED and status.cleanup_errors
-        assert probe.events == [("setup", "first")]
-    finally:
         await kernel.terminate_all(force=True)
 
 
