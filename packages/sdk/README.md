@@ -440,11 +440,11 @@ Actual kernel ordering, role saves, session media adoption, runtime lease
 retention, screen/desktop-pet integration and Windows Job cleanup remain in host
 tests. PR CI includes a dedicated Windows process-lifecycle job.
 
-Desktop pet also injects `roles`, `storage`, `tools`, `rpc` and `events`
-(typed `role_events.RoleDeleted`). Sprite packages, role selection,
-exclusive visibility and asset reconciliation remain plugin policies. Host
-integration tests exercise canonical role locks, atomic saves, migration receipts
-and kernel replacement with those public keys. `RPC`'s `register` supports
+Desktop pet also injects `workspace`, `roles`, `tools`, `rpc` and `events`
+(typed `role_events.RoleDeleted`). Its private paths use `plugin_data_dir`.
+Sprite packages, role selection, exclusive visibility and asset reconciliation
+remain plugin policies. Host integration tests exercise canonical role locks,
+atomic saves and kernel replacement with those public keys. `RPC`'s `register` supports
 `admission_exempt=True` for bounded controls that must remain reachable while
 ordinary admission pauses; desktop-pet bubble dismissal uses this flag.
 Pure timestamp/path helpers are defined once in `shiori_sdk.values`.
