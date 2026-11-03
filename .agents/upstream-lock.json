@@ -82,22 +82,22 @@
     }
   ],
   "integrations": {
-    "investigate": [
+    "wf-investigate": [
       "pstack/how",
       "pstack/why"
     ],
-    "grill": [
+    "wf-grill": [
       "matt/grilling"
     ],
-    "design": [
+    "wf-design": [
       "pstack/arena",
       "pstack/architect"
     ],
-    "plan": [
+    "wf-plan": [
       "matt/to-spec",
       "matt/to-tickets"
     ],
-    "write": [
+    "wf-write": [
       "pstack/unslop",
       "pstack/technical-writing"
     ],

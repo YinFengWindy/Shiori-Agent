@@ -1,72 +1,35 @@
 # Agent ownership and communication
 
-The parent maintains the user's intent, current decisions, and overall design. Delegation assigns bounded work; it does not transfer product authority or expand authorization.
+You, the coordinator (called the parent below), hold the user's intent, the current decisions, and the overall design. Delegating work hands out bounded tasks; it does not hand out product authority or extra permissions.
 
-## Authority
+## Three rules
 
-These three rules are the collection's source of truth. Stage skills keep a one-line pointer and their own actions.
-
-- **Acceptance is not review.** Acceptance checks whether the agreed behavior works. Review asks where the current behavior can still fail, and whether a proposed repair is necessary. Keep the two results separate. A hypothetical warning does not become defensive code.
-- **Silence and green CI are not approval.** The user confirms requirements, the ticket breakdown, and merging the finished PR. A quiet thread, a passing check, or a successful command does not grant those confirmations. An explicit authorization already on record stays in force for that same action.
-- **The parent owns product decisions.** The parent keeps context and design revisions, integration, Git and tracker actions, and questions to the user. Workers report contradictions with evidence. Technical adjustments inside the agreed scope stay with the parent. Material product changes return to the user.
+- **Acceptance is not review.** Acceptance checks that the agreed behavior works; review looks for where it can still fail and whether a proposed fix is needed. Report them separately. A hypothetical warning is not a reason to add defensive code.
+- **Silence and green CI are not approval.** Only the user confirms requirements, the ticket breakdown, and merging. An explicit authorization they already gave stays in force for that same action.
+- **The user owns product decisions.** A product decision changes what users see or can do, what data is kept, compatibility, cost, or scope. The parent makes every technical decision and takes product decisions to the user.
 
 ## Roles
 
-| Role | Responsibility |
+| Role | Does |
 | --- | --- |
-| Parent | Read investigation evidence, grill the user, compare design proposals, converge the design, approve technical adjustments, integrate, manage Git/tracker/CI, and obtain user confirmations. |
-| Investigator | Use current behavior or historical rationale to answer concrete factual questions, with source evidence and unknowns. |
-| Design candidate | Independently propose a solution to the same confirmed problem. Do not inspect another candidate's unfinished proposal. |
-| Implementer | Implement an approved ticket against the current design in the assigned workspace; run focused checks and report results or contradictions. |
-| Finder | Independently search current behavior chains for defects in a fixed change. |
-| Verifier | Challenge each finding's mechanism and the necessity of its proposed fix, using the review skill. |
+| Parent | Talks with the user, compares and converges designs, integrates, commits, and handles Git, the tracker, and CI. |
+| Investigator | Answers factual questions with sources and unknowns. |
+| Design candidate | Proposes a solution independently, without seeing other candidates' work. |
+| Implementer | Implements one approved ticket in its assigned worktree, checks it, and reports. |
+| Finder / verifier | Looks for defects independently; a separate verifier challenges each finding (see wf-review). |
 
-Only the parent asks user-facing product questions. Workers do not widen scope, publish issues, commit, push, change branches, merge, or contact other people. Use native agent tools and the host's configured model defaults. Do not invent unavailable model families, cloud workers, messaging integrations, or user-visible chats.
+Workers report to the parent. They do not talk to the user, widen scope, commit, push, publish, merge, or contact anyone else.
 
-## Share evidence, not just a summary
+## Hand over evidence, not just a summary
 
-Before design comparison and implementation, provide a versioned context packet. Reuse the spec and existing investigation records by reference; small tasks need no separate document.
+Give workers what they need to work without guessing: the confirmed goal and acceptance criteria, exclusions, the code baseline, relevant source and history, known unknowns, rejected directions, the current design, and their exact assignment and writable area. Link primary sources rather than paraphrasing them. When the context changes, say what changed, so that work based on an older version is visible as such.
 
-- Confirmed goal, observable acceptance criteria, exclusions, and the reasons behind material user decisions.
-- Repository, exact baseline, relevant source entrypoints, call/state flows, and source-backed historical constraints.
-- Facts, inferences, remaining unknowns, and rejected directions with their reasons.
-- Current design and contract revision when available.
-- Assignment, output location, applicable instructions, writable boundaries, and verification responsibilities.
+Workers bring evidence gaps and contradictions back to the parent, with what they checked and whether other work can continue. The parent sends factual follow-ups to investigators, settles technical details itself, takes product questions to the user, and tells affected workers. Workers do not renegotiate the design among themselves.
 
-Keep primary evidence accessible: source paths and revisions, linked issues/ADRs, relevant commands and outputs. Include fetched excerpts when a child cannot access the source. A summary is an index, not the sole source of truth.
+## Writers and integration
 
-Conversation inheritance can supplement the packet when the host supports it. Explicitly identify the latest decisions so discarded drafts cannot override them. Inheriting the parent's history does not reproduce an investigator's entire context. Workers may read original evidence and request missing context.
+Each implementer gets its own worktree and task branch (see wf-implement). Parallelize only work that is truly independent, and decide who owns integration. Before committing, check the actual diff and evidence, not just the worker's report. Let running writers finish before staging, switching branches, or starting a review on that checkout. Send repairs back to the same implementer when its context is still useful.
 
-## Coordinate questions through the parent
+## When a capability is missing
 
-An investigator can be reused through the clarification loop when accumulated context is useful. Fresh design candidates work from the same frozen packet and produce their own proposal and rationale. The parent judges their outputs and performs architectural convergence.
-
-When a worker finds an evidence gap or design contradiction, send the parent:
-- The exact question or contradiction and its source.
-- Which assigned behavior is affected.
-- What was checked, and what observation would resolve it.
-- Whether independent work can continue.
-
-The parent routes factual follow-ups to investigators. It resolves technical details within scope, returns product changes to the user, updates the context revision, and notifies affected workers. Pause only work invalidated by the change. Workers must not silently revise the contract or negotiate a new product decision among themselves.
-
-## Isolate writes and integrate
-
-Default to one implementer per approved unblocked ticket. An isolated worktree is the default for orchestrated and parallel implementation. Use the workspace the user names when they specify one. Implement on the target or default branch only when the user assigns that workspace.
-
-Name the branch from the repository's convention or the name the user requests. Do not hardcode a `codex/` prefix.
-
-Parallelize only independent scopes, with explicit integration ownership and separate writable worktrees. Read-only investigation can share a checkout when no writer is changing its baseline.
-
-Preserve unrelated work. If the task depends on uncommitted user edits, account for them explicitly. Do not omit, stage, stash, reset, or publish them silently. Stage only this task's changes. Run the repository's pre-commit checks before committing.
-
-The implementer returns its workspace and baseline, changed files, acceptance evidence, commands and results, unrun checks, and design deviations. The parent checks the actual diff and evidence before Git or tracker mutations. A success statement alone is not enough. Reuse successful checks unless a material change or a gap requires more verification.
-
-Wait for writers and running mutation commands before staging, changing branches, or starting review on that checkout. Review runs on a pinned snapshot. Reproduction scripts belong in a separate scratch/worktree location, not in the implementation tree.
-
-Send repairs back to the existing implementer when its state remains useful. A replacement receives the current packet, workspace state, prior findings, and dispositions. Every agent result records its context revision and code baseline.
-
-## Capability fallback
-
-If investigation or implementation agents are unavailable, disclose that the parent is doing that work and continue within scope. If design cannot run independent candidates, report that comparison as limited; do not describe one serial answer as independent alternatives. The parent can prepare a design, while any unresolved material choice remains explicit.
-
-If required independent discovery cannot run, review remains pending. Complete other preparation without claiming the review gate passed. Never create user-visible tasks or external messages just to emulate missing subagents.
+If subagents are unavailable, say so and do the work in the parent. A single serial design is not an independent comparison; call it limited. Review that requires independent discovery stays pending rather than being replaced by a self-review. Do not open new chats or tasks to fake missing subagents.

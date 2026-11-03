@@ -7,57 +7,43 @@ metadata:
 
 # Windflow
 
-An optional coordinator for the Windflow skill collection. Use individual skills directly for investigation, design, writing, implementation, acceptance, review, or delivery. This entrypoint owns stage selection, continuing context, user decisions, and handoffs rather than duplicating each method.
+An optional coordinator for the Windflow skills. It picks the stages, carries context and decisions between them, and talks with the user; each stage's method lives in its own skill.
 
-## Load the stage you need
-
-The stage skills are separate installable packages. This file does not contain them. Install the collection for the full workflow, or install the required subset for the requested stages.
-
-| Stage | Skill | Owner in this workflow |
+| Stage | Skill | Who does it |
 | --- | --- | --- |
-| Current behavior and history | investigate | Investigation agents |
-| Requirement interview | grill | Parent |
-| Alternatives then architecture | design | Independent candidates, then parent convergence |
-| Spec and tickets | plan | Parent |
-| Code changes and local checks | implement | Implementation agent |
-| Acceptance of promised behavior | verify | Parent owns the verdict |
-| Defect discovery and verification | review | Independent finder and separate verification |
-| PR, CI, merge, cleanup | ship | Parent |
-| Clear replies and documents | write | Every author |
+| Current behavior and history | wf-investigate | Investigation agents |
+| Requirement interview | wf-grill | You (the coordinator) |
+| Alternatives, then architecture | wf-design | Independent candidates, then you |
+| Spec and tickets | wf-plan | You |
+| Code changes and local checks | wf-implement | Implementation agents |
+| Acceptance | wf-verify | You own the verdict |
+| Defect discovery and verification | wf-review | An independent finder, plus separate verification |
+| PR, CI, merge, cleanup | wf-ship | You |
+| Replies and documents | wf-write | Whoever is writing |
 
-Locate an entry through the host's installed-skill catalog or the collection's sibling directories. Check that its frontmatter identifies collection `windflow` before using a same-named skill from another source. Read the actual SKILL.md, and pass its path and instructions to assigned workers. A name is not a tool invocation.
+Read each stage's SKILL.md and give its path to the workers you assign. If a stage skill is not installed, say so and stop that stage, rather than improvising its method. If several skills share a name, use the one whose frontmatter says `collection: windflow`.
 
-Hosts discover skills by name and description. This file does not declare installer dependencies. If a required stage is not installed, report the missing skill and stop that dependent stage; continue independent preparation. Do not substitute an unrelated global implementation or pretend the method ran. A subset installation need not contain skills for stages outside the user's request.
+## Route the request
 
-## Route intent
-
-State the entry and the stopping point. Read [coordination](references/coordination.md) before delegation and [execution context](references/execution.md) when handing off or resuming. Use write for replies and documents. It is not an extra stage or approval.
+State where you are starting and where you will stop. Read [coordination](references/coordination.md) before delegating, and [execution records](references/execution.md) when handing off or resuming.
 
 | Request | Route | Stop |
 | --- | --- | --- |
-| Unsettled behavior | investigate, then grill, then design, then plan | The user has agreed the behavior, and has approved the ticket breakdown, before publication or implementation |
-| Approved ticket | implement in the assigned workspace, then verify | The ticket's behavior is accepted, or an earlier stopping point the user set |
-| Known defect | investigate the mechanism, then implement inside that scope | The requested fix, without opening a new feature split |
-| Mechanical edit with the behavior already specified | implement | The edit itself |
-| Review only | review the fixed change | Findings and repair directions |
-| Deliver work that already exists | ship | The requested gate: PR, CI, review evidence, or an authorized merge |
+| Unsettled behavior | investigate, grill, design, plan | Behavior agreed and breakdown approved, before publishing or implementing |
+| Approved ticket | implement, then verify | Behavior accepted, or an earlier stop the user set |
+| Known defect | investigate the mechanism, then implement | The fix, with no new feature split |
+| Behavior already fully specified | implement | The edit |
+| Review only | review the pinned change | Findings and repair directions |
+| Existing work to deliver | ship | The gate the user asked for |
 
-When ship requires review, dispatch it on the fixed change and verify findings before repairs. Merge waits until the user confirms the presented PR. After that confirmation, verify the merge and any eligible source-branch cleanup.
+Skip what is already settled: an agreed requirement, an approved design, a selected ticket, or an unchanged approval carries forward. A fully specified edit needs neither an interview nor a design competition.
 
-Reuse an explicit requirement agreement, an approved design, a selected ticket, and an unchanged approval while they still apply. A selected existing ticket does not need a new breakdown. A fully specified mechanical edit does not need an interview or a design competition. Discussion, planning, local edits, review-only work, and standalone delivery stop at the requested result.
+## Decisions and approvals
 
-## Preserve decisions and authorization
+The user confirms three things: the requirements, the ticket breakdown (for a single ticket, together with the requirements), and merging the finished PR. Nothing else stands in for those confirmations, and an authorization the user already gave stays in force. Keep merged, ready-to-merge, partial, and unverified outcomes distinct when you report.
 
-Acceptance versus review, silence or green CI versus approval, and parent ownership of product decisions are defined in [coordination](references/coordination.md). Apply that reference at every stage.
+To resume, read the current repository, tracker, and PR state, the latest decisions and evidence, and find the next unmet gate. A new head needs fresh CI and a review of what changed.
 
-The owner confirms requirements, the exact ticket breakdown, and the finished PR before merge. The plan skill also returns plausible issue overlap to the user. An authorization the user already gave, and any narrower stopping point, stays in force.
+Work in the current conversation; start new sessions, scheduled jobs, or external messages only when the user asks.
 
-Use focused local checks for affected behavior and callers. Keep required external CI. Repeat a passed check only when the code changed or the evidence has a gap. Keep merged, merge-ready, partial, and unverified outcomes distinct.
-
-## Resume
-
-Read current repository and tracker state, the latest context and design revision, completed evidence, approvals, and the next unsatisfied gate. A changed head needs current CI and a fresh review-eligibility check. Preserve results that still apply.
-
-This skill operates in the current task. It does not create a scheduler, new user-visible chats, or external messages unless the user asked for that action.
-
-Sources and revisions: [THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES.md), [upstream-lock.json](../../upstream-lock.json).
+Agent coordination is adapted from pstack `swarm` by Lauren Tan (MIT). Sources, revisions, and license notices: [THIRD_PARTY_NOTICES](https://github.com/YinFengWindy/windflow/blob/main/THIRD_PARTY_NOTICES.md).
