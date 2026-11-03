@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.plugin_kernel import set_plugin_enabled
+
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -73,7 +75,7 @@ async def test_manifest_keys_and_events_go_through_the_generation_kernel(
         assert module.crash_reporting[0] is not None
         assert kernel.kernel.get(Key("keyed.api")) is module.API
         await events.emit(_starting(), apply)
-        _ = await kernel.unload("keyed")
+        _ = await set_plugin_enabled(kernel, "keyed", False)
         await events.emit(_starting(), apply)
     finally:
         await kernel.terminate_all(force=True)
@@ -111,7 +113,7 @@ async def test_optional_inject_gets_the_host_built_kv_and_services(
     )
     await kernel.load_all()
     try:
-        [state] = kernel.states()
+        [state] = [view.describe() for view in kernel.views()]
         assert state["state"] == "ACTIVE", state["error"]
         module = next(
             m

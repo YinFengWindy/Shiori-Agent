@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import psutil
 import pytest
+from tests.support.plugin_kernel import set_plugin_enabled
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 from shiori_sdk.tools import ToolResult
 
@@ -75,7 +76,7 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
         plugin_configs={"computer_use": {"enabled": True}},
     )
     await kernel.load_all()
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
     records = []
     driver_pids: list[int] = []
 
@@ -310,7 +311,7 @@ async def test_real_controlled_window(tmp_path, monkeypatch):
             {"owned_driver_pids_exited": driver_pids, "target_app_preserved": True}
         )
     finally:
-        await kernel.unload("computer_use")
+        await set_plugin_enabled(kernel, "computer_use", False)
         app.terminate()
         app.wait(timeout=10)
         (evidence / "acceptance.json").write_text(

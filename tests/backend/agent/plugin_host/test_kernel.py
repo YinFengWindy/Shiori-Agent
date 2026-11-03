@@ -8,8 +8,8 @@ from pathlib import Path
 from functools import partial
 
 import pytest
+from tests.support.plugin_kernel import set_plugin_enabled
 
-from agent.plugin_host import PluginState
 from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
 from shiori_sdk.core.services import LIGHT_PROVIDER
 from agent.plugin_host.manifest import group_listening_channels
@@ -81,7 +81,7 @@ async def test_account_test_plugin_reports_and_withdraws_live_state(tmp_path):
     )
     await first_kernel.load_all()
     publish_plugin_accounts(first_kernel.kernel)
-    assert first_kernel.loaded_count == 1
+    assert len(first_kernel.active_plugin_ids) == 1
     first, second = first_kernel._dependency_api("account_demo")
     assert role_store.accounts.get(first).connection == "online"
     assert role_store.accounts.get(first).capabilities == frozenset({"contacts"})
@@ -156,7 +156,7 @@ async def test_failed_account_plugin_setup_discards_unpublished_identity(tmp_pat
         role_store=role_store,
     )
     await kernel.load_all()
-    assert kernel.loaded_count == 0
+    assert len(kernel.active_plugin_ids) == 0
     assert role_store.accounts.list() == []
     assert RoleStore(workspace).accounts.list() == []
 
@@ -178,7 +178,7 @@ async def test_external_source_import_boundary_is_reclaimed_with_plugin_effects(
     before = set(sys.meta_path)
     try:
         await kernel.load_all()
-        assert kernel.loaded_count == 1
+        assert len(kernel.active_plugin_ids) == 1
         assert any(
             isinstance(finder, TrustedPluginImports) and finder not in before
             for finder in sys.meta_path
@@ -211,6 +211,7 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
             )
             + "from shiori_sdk.core.services import EVENTS\n"
             "async def setup(ctx):\n"
+            "    global state\n"
             "    state = ['started']\n"
             "    ctx.expose(state)\n"
             "    ctx.effect('close', lambda: state.append('closed'))\n"
@@ -225,21 +226,25 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
     kernel = make_kernel([tmp_path], event_bus=bus, strict=strict)
     loading = asyncio.create_task(kernel.load_all())
     await asyncio.sleep(0)
-    waiting = kernel._handles[str((tmp_path / "waiting").absolute())]
-    state = waiting.instance
+    waiting = kernel.kernel.scope("waiting")
+    record = next(
+        record for record in kernel.discover() if record.manifest.id == "waiting"
+    )
+    state = sys.modules[record.import_path].state
     active_state = kernel._dependency_api("active")
-    assert waiting.state is PluginState.LOADING
+    assert kernel.view("waiting").state == "BLOCKED"
+    assert kernel.view("waiting").diagnostic.code == "not_started"
     assert state == ["started"]
-    assert waiting.effects.labels
+    assert waiting.labels
     loading.cancel()
     with pytest.raises(asyncio.CancelledError):
         await loading
     try:
         assert state == ["started", "closed"]
-        assert waiting.effects.labels == []
-        assert waiting.state is PluginState.FAILED
-        assert isinstance(waiting.error, asyncio.CancelledError)
-        assert str((tmp_path / "zlater").absolute()) not in kernel._handles
+        assert waiting.labels == []
+        assert kernel.view("waiting").state == "FAILED"
+        assert isinstance(kernel.view("waiting").error, asyncio.CancelledError)
+        assert "zlater" not in kernel._instances
         # The unreached spec is enabled, but direct activation cannot import
         # code without this round's host handle and screened content.
         refused = await kernel.kernel.activate("zlater")
@@ -254,7 +259,7 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
     assert active_state == ["started", "closed"]
     assert state == ["started", "closed"]
     assert await bus.emit([]) == []
-    assert kernel.states() == []
+    assert kernel.active_plugin_ids == []
 
 
 @pytest.mark.asyncio
@@ -272,8 +277,8 @@ async def test_invalid_yaml_is_diagnosed_without_blocking_valid_sibling(
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     try:
         await kernel.load_all()
-        assert kernel.loaded_count == 1
-        assert kernel.states()[0]["id"] == "hello"
+        assert len(kernel.active_plugin_ids) == 1
+        assert [view.describe() for view in kernel.views()][0]["id"] == "hello"
         assert "broken" in caplog.text
         assert "manifest" in caplog.text
     finally:
@@ -347,6 +352,7 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
     (package / "backend/plugin.py").write_text(
         "import asyncio\n"
         "async def setup(ctx):\n"
+        "    global state\n"
         "    state = {'closed': False, 'closing': asyncio.Event()}\n"
         "    ctx.expose(state)\n"
         "    ctx.effect('close', lambda: state.update(closed=True))\n"
@@ -360,8 +366,9 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     loading = asyncio.create_task(kernel.load_all())
     await asyncio.sleep(0)
-    handle = kernel._handles[str((tmp_path / "waiting").absolute())]
-    state = handle.instance
+    scope = kernel.kernel.scope("waiting")
+    record = kernel.discover()[0]
+    state = sys.modules[record.import_path].state
     loading.cancel()
     try:
         await asyncio.wait_for(state["closing"].wait(), timeout=1)
@@ -369,12 +376,12 @@ async def test_force_cleanup_recovers_effects_after_rollback_is_cancelled(tmp_pa
         loading.cancel()
         with pytest.raises(asyncio.CancelledError):
             await loading
-    assert handle.effects.labels == ["custom:close"]
+    assert scope.labels == ["custom:close"]
     assert not state["closed"]
     await kernel.terminate_all(force=True)
     assert state["closed"]
-    assert handle.effects.labels == []
-    assert kernel.states() == []
+    assert scope.labels == []
+    assert kernel.active_plugin_ids == []
 
 
 _EXPECTED_TOP_LEVEL_PLUGINS = {
@@ -490,10 +497,15 @@ async def test_declared_dependency_loads_first_and_its_api_is_scoped(tmp_path):
         )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
-    assert [row["id"] for row in kernel.states()] == ["z_provider", "a_consumer"]
-    assert all(row["state"] == "ACTIVE" for row in kernel.states())
-    await kernel.unload("z_provider")
-    assert kernel.loaded_count == 0
+    assert [row["id"] for row in [view.describe() for view in kernel.views()]] == [
+        "z_provider",
+        "a_consumer",
+    ]
+    assert all(
+        row["state"] == "ACTIVE" for row in [view.describe() for view in kernel.views()]
+    )
+    await set_plugin_enabled(kernel, "z_provider", False)
+    assert len(kernel.active_plugin_ids) == 0
 
 
 @pytest.mark.asyncio
@@ -518,7 +530,7 @@ async def test_enabled_plugin_cycled_with_a_disabled_one_is_not_a_dependency_cyc
     )
     await kernel.load_all()
 
-    states = {item["id"]: item for item in kernel.states()}
+    states = {item["id"]: item for item in [view.describe() for view in kernel.views()]}
     assert states["disabled"]["state"] == "DISABLED"
     assert states["enabled"]["state"] == "BLOCKED"
     assert (
@@ -546,8 +558,8 @@ async def test_missing_or_cyclic_dependency_blocks_setup(tmp_path, dependencies)
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
-    assert kernel.states()[0]["state"] == "BLOCKED"
-    assert kernel.states()[0]["error"]
+    assert [view.describe() for view in kernel.views()][0]["state"] == "BLOCKED"
+    assert [view.describe() for view in kernel.views()][0]["error"]
 
 
 @pytest.mark.asyncio
@@ -578,7 +590,7 @@ async def test_uninstalled_external_source_is_never_a_kernel_candidate(
     try:
         await kernel.load_all()
         assert [record.manifest.id for record in kernel.discover()] == ["dependent"]
-        [state] = kernel.states()
+        [state] = [view.describe() for view in kernel.views()]
         assert state["id"] == "dependent" and state["state"] == "BLOCKED"
         # Same verdict as discovery-time checks: the source provides nothing.
         assert state["diagnostic"]["code"] == "missing_dependency"
@@ -605,7 +617,7 @@ async def test_plugin_setup_and_unload(
     kernel = make_kernel([tmp_path], event_bus=bus, workspace=workspace)
     await kernel.load_all()
 
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
     # kv 落在 workspace 而不是插件目录（issue #209）
     assert (plugin_data_dir(workspace, "kvdemo") / "kv.json").exists()
     assert not (plugin_dir / ".kv.json").exists()
@@ -620,7 +632,7 @@ async def test_plugin_setup_and_unload(
     _ = await bus.emit(before_turn_ctx(session_key="test:v2"))
     assert module.seen == ["test:v2"]
 
-    _ = await kernel.unload("kvdemo")
+    _ = await set_plugin_enabled(kernel, "kvdemo", False)
     _ = await bus.emit(before_turn_ctx(session_key="test:gone"))
     assert module.seen == ["test:v2"]
 
@@ -699,7 +711,7 @@ async def _on_turn(event):
     kernel = make_kernel([tmp_path], event_bus=bus)
     await kernel.load_all()
 
-    assert kernel.loaded_count == 0
+    assert len(kernel.active_plugin_ids) == 0
     result = await bus.emit(before_turn_ctx())
     assert "rollback_demo_touched" not in result.extra_metadata
 
@@ -712,7 +724,7 @@ async def test_obsolete_marker_cannot_override_authoritative_config(tmp_path: Pa
         [tmp_path], event_bus=EventBus(), plugin_configs={"hello": {"enabled": True}}
     )
     await kernel.load_all()
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
     await kernel.terminate_all()
 
 
@@ -727,8 +739,11 @@ async def test_config_enabled_false_skips_plugin(tmp_path: Path):
     )
     await kernel.load_all()
 
-    assert kernel.loaded_count == 0
-    assert any(item["state"] == PluginState.DISABLED.name for item in kernel.states())
+    assert len(kernel.active_plugin_ids) == 0
+    assert any(
+        item["state"] == "DISABLED"
+        for item in [view.describe() for view in kernel.views()]
+    )
 
 
 @pytest.mark.asyncio
@@ -737,7 +752,7 @@ async def test_config_enabled_defaults_to_true_when_absent(tmp_path: Path):
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
 
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
 
 
 def _stage_default_disabled_hello(root: Path) -> None:
@@ -757,8 +772,10 @@ async def test_manifest_default_disabled_applies_when_config_has_no_flag(
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
 
-    assert kernel.loaded_count == 0
-    assert [item["state"] for item in kernel.states()] == [PluginState.DISABLED.name]
+    assert len(kernel.active_plugin_ids) == 0
+    assert [item["state"] for item in [view.describe() for view in kernel.views()]] == [
+        "DISABLED"
+    ]
 
 
 @pytest.mark.asyncio
@@ -771,7 +788,7 @@ async def test_explicit_enabled_overrides_manifest_default_disabled(tmp_path: Pa
     )
     await kernel.load_all()
 
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
     await kernel.terminate_all()
 
 
@@ -794,16 +811,17 @@ async def test_runtime_disable_then_enable(tmp_path: Path):
     bus = EventBus()
     kernel = make_kernel([tmp_path], event_bus=bus)
     await kernel.load_all()
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
 
-    _ = await kernel.unload("hello")
-    assert kernel.loaded_count == 0
+    _ = await set_plugin_enabled(kernel, "hello", False)
+    assert len(kernel.active_plugin_ids) == 0
     result = await bus.emit(before_turn_ctx())
     assert "hello_touched" not in result.extra_metadata
 
     # 重新启用后行为恢复
-    assert await kernel.load("hello") is True
-    assert kernel.loaded_count == 1
+    _ = await set_plugin_enabled(kernel, "hello", True)
+    assert kernel.view("hello").state == "ACTIVE"
+    assert len(kernel.active_plugin_ids) == 1
     result = await bus.emit(before_turn_ctx())
     assert result.extra_metadata.get("hello_touched") is True
 
@@ -816,7 +834,7 @@ async def test_load_all_is_idempotent(tmp_path: Path):
     await kernel.load_all()
     await kernel.load_all()
 
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
     result = await bus.emit(before_turn_ctx())
     # 重复 load_all 不得重复绑定 handler（否则 metadata 被写两次也看不出，改用计数）
     assert result.extra_metadata.get("hello_touched") is True
@@ -852,12 +870,12 @@ async def test_injected_commands_reach_the_menu_until_unload(tmp_path: Path):
         )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
-    states = {row["id"]: row for row in kernel.states()}
+    states = {row["id"]: row for row in [view.describe() for view in kernel.views()]}
     assert states["v2cmds"]["state"] == "ACTIVE"
     assert states["v2cmds_dup"]["state"] == "FAILED"
     assert "/chatid" in states["v2cmds_dup"]["error"]
     assert command_menu(kernel.kernel) == [("chatid", "查看我的 chat_id")]
-    await kernel.unload("v2cmds")
+    await set_plugin_enabled(kernel, "v2cmds", False)
     assert command_menu(kernel.kernel) == []
 
 
@@ -892,7 +910,7 @@ async def test_plugin_rpc_method_callable_then_gone_after_unload(tmp_path: Path)
     _, handler = resolved
     assert await handler({"value": 1}) == {"pong": 1}
 
-    _ = await kernel.unload("rpcdemo")
+    _ = await set_plugin_enabled(kernel, "rpcdemo", False)
 
     # 插件卸载后其 RPC 方法立即不可调用
     assert rpc.resolve("rpcdemo.ping") is None
@@ -963,7 +981,7 @@ async def test_plugin_reads_host_service_references(tmp_path: Path):
     )
     withheld = host_kernel([withheld_root], withheld=frozenset({LIGHT_PROVIDER}))
     await withheld.load_all()
-    [state] = withheld.states()
+    [state] = [view.describe() for view in withheld.views()]
     assert state["state"] == "BLOCKED"
     assert "不存在" in state["error"]
 
@@ -1055,7 +1073,11 @@ async def test_injected_service_without_a_provider_fails_before_setup(
     )
     await kernel.load_all()
 
-    row = next(item for item in kernel.states() if item["id"] == "needs_service")
+    row = next(
+        item
+        for item in [view.describe() for view in kernel.views()]
+        if item["id"] == "needs_service"
+    )
     assert row["state"] == state
     assert name in row["error"]
     assert fragment in row["error"]
@@ -1075,7 +1097,7 @@ async def test_weather_tool_via_facade(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
+async def test_optional_dependencies_read_current_exports_across_toggle_and_retirement(
     tmp_path,
 ):
     from agent.plugin_host.dependencies import PluginDependencyError
@@ -1117,23 +1139,30 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
         "    ctx.effect('check-unloading', on_unload)\n",
         encoding="utf-8",
     )
-    kernel = make_kernel([tmp_path], event_bus=EventBus(), namespace="optional")
+    kernel = make_kernel(
+        [tmp_path],
+        event_bus=EventBus(),
+        namespace="optional",
+        plugin_configs={"provider": {"enabled": False}},
+    )
     try:
-        assert await kernel.load("consumer")
+        await kernel.load_all()
         consumer = kernel._dependency_api("consumer")
         assert consumer.get_optional("provider") is None
-        assert [row["id"] for row in kernel.states()] == ["consumer"]
-        assert await kernel.load("provider")
+        assert kernel.active_plugin_ids == ["consumer"]
+        _ = await set_plugin_enabled(kernel, "provider", True)
         first = consumer.get_optional("provider")
         assert first == {"version": "first"}
-        assert await kernel.unload("provider") == []
-        assert kernel.loaded_count == 1
+        assert (
+            await set_plugin_enabled(kernel, "provider", False)
+        ).cleanup_errors == ()
+        assert len(kernel.active_plugin_ids) == 1
         assert consumer.get_optional("provider") is None
         _ = (tmp_path / "provider/backend/plugin.py").write_text(
             "async def setup(ctx):\n    ctx.expose({'version': 'second-generation'})\n",
             encoding="utf-8",
         )
-        assert await kernel.load("provider")
+        _ = await set_plugin_enabled(kernel, "provider", True)
         assert consumer.get_optional("provider") == {"version": "second-generation"}
         assert consumer.get_optional("provider") is not first
         with pytest.raises(PluginDependencyError, match="未声明"):
@@ -1145,7 +1174,7 @@ async def test_optional_provider_lifecycle_does_not_activate_or_unload_consumer(
         [tmp_path], event_bus=EventBus(), namespace="next_optional"
     )
     try:
-        assert await next_kernel.load("provider")
+        await next_kernel.load_all()
         assert next_kernel._dependency_api("provider") == {
             "version": "second-generation"
         }
@@ -1191,7 +1220,7 @@ async def test_optional_unavailable_exports_return_none_but_require_stays_strict
 
 @pytest.mark.asyncio
 async def test_unsafe_strong_dependency_closure_is_rejected_before_any_effect(tmp_path):
-    from agent.plugin_host import PluginRestartRequired
+    from agent.plugin_host import PluginRestartRequired, PluginReloadUnsupported
 
     for name, dependencies, safe in [
         ("provider", [], True),
@@ -1214,13 +1243,19 @@ async def test_unsafe_strong_dependency_closure_is_rejected_before_any_effect(tm
         name: kernel._dependency_api(name) for name in ("provider", "safe", "unsafe")
     }
     try:
-        for operation in (lambda: kernel.unload("provider"), kernel.terminate_all):
-            with pytest.raises(PluginRestartRequired) as caught:
+        for operation, failure in (
+            (
+                lambda: set_plugin_enabled(kernel, "provider", False),
+                PluginReloadUnsupported,
+            ),
+            (kernel.terminate_all, PluginRestartRequired),
+        ):
+            with pytest.raises(failure) as caught:
                 await operation()
             assert caught.value.plugin_ids == ("unsafe",)
-            assert kernel.loaded_count == 3
+            assert len(kernel.active_plugin_ids) == 3
             assert all(value == [] for value in states.values())
-        await kernel.unload("safe")
+        await set_plugin_enabled(kernel, "safe", False)
         assert states["safe"] == ["closed"]
         assert states["unsafe"] == []
     finally:
@@ -1248,7 +1283,7 @@ async def test_force_cleanup_continues_after_an_unsafe_plugin_effect_fails(tmp_p
     with pytest.raises(ExceptionGroup, match="Plugin cleanup failed"):
         await kernel.terminate_all(force=True)
     assert state == {"one": ["closed"], "two": ["closed"]}
-    assert kernel.states() == []
+    assert kernel.active_plugin_ids == []
 
 
 @pytest.mark.asyncio
@@ -1267,7 +1302,7 @@ async def test_unsafe_declaration_never_blocks_setup_failure_rollback(tmp_path):
     bus = EventBus()
     kernel = make_kernel([tmp_path], event_bus=bus)
     await kernel.load_all()
-    assert kernel.states()[0]["state"] == "FAILED"
+    assert [view.describe() for view in kernel.views()][0]["state"] == "FAILED"
     assert await bus.emit([]) == []
     await kernel.terminate_all()
 
@@ -1306,7 +1341,7 @@ async def test_config_schema_survives_a_setup_failure_caused_by_its_own_config(
     必须继续留在 config_schemas 里。
 
     修复前 schema 是作为 setup 回滚 effect 注册的：setup 一失败，
-    ``_rollback_failed_load`` 调 ``handle.effects.dispose_all()`` 就把它跟着
+    setup 失败释放内核 scope 时不能把 schema 跟着
     其它 effect 一起注销了，``plugin.config.get/set`` 立刻变回
     plugin_config_unsupported——用户唯一的出路是手改配置文件。这个洞不是
     tool_loop_guard 独有的：任何在 setup() 里校验自己 config_model 的插件
@@ -1321,8 +1356,8 @@ async def test_config_schema_survives_a_setup_failure_caused_by_its_own_config(
     )
     await kernel.load_all()
 
-    assert kernel.states()[0]["state"] == "FAILED"
-    assert "limit" in kernel.states()[0]["error"]
+    assert [view.describe() for view in kernel.views()][0]["state"] == "FAILED"
+    assert "limit" in [view.describe() for view in kernel.views()][0]["error"]
     assert kernel.config_schemas.schema_for("needs_config") is not None
 
     await kernel.terminate_all(force=True)
@@ -1365,36 +1400,12 @@ async def test_only_manifested_entries_are_loaded(tmp_path):
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     assert {record.name for record in kernel.discover()} == {"old", "missing_setup"}
     await kernel.load_all()
-    assert kernel.loaded_count == 0
-    states = {row["id"]: row for row in kernel.states()}
+    assert len(kernel.active_plugin_ids) == 0
+    states = {row["id"]: row for row in [view.describe() for view in kernel.views()]}
     assert states["old"]["state"] == "BLOCKED"
     assert states["old"]["diagnostic"]["code"] == "unsupported_api"
     assert states["missing_setup"]["state"] == "FAILED"
     assert "setup(ctx)" in states["missing_setup"]["error"]
-
-
-@pytest.mark.asyncio
-async def test_optional_unsafe_consumer_does_not_block_provider_unload(tmp_path):
-    for name, body in [
-        ("consumer", "supports_hot_unload: false\noptional_dependencies: [provider]\n"),
-        ("provider", ""),
-    ]:
-        package = tmp_path / name
-        (package / "backend").mkdir(parents=True)
-        (package / "backend/plugin.py").write_text(
-            "async def setup(ctx):\n    pass\n", encoding="utf-8"
-        )
-        (package / "manifest.yaml").write_text(
-            f"api: 4\nsdk: '>=4.0.0'\nid: {name}\n" + body, encoding="utf-8"
-        )
-    kernel = make_kernel([tmp_path], event_bus=EventBus())
-    await kernel.load_all()
-    try:
-        assert await kernel.unload("provider") == []
-        assert kernel.loaded_count == 1
-        assert kernel.states()[0]["id"] == "consumer"
-    finally:
-        await kernel.terminate_all(force=True)
 
 
 @pytest.mark.asyncio
@@ -1429,8 +1440,10 @@ async def test_contract_rejection_precedes_backend_execution(
     )
     await kernel.load_all()
     assert not marker.exists()
-    assert kernel.states()[0]["state"] == "BLOCKED"
-    assert kernel.states()[0]["diagnostic"]["stage"] == "validation"
+    assert [view.describe() for view in kernel.views()][0]["state"] == "BLOCKED"
+    assert [view.describe() for view in kernel.views()][0]["diagnostic"][
+        "stage"
+    ] == "validation"
     assert kernel.discover()[0].manifest.id == "external_demo"
 
 
@@ -1438,14 +1451,14 @@ async def test_contract_rejection_precedes_backend_execution(
 async def test_contract_package_activates_after_preflight(contract_package):
     kernel = make_kernel([contract_package.parent], event_bus=EventBus())
     await kernel.load_all()
-    assert kernel.states()[0]["state"] == "ACTIVE"
+    assert [view.describe() for view in kernel.views()][0]["state"] == "ACTIVE"
     await kernel.terminate_all(force=True)
 
 
 @pytest.mark.asyncio
 async def test_runtime_contract_error_still_rolls_back_failed_setup(contract_package):
     (contract_package / "backend/plugin.py").write_text(
-        "from agent.plugin_host.diagnostics import PackageContractError\n"
+        "from shiori_sdk.kernel import PackageContractError\n"
         "async def setup(ctx):\n"
         "    values = []\n"
         "    ctx.expose(values)\n"
@@ -1455,9 +1468,9 @@ async def test_runtime_contract_error_still_rolls_back_failed_setup(contract_pac
     )
     kernel = make_kernel([contract_package.parent], event_bus=EventBus())
     await kernel.load_all()
-    assert kernel.states()[0]["state"] == "FAILED"
-    assert kernel._handles[str(contract_package.absolute())].effects.labels == []
-    assert kernel.states()[0]["diagnostic"] is None
+    assert [view.describe() for view in kernel.views()][0]["state"] == "FAILED"
+    assert "external_demo" not in kernel._instances
+    assert kernel.view("external_demo").diagnostic.code == "setup_failed"
 
 
 @pytest.mark.asyncio
@@ -1496,7 +1509,11 @@ async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
     )
     await kernel.load_all()
     assert not marker.exists()
-    state = next(state for state in kernel.states() if state["id"] == "external_demo")
+    state = next(
+        state
+        for state in [view.describe() for view in kernel.views()]
+        if state["id"] == "external_demo"
+    )
     assert state["state"] == "BLOCKED"
     assert state["diagnostic"]["code"] == (
         "missing_dependency" if provider == "missing" else "dependency_unavailable"
@@ -1530,13 +1547,14 @@ async def test_external_package_never_executes_even_with_config_enablement(
         ),
     )
     await kernel.load_all()
-    first = kernel.states()
+    first = [view.describe() for view in kernel.views()]
     await kernel.load_all()
-    assert not await kernel.load("external_demo")
-    assert kernel.states() == first
+    await kernel.load_all()
+    assert kernel.view("external_demo").state == "UNTRUSTED"
+    assert [view.describe() for view in kernel.views()] == first
     assert first[0]["state"] == "UNTRUSTED"
     assert first[0]["diagnostic"]["code"] == "trust_required"
-    assert kernel.loaded_count == 0
+    assert len(kernel.active_plugin_ids) == 0
     assert not marker.exists()
     await kernel.terminate_all(force=True)
 
@@ -1574,7 +1592,7 @@ async def test_package_changed_after_discovery_is_not_started_by_the_kernel(
     # Admitted at discovery, then refused at load when the bytes no longer
     # match: the refusal is the host's, never a kernel setup failure.
     await kernel.load_all()
-    [state] = kernel.states()
+    [state] = [view.describe() for view in kernel.views()]
     assert state["state"] == "UNTRUSTED"
     assert state["diagnostic"]["code"] == "trust_changed"
     assert kernel.kernel.status("external_demo") is None
@@ -1623,7 +1641,9 @@ async def test_refused_duplicate_provider_leaves_the_key_to_the_other(tmp_path):
     await kernel.load_all()
 
     # beta is refused before the plan, so it is no duplicate of alpha.
-    assert {row["id"]: row["state"] for row in kernel.states()} == {
+    assert {
+        row["id"]: row["state"] for row in [view.describe() for view in kernel.views()]
+    } == {
         "alpha": "ACTIVE",
         "beta": "UNTRUSTED",
     }
@@ -1663,7 +1683,7 @@ async def test_rejected_provider_and_dependents_never_execute(tmp_path, conflict
     )
     await kernel.load_all()
     await kernel.load_all()
-    states = kernel.states()
+    states = [view.describe() for view in kernel.views()]
     providers = [row for row in states if row["id"] == "provider"]
     assert len(providers) == (2 if conflict else 1)
     assert {row["state"] for row in providers} == {
@@ -1671,7 +1691,7 @@ async def test_rejected_provider_and_dependents_never_execute(tmp_path, conflict
     }
     assert next(row for row in states if row["id"] == "consumer")["state"] == "BLOCKED"
     assert not marker.exists()
-    assert kernel.loaded_count == 0
+    assert len(kernel.active_plugin_ids) == 0
     await kernel.terminate_all(force=True)
 
 
@@ -1693,12 +1713,13 @@ async def test_identical_directory_names_keep_independent_runtime_handles(tmp_pa
         roots,
     )
     await kernel.load_all()
-    assert kernel.loaded_count == 2
+    assert len(kernel.active_plugin_ids) == 2
     with pytest.raises(ManifestError, match="不唯一"):
-        await kernel.unload("same")
-    await kernel.unload("plugin_0")
-    assert kernel.loaded_count == 1
-    assert kernel.states()[0]["id"] == "plugin_1"
+        await set_plugin_enabled(kernel, "same", False)
+    await set_plugin_enabled(kernel, "plugin_0", False)
+    assert len(kernel.active_plugin_ids) == 1
+    assert kernel.active_plugin_ids == ["plugin_1"]
+    assert kernel.view("plugin_0").state == "DISABLED"
     await kernel.terminate_all(force=True)
 
 
@@ -1734,7 +1755,7 @@ async def test_discovery_snapshot_preserves_admission_without_sharing_runtime_st
         assert next_record.import_path in sys.modules
         result = await next_bus.emit(before_turn_ctx())
         assert result.extra_metadata["hello_touched"] is True
-        assert successor.loaded_count == 1
+        assert len(successor.active_plugin_ids) == 1
     finally:
         await successor.terminate_all(force=True)
 
@@ -1751,7 +1772,7 @@ async def test_empty_startup_snapshot_does_not_rescan_new_packages(tmp_path):
     )
     await successor.load_all()
     assert successor.discover() == []
-    assert successor.loaded_count == 0
+    assert len(successor.active_plugin_ids) == 0
 
 
 # ── 跨进程激活事务汇总（issue #262） ────────────────────────────────────────
@@ -1802,11 +1823,13 @@ async def test_activation_gate_clears_only_once_every_declared_kind_confirms(tmp
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()
-    handle = kernel._handles[str((tmp_path / "gated").absolute())]
+    handle = kernel.view("gated")
     # Backend contributions are already live — AC1 only gates display.
-    assert handle.state is PluginState.ACTIVE
+    assert kernel.view(handle.plugin_id).state == "ACTIVE"
     assert tools.get_tool("gated_tool") is not None
-    assert kernel.states()[0]["pending_renderer_kinds"] == ["background", "ui"]
+    assert [view.describe() for view in kernel.views()][0][
+        "pending_renderer_kinds"
+    ] == ["background", "ui"]
 
     token = handle.activation_token
     # An unrequired/unknown kind or plugin id is a no-op, not an error.
@@ -1816,13 +1839,17 @@ async def test_activation_gate_clears_only_once_every_declared_kind_confirms(tmp
     assert await kernel.confirm_renderer_entry("gated", "ui", "wrong-token") is False
 
     assert await kernel.confirm_renderer_entry("gated", "ui", token) is True
-    assert kernel.states()[0]["pending_renderer_kinds"] == ["background"]
+    assert [view.describe() for view in kernel.views()][0][
+        "pending_renderer_kinds"
+    ] == ["background"]
     # A duplicate confirmation changes nothing and reports so.
     assert await kernel.confirm_renderer_entry("gated", "ui", token) is False
 
     assert await kernel.confirm_renderer_entry("gated", "background", token) is True
-    assert kernel.states()[0]["pending_renderer_kinds"] == []
-    assert handle.state is PluginState.ACTIVE
+    assert [view.describe() for view in kernel.views()][0][
+        "pending_renderer_kinds"
+    ] == []
+    assert kernel.view(handle.plugin_id).state == "ACTIVE"
     await kernel.terminate_all(force=True)
 
 
@@ -1841,13 +1868,10 @@ async def test_failed_renderer_entry_rolls_back_only_that_plugin(tmp_path):
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()
-    flaky = kernel._handles[str((tmp_path / "flaky").absolute())]
-    healthy = kernel._handles[str((tmp_path / "healthy").absolute())]
-    assert flaky.state is PluginState.ACTIVE
-    assert healthy.state is PluginState.ACTIVE
+    flaky = kernel.view("flaky")
+    assert kernel.view("flaky").state == "ACTIVE"
+    assert kernel.view("healthy").state == "ACTIVE"
 
-    flaky_candidate_id = str((tmp_path / "flaky").absolute())
-    healthy_candidate_id = str((tmp_path / "healthy").absolute())
     changed = await kernel.fail_renderer_entry(
         "flaky", "ui", "module threw on import", flaky.activation_token
     )
@@ -1855,11 +1879,13 @@ async def test_failed_renderer_entry_rolls_back_only_that_plugin(tmp_path):
 
     # The failing plugin is rolled back completely: no tool, no leftover
     # effect, no longer in the active-order aggregation (AC2/AC6).
-    assert flaky.state is PluginState.FAILED
-    assert flaky.effects.labels == []
+    assert kernel.view("flaky").state == "FAILED"
+    assert "flaky" not in kernel._instances
     assert tools.get_tool("flaky_tool") is None
-    assert flaky_candidate_id not in kernel._active_order
-    states_by_id = {row["id"]: row for row in kernel.states()}
+    assert "flaky" not in kernel.active_plugin_ids
+    states_by_id = {
+        row["id"]: row for row in [view.describe() for view in kernel.views()]
+    }
     assert states_by_id["flaky"]["diagnostic"] == {
         "code": "renderer_ui_failed",
         "stage": "ui",
@@ -1870,9 +1896,9 @@ async def test_failed_renderer_entry_rolls_back_only_that_plugin(tmp_path):
     }
 
     # The other, unrelated plugin is completely unaffected (AC3).
-    assert healthy.state is PluginState.ACTIVE
+    assert kernel.view("healthy").state == "ACTIVE"
     assert tools.get_tool("healthy_tool") is not None
-    assert healthy_candidate_id in kernel._active_order
+    assert "healthy" in kernel.active_plugin_ids
     await kernel.terminate_all(force=True)
 
 
@@ -1888,8 +1914,10 @@ async def test_failed_renderer_entry_accepts_surface_although_not_gated(tmp_path
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()
-    assert kernel.states()[0]["pending_renderer_kinds"] == ["ui"]
-    handle = kernel._handles[str((tmp_path / "demo").absolute())]
+    assert [view.describe() for view in kernel.views()][0][
+        "pending_renderer_kinds"
+    ] == ["ui"]
+    handle = kernel.view("demo")
 
     assert (
         await kernel.fail_renderer_entry(
@@ -1898,7 +1926,7 @@ async def test_failed_renderer_entry_accepts_surface_although_not_gated(tmp_path
         is True
     )
 
-    assert handle.state is PluginState.FAILED
+    assert kernel.view(handle.plugin_id).state == "FAILED"
     assert tools.get_tool("demo_tool") is None
     await kernel.terminate_all(force=True)
 
@@ -1916,8 +1944,8 @@ async def test_stale_or_unknown_activation_reports_are_ignored(tmp_path):
         plugin_configs={"demo": {"enabled": False}},
     )
     await kernel.load_all()
-    handle = kernel._handles[str((tmp_path / "demo").absolute())]
-    assert handle.state is PluginState.DISABLED
+    handle = kernel.view("demo")
+    assert kernel.view(handle.plugin_id).state == "DISABLED"
 
     # A report naming a plugin the kernel does not consider ACTIVE (disabled,
     # never loaded, or belonging to a superseded generation) is stale and
@@ -1926,7 +1954,7 @@ async def test_stale_or_unknown_activation_reports_are_ignored(tmp_path):
     assert await kernel.confirm_renderer_entry("demo", "ui", "") is False
     assert await kernel.fail_renderer_entry("demo", "ui", "irrelevant", "") is False
     assert await kernel.fail_renderer_entry("never-existed", "ui", "n/a", "") is False
-    assert handle.state is PluginState.DISABLED
+    assert kernel.view(handle.plugin_id).state == "DISABLED"
     await kernel.terminate_all(force=True)
 
 
@@ -1956,24 +1984,22 @@ async def test_stale_report_from_a_superseded_generation_is_ignored(tmp_path):
     # (the disable that discards this generation).
     kernel_g1 = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel_g1.load_all()
-    stale_token = kernel_g1._handles[
-        str((tmp_path / "demo").absolute())
-    ].activation_token
+    stale_token = kernel_g1.view("demo").activation_token
     await kernel_g1.terminate_all(force=True)
 
     # G3: the re-enable — a fresh kernel, fresh handle, fresh token.
     kernel_g3 = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel_g3.load_all()
-    fresh_handle = kernel_g3._handles[str((tmp_path / "demo").absolute())]
+    fresh_handle = kernel_g3.view("demo")
     assert fresh_handle.activation_token != stale_token
-    assert fresh_handle.pending_renderer_kinds == {"ui"}
+    assert kernel_g3.view("demo").pending_renderer_kinds == {"ui"}
 
     # G1's abandoned "ui ready" resolves late, echoing G1's token: ignored,
     # G3 keeps waiting for its own confirmation (AC1).
     changed = await kernel_g3.confirm_renderer_entry("demo", "ui", stale_token)
     assert changed is False
-    assert fresh_handle.pending_renderer_kinds == {"ui"}
-    assert fresh_handle.state is PluginState.ACTIVE
+    assert kernel_g3.view("demo").pending_renderer_kinds == {"ui"}
+    assert kernel_g3.view("demo").state == "ACTIVE"
 
     # G1's abandoned failure also resolves late: ignored, G3 stays healthy
     # rather than flipping FAILED over G1's stale reason (AC2).
@@ -1981,7 +2007,7 @@ async def test_stale_report_from_a_superseded_generation_is_ignored(tmp_path):
         "demo", "ui", "stale failure from a discarded attempt", stale_token
     )
     assert changed is False
-    assert fresh_handle.state is PluginState.ACTIVE
+    assert kernel_g3.view("demo").state == "ACTIVE"
     assert tools.get_tool("demo_tool") is not None
 
     # G3's own, current-generation report still works normally.
@@ -1989,7 +2015,7 @@ async def test_stale_report_from_a_superseded_generation_is_ignored(tmp_path):
         "demo", "ui", fresh_handle.activation_token
     )
     assert changed is True
-    assert fresh_handle.pending_renderer_kinds == frozenset()
+    assert kernel_g3.view("demo").pending_renderer_kinds == frozenset()
     await kernel_g3.terminate_all(force=True)
 
 
@@ -2008,8 +2034,8 @@ async def test_concurrent_failure_reports_for_the_same_plugin_clean_up_exactly_o
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus(), tools=tools)
     await kernel.load_all()
-    handle = kernel._handles[str((tmp_path / "demo").absolute())]
-    assert handle.state is PluginState.ACTIVE
+    handle = kernel.view("demo")
+    assert kernel.view(handle.plugin_id).state == "ACTIVE"
 
     token = handle.activation_token
     results = await asyncio.gather(
@@ -2017,10 +2043,10 @@ async def test_concurrent_failure_reports_for_the_same_plugin_clean_up_exactly_o
         kernel.fail_renderer_entry("demo", "background", "background failed", token),
     )
     assert sorted(results) == [False, True]
-    assert handle.state is PluginState.FAILED
-    assert handle.effects.labels == []
+    assert kernel.view(handle.plugin_id).state == "FAILED"
+    assert handle.plugin_id not in kernel._instances
     assert tools.get_tool("demo_tool") is None
-    assert kernel._active_order == []
+    assert kernel.active_plugin_ids == []
     await kernel.terminate_all(force=True)
 
 
@@ -2043,8 +2069,8 @@ async def test_rollback_that_cannot_dispose_every_effect_requires_a_restart(tmp_
     )
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
-    handle = kernel._handles[str(package.absolute())]
-    assert handle.state is PluginState.RESTART_REQUIRED
+    handle = kernel.view(str(package.absolute()))
+    assert kernel.view(handle.plugin_id).state == "RESTART_REQUIRED"
     await kernel.terminate_all(force=True)
 
 
@@ -2100,9 +2126,9 @@ async def test_undeclared_channel_fails_activation_with_diagnostic(tmp_path: Pat
     await kernel.load_all()
     try:
         assert active_plugin_channels(kernel) == []
-        [state] = kernel.states()
+        [state] = [view.describe() for view in kernel.views()]
         assert state["state"] == "FAILED"
-        assert state["diagnostic"]["code"] == "undeclared_channel"
+        assert state["diagnostic"]["code"] == "setup_failed"
         assert state["diagnostic"]["state"] == "FAILED"
         assert "sneaky" in state["diagnostic"]["reason"]
     finally:
@@ -2116,12 +2142,15 @@ async def test_plugins_declaring_one_channel_both_stay_inactive(tmp_path: Path):
     kernel = make_kernel([tmp_path], event_bus=EventBus())
     await kernel.load_all()
     try:
-        assert kernel.loaded_count == 0
+        assert len(kernel.active_plugin_ids) == 0
         assert active_plugin_channels(kernel) == []
-        assert {state["state"] for state in kernel.states()} == {"CONFLICT"}
-        assert {state["diagnostic"]["code"] for state in kernel.states()} == {
-            "duplicate_channel"
-        }
+        assert {
+            state["state"] for state in [view.describe() for view in kernel.views()]
+        } == {"CONFLICT"}
+        assert {
+            state["diagnostic"]["code"]
+            for state in [view.describe() for view in kernel.views()]
+        } == {"duplicate_channel"}
     finally:
         await kernel.terminate_all(force=True)
 
@@ -2184,7 +2213,9 @@ async def test_installed_api2_package_is_blocked_without_losing_data(tmp_path: P
     )
     await kernel.load_all()
     try:
-        states = {row["id"]: row for row in kernel.states()}
+        states = {
+            row["id"]: row for row in [view.describe() for view in kernel.views()]
+        }
         assert states["legacy"]["state"] == "BLOCKED"
         assert states["legacy"]["diagnostic"]["code"] == "unsupported_api"
         assert states["fresh"]["state"] == "ACTIVE"
@@ -2214,11 +2245,84 @@ async def test_api2_host_key_does_not_abort_startup(tmp_path: Path):
     kernel = host_kernel([tmp_path], strict=True)
     await kernel.load_all()
     try:
-        [state] = kernel.states()
+        [state] = [view.describe() for view in kernel.views()]
         assert state["state"] == "BLOCKED"
         assert state["diagnostic"]["code"] == "unsupported_api"
         owner, impl = kernel.kernel._providers["host.bridge"]
         assert owner == ""
         assert impl is kernel._rpc
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_previously_executed_content_requires_restart_even_after_new_trust(
+    contract_package, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "identity-test")
+    store = PluginTrustStore(tmp_path)
+    content = inspect_package_content(contract_package)
+    store.approve(contract_package, content.fingerprint, approved_session="")
+    settings = PluginGenerationSettings(
+        workspace=tmp_path, is_trusted=partial(store.is_trusted, activation=True)
+    )
+    kernel = host_kernel([tmp_path], external_plugin_dirs=[tmp_path], settings=settings)
+    await kernel.load_all()
+    assert kernel.view("external_demo").state == "ACTIVE"
+    await kernel.terminate_all(force=True)
+    entry = contract_package / "backend/plugin.py"
+    entry.write_text("async def setup(ctx): pass\n", encoding="utf-8")
+    content = inspect_package_content(contract_package)
+    store.approve(contract_package, content.fingerprint, approved_session="")
+    restarted_bridge = host_kernel(
+        [tmp_path], external_plugin_dirs=[tmp_path], settings=settings
+    )
+    await restarted_bridge.load_all()
+    view = restarted_bridge.view("external_demo")
+    assert view.state == "RESTART_REQUIRED"
+    assert view.diagnostic.code == "executed_content_changed"
+    assert restarted_bridge.active_plugin_ids == []
+
+
+@pytest.mark.asyncio
+async def test_trusting_a_provider_keeps_its_waiting_consumer_enabled(tmp_path):
+    store = PluginTrustStore(tmp_path)
+    for plugin_id, dependencies in (("provider", "[]"), ("consumer", "[provider]")):
+        directory = tmp_path / "plugins" / plugin_id
+        (directory / "backend").mkdir(parents=True)
+        (directory / "manifest.yaml").write_text(
+            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\nversion: 1.0.0\nentry: backend/plugin.py\ndependencies: {dependencies}\n",
+            encoding="utf-8",
+        )
+        (directory / "backend/plugin.py").write_text(
+            "async def setup(ctx): pass\n", encoding="utf-8"
+        )
+    consumer = tmp_path / "plugins/consumer"
+    store.approve(consumer, inspect_package_content(consumer).fingerprint)
+    kernel = host_kernel(
+        [tmp_path / "plugins"],
+        external_plugin_dirs=[tmp_path / "plugins"],
+        settings=PluginGenerationSettings(
+            workspace=tmp_path, is_trusted=partial(store.is_trusted, activation=True)
+        ),
+    )
+    await kernel.load_all()
+    assert kernel.view("provider").state == "UNTRUSTED"
+    assert kernel.view("consumer").state == "BLOCKED"
+    provider = tmp_path / "plugins/provider"
+    store.approve(provider, inspect_package_content(provider).fingerprint)
+    candidate = next(
+        record
+        for record in kernel.inspect_candidates()
+        if record.manifest.id == "provider"
+    )
+    await kernel.admit_trusted_candidate(candidate)
+    waiting = kernel.view("consumer")
+    assert waiting.state == "BLOCKED"
+    assert waiting.diagnostic.code == "dependency_unavailable"
+    assert waiting.record.admission is None
+    try:
+        await set_plugin_enabled(kernel, "provider", True)
+        assert set(kernel.active_plugin_ids) == {"provider", "consumer"}
     finally:
         await kernel.terminate_all(force=True)

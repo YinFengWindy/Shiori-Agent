@@ -357,10 +357,8 @@ async def test_publish_rechecks_hot_unload_before_handover_or_commit(
         original.plugin_manager._settings.plugin_configs = {
             "restart_required": {"enabled": True}
         }
-        original.plugin_manager._handles.pop(
-            str((root / "restart_required").absolute()), None
-        )
-        assert await original.plugin_manager.load("restart_required")
+        await original.plugin_manager.load_all()
+        assert "restart_required" in original.plugin_manager.active_plugin_ids
         with pytest.raises(PluginRestartRequired):
             await app.publish(prepared, commit=lambda: committed.append(True))
         assert committed == []
@@ -425,7 +423,7 @@ async def test_unpublished_unsafe_candidate_is_forcibly_reclaimed_on_failure(
                 replace(config, plugins={"restart_required": {"enabled": True}})
             )
         assert len(captured) == 1
-        assert captured[0].plugin_manager.states() == []
+        assert captured[0].plugin_manager.active_plugin_ids == []
         assert captured[0].event_bus._closed
         assert not app.core.event_bus._closed
         assert app.generation == 1

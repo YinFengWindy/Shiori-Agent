@@ -15,6 +15,7 @@ from threading import Thread
 
 import psutil
 import pytest
+from tests.support.plugin_kernel import set_plugin_enabled
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 from shiori_sdk.tools import ToolResult
 
@@ -161,14 +162,15 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
         )
 
     async def unload():
-        errors = await kernel.unload("browser_use")
+        result = await set_plugin_enabled(kernel, "browser_use", False)
+        errors = list(result.cleanup_errors)
         if errors:
             raise ExceptionGroup("Browser acceptance cleanup failed", errors)
 
     failure = None
     try:
         await evidence.run("load", kernel.load_all)
-        assert kernel.loaded_count == 1
+        assert len(kernel.active_plugin_ids) == 1
         await call("open", {"url": url})
         browser_pids = _agent_browser_pids(_owned_descendants(baseline))
         assert browser_pids

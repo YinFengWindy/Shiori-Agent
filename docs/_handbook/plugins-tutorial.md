@@ -149,7 +149,7 @@ contributes:
 - 声明是静态的：插件停用、未信任或还没有账号时，桌面端也能经 `channels.list` 列出这个渠道。账号插件应始终贡献渠道，并从插件自己的存储恢复账号；凭据缺失只影响对应账号的连接状态。
 - `chat_types` 必填，声明渠道的会话类型（`private` / `group`，各带标签、号码标签与提示、可选内部前缀），缺失时宿主拒绝 manifest。渠道插件用它标注会话类型，并为 `/chatid` 等命令生成可识别的会话标识。
 - 渠道项还可选 `contact_label`（群聊黑名单里成员 ID 的说明）、`group_listening: true`（支持群聊旁听）和 `instance_prefix`（必须以 `<name>_` 开头，如 Telegram 的 `telegram_`）：按账号拆出的连接可用 `<instance_prefix><后缀>` 作渠道名，沿用该项的会话类型，`channels.list` 为启用且 `ACTIVE` 的插件每个实例列一行。
-- `ctx.require(CHANNELS).add(channel)` 只接受本 manifest 声明过的 `channel.name`、声明的 `instance_prefix` 下的名字，或带非空 `account_id` 的 `<声明名>:<后缀>` 账号实例，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `undeclared_channel`。
+- `ctx.require(CHANNELS).add(channel)` 只接受本 manifest 声明过的 `channel.name`、声明的 `instance_prefix` 下的名字，或带非空 `account_id` 的 `<声明名>:<后缀>` 账号实例，否则 setup 失败，插件回滚为 `FAILED`，诊断码 `setup_failed`，原因注明未声明的渠道名。
 - 两个插件声明同一个渠道名（或一方的 `instance_prefix` 与另一方的渠道名、前缀相互覆盖）时，两者都是 `CONFLICT`（诊断码 `duplicate_channel`），都不会激活。
 - 渠道的启停和换代由宿主的 ChannelHost 管理，不要用 `BACKGROUND` 自己起连接任务。跨代复用连接时，渠道提供 `configuration_key`，它变化就重建连接；声明了 `uses_bot_commands = True` 的渠道，宿主还会连同 bot 命令列表一起比较。
 - 渠道可以实现可选的 `status()`，返回 `{"connected": bool, "account": str, "detail": str}`（`account`、`detail` 可省略），`channels.list` 会原样带给桌面端。

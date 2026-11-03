@@ -28,7 +28,7 @@ def communication_name(value: Any) -> str:
 class PluginCommunication:
     """Routes declared peers and backgrounds within one active kernel generation.
 
-    The resolver reads existing PluginHandles; this is not a second dependency
+    The resolver reads the current kernel instance; this is not a second dependency
     registry and never enables a missing provider. IDs are cooperation metadata,
     not authentication in the shared-process trust model.
     """

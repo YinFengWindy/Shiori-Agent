@@ -326,7 +326,7 @@ async def test_generated_trust_operation_waits_for_publication_and_replay_is_qui
     monkeypatch.setattr(
         "bootstrap.tools._resolve_plugin_dirs", lambda _: [package.parent]
     )
-    text = "[llm]\nregistrations = []\n[plugins.trust_probe]\nenabled = false\n"
+    text = "[llm]\nregistrations = []\n"
     path = tmp_path / "config.toml"
     path.write_text(text, encoding="utf-8")
     app = AppRuntime(
@@ -347,7 +347,7 @@ async def test_generated_trust_operation_waits_for_publication_and_replay_is_qui
             payload = {
                 "candidate_id": candidate["candidate_id"],
                 "fingerprint": candidate["trust_fingerprint"],
-                "enable": True,
+                "enable": False,
             }
             notifications = []
             entered, deliver = asyncio.Event(), asyncio.Event()
@@ -685,3 +685,99 @@ async def test_plugin_wire_routes_events_and_reports_disabled_contexts(
             bridge, "wire_probe.append", {"text": "fresh"}
         )
         assert fresh.error is None and fresh.payload == {"items": ["fresh"]}
+
+
+@pytest.fixture
+async def first_trust_runtime(tmp_path, monkeypatch):
+    from agent.config import load_config_text
+    from bootstrap.app import AppRuntime, RuntimeFeatures
+
+    workspace = tmp_path / "workspace"
+    builtin = tmp_path / "builtin" / "resident"
+    target = workspace / "plugins" / "first_trust"
+    for directory, plugin_id, default_enabled in (
+        (builtin, "resident", False),
+        (target, "first_trust", True),
+    ):
+        (directory / "backend").mkdir(parents=True)
+        (directory / "manifest.yaml").write_text(
+            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\nversion: 1.0.0\n"
+            f"entry: backend/plugin.py\nsupports_hot_unload: false\ndefault_enabled: {str(default_enabled).lower()}\n",
+            encoding="utf-8",
+        )
+        (directory / "backend/plugin.py").write_text(
+            "async def setup(ctx): pass\n", encoding="utf-8"
+        )
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs",
+        lambda _: [builtin.parent, target.parent],
+    )
+    path = workspace / "config.toml"
+    text = "[llm]\nregistrations = []\n"
+    path.write_text(text, encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(text),
+        workspace,
+        features=RuntimeFeatures(enable_message_channels=False),
+    )
+    try:
+        await app.start()
+        bridge = ReloadableDesktopService(
+            app, path, app.core.role_runtime_registry.repository.store
+        )
+        try:
+            roster = (await plugin_bridge_request(bridge, "plugins.list")).payload[
+                "plugins"
+            ]
+            target_row = next(row for row in roster if row["id"] == "first_trust")
+            payload = {
+                "candidate_id": target_row["candidate_id"],
+                "fingerprint": target_row["trust_fingerprint"],
+                "enable": False,
+            }
+            yield bridge, app, payload
+        finally:
+            await bridge.aclose()
+    finally:
+        await app.shutdown()
+
+
+async def test_trusted_first_activation_failure_remains_visible(
+    first_trust_runtime, monkeypatch
+):
+    bridge, app, payload = first_trust_runtime
+
+    def fail_service(_core):
+        raise RuntimeError("new bridge service unavailable")
+
+    monkeypatch.setattr(bridge, "_prepare", fail_service)
+    result = await plugin_bridge_request(bridge, "plugins.trust", payload)
+    assert result.error is not None
+    assert result.error.code == "runtime_apply_failed"
+    roster = (await plugin_bridge_request(bridge, "plugins.list")).payload["plugins"]
+    target = next(row for row in roster if row["id"] == "first_trust")
+    assert target["trusted"] is True
+    assert target["state"] == "FAILED"
+    assert target["diagnostic"]["code"] == "activation_failed"
+    assert app.core.plugin_manager.kernel.status("first_trust") is None
+
+
+async def test_trusted_first_activation_requires_restart_with_an_unsafe_live_plugin(
+    first_trust_runtime,
+):
+    bridge, app, payload = first_trust_runtime
+    enabled = await plugin_bridge_request(
+        bridge,
+        "plugins.setEnabled",
+        {"plugin_id": "resident", "enabled": True, "operation_id": "activate-resident"},
+    )
+    assert enabled.error is None
+    result = await plugin_bridge_request(bridge, "plugins.trust", payload)
+    assert result.error is not None
+    assert result.error.code == "plugin_restart_required"
+    roster = (await plugin_bridge_request(bridge, "plugins.list")).payload["plugins"]
+    target = next(row for row in roster if row["id"] == "first_trust")
+    assert target["trusted"] is True
+    assert target["state"] == "RESTART_REQUIRED"
+    assert target["diagnostic"]["code"] == "plugin_restart_required"
+    assert "resident" in app.core.plugin_manager.active_plugin_ids

@@ -83,17 +83,11 @@ class RuntimePluginManagement:
         kernel = self._plugin_kernel()
         if kernel is None:
             return {"plugins": []}
-        states = {entry["candidate_id"]: entry for entry in kernel.states()}
         plugins: list[dict[str, Any]] = []
-        for record in kernel.discover():
-            plugin_id = record.manifest.id
-            state = states.get(record.candidate_id)
-            admission = record.admission
-            runtime_state = (
-                state["state"]
-                if state
-                else (admission.state if admission else "DISCOVERED")
-            )
+        for view in kernel.views():
+            record = view.record
+            plugin_id = view.plugin_id
+            runtime_state = view.state
             plugins.append(
                 {
                     "id": plugin_id,
@@ -126,29 +120,19 @@ class RuntimePluginManagement:
                     # Settings › 插件 groups its rows by this (feature/channel/system).
                     "category": record.manifest.category,
                     "state": runtime_state,
-                    "error": (
-                        state["error"]
-                        if state
-                        else (admission.reason if admission else "")
-                    ),
+                    "error": str(view.error) if view.error else "",
                     "diagnostic": (
-                        state.get("diagnostic")
-                        if state
-                        else (admission.to_dict() if admission else None)
+                        view.diagnostic.to_dict() if view.diagnostic else None
                     ),
                     # Required renderer entries (ui/background) not yet
                     # confirmed ready by their owning window; non-empty only
                     # while ``state == "ACTIVE"`` (#262 AC1).
-                    "pending_renderer_kinds": (
-                        state.get("pending_renderer_kinds", []) if state else []
-                    ),
+                    "pending_renderer_kinds": sorted(view.pending_renderer_kinds),
                     # Opaque per-activation-attempt identity, echoed back in
                     # ``plugins.activation.report`` so a stale report from a
                     # disable/re-enable cycle's abandoned load cannot be
                     # mistaken for the current handle (#262).
-                    "activation_token": (
-                        state.get("activation_token", "") if state else ""
-                    ),
+                    "activation_token": view.activation_token,
                     # Saved accounts the running plugin could not register
                     # (e.g. no owner role); the plugin itself stays up.
                     "account_errors": self._settings.roles.accounts.rejected(plugin_id),

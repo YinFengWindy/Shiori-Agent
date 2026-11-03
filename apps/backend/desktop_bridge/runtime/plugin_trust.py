@@ -195,20 +195,17 @@ class RuntimePluginTrust:
             raise
         original = self._candidate(candidate_id, fingerprint)
         kernel = self._app.core.plugin_manager if self._app.core is not None else None
-        state = (
-            next(
-                (row for row in kernel.states() if row["candidate_id"] == candidate_id),
-                {},
+        view = kernel.view(candidate_id) if kernel is not None else None
+        if view is None:
+            raise RuntimeApplyError(
+                "plugin_candidate_changed", "插件候选已变化，请重新读取"
             )
-            if kernel is not None
-            else {}
-        )
         return {
             **result,
             "operation_id": operation_id,
             "plugin_id": original.manifest.id,
             "candidate_id": candidate_id,
-            "restart_required": state.get("state") == "RESTART_REQUIRED",
-            "state": state.get("state", "DISCOVERED"),
-            "error": state.get("error", ""),
+            "restart_required": view.state == "RESTART_REQUIRED",
+            "state": view.state,
+            "error": str(view.error) if view.error else "",
         }

@@ -7,7 +7,7 @@
 
 | 层 | 定义 | 可禁用 | 依赖方向 |
 |---|---|---|---|
-| **内核 Kernel** | 只负责加载插件：发现、manifest 校验、服务注册（provide/require）、typed 事件（`on` 顺序传递可改写 + `watch` 并行只读）、按依赖顺序 setup、可 dispose 的注册、单插件热重载、start/stop。不懂任何业务，本身不是插件，目标见 §8.8（≤700 LOC） | — | 不 import 任何业务 |
+| **内核 Kernel** | 只提供服务注册（provide/require）、typed 事件（`on` 顺序传递可改写 + `watch` 串行队列）、依赖规划、单插件激活/释放、闭包与排空原语。发现、manifest 校验、启停与重载编排由宿主承担，测试编排由 KernelHarness 承担（见 [P8b 决策](2026-11-04-kernel-primitives-host-single-state.md)）。不懂任何业务，本身不是插件，目标见 §8.8（≤700 LOC） | — | 不 import 任何业务 |
 | **核心模块 Core** | 没有它就聊不了天的部分，随宿主发布，不可删、不安装卸载，但同样用 `provide` 注册服务。插座类接口（tools/channels/commands…）的契约类型由提供它的模块持有 | 否 | 可 import 内核和 SDK，禁止 import 插件 |
 | **系统插件 System** | 官方内置、默认开启、可以禁用。和第三方插件用同一套 API，没有任何特权 | 是 | 只能 import SDK 和已声明依赖的插件 |
 | **外部集成插件 External** | 渠道、TTS/ASR、工具、MCP 等外部集成 | 是 | 同上 |
@@ -256,7 +256,7 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
 | **P8 安装器裁剪 + 内核达标** | ZIP 解包和信任持久化移到 bridge；共用准入规则留宿主，保留 SDK/peers 版本比较；删除 host_contract/data_migration/storage 模块与空迁移接口（[P8 边界修订](2026-11-03-p8-installer-and-gates.md)）；**信任语义保留**（D16）；热重载按 D14（`supports_hot_unload` 保留）；文档写入 AGENTS.md + 插件编写指南；CI：`shiori_sdk.kernel` ≤700 LOC（§8.8）；确认 P1–P8 齐套后才允许桌面发版（D23） | +250 / −2000（历史预估，非当前结果） | 低中 | 无；发版门闩 = 本阶段完成 |
 | P9 内置工具外移（已取消） | **已取消（D11）**：shell/fs、web、skills、subagent 留在核心；scene 和 mcp 并入 P6a；scheduler 做成独立系统插件 `schedule`（D17，P6s） | — | — | — |
 
-合计（估，2026-10-22 按 D1–D24 重算，D25–D27 未重估，P1 新增的 on_drain 与链后校验会让内核侧略增，见 §8.8；D20 改插件化不改净 LOC 量级）：删除约 2.24 万，新增约 0.69 万，净减约 1.55 万 LOC（上一版净减约 1.6 万）。本轮变化：P6s +350 / −300（schedule 独立成插件，D17）；P1 +70（watch、单插件 reload）；P3 +80 / −50（两个回滚方法；删 diagnostics）；P6a +250 / −300（scene、mcp 从 P9 并入）；P6b +100 / −100（核心侧通用化）；P7 +350 / −350（voice UI 搬进插件）；P8 +50 / −300 少删（保留 trust_store）；P9 取消。plugin_host 7.3k → `shiori_sdk.kernel` 预算 **700 LOC**（§8.8，原 500 不够）+ 宿主装配层/bridge 约 1.2k–1.5k（含 on_drain/reload、trust_store；这是历史预估，当前实测超出，见 [P8 规模记录](2026-11-03-p8-installer-and-gates.md#规模与剩余边界)）。早先的变化来源：D1 多删约 0.3k 记忆引擎专用加载代码；D3 让 P5 少写约 0.3k 镜像；D4 在 P4 和 P8 多删约 0.7k 兼容代码。
+合计（估，2026-10-22 按 D1–D24 重算，D25–D27 未重估，P1 新增的 on_drain 与链后校验会让内核侧略增，见 §8.8；D20 改插件化不改净 LOC 量级）：删除约 2.24 万，新增约 0.69 万，净减约 1.55 万 LOC（上一版净减约 1.6 万）。本轮变化：P6s +350 / −300（schedule 独立成插件，D17）；P1 +70（watch、单插件 reload）；P3 +80 / −50（两个回滚方法；删 diagnostics）；P6a +250 / −300（scene、mcp 从 P9 并入）；P6b +100 / −100（核心侧通用化）；P7 +350 / −350（voice UI 搬进插件）；P8 +50 / −300 少删（保留 trust_store）；P9 取消。plugin_host 7.3k → `shiori_sdk.kernel` 预算 **700 LOC**（§8.8，原 500 不够）+ 宿主装配层/bridge 原 1.2k–1.5k 估算作废，按各阶段实测重新记录（见 [P8b 规模记录](2026-11-04-kernel-primitives-host-single-state.md#规模记录)）。早先的变化来源：D1 多删约 0.3k 记忆引擎专用加载代码；D3 让 P5 少写约 0.3k 镜像；D4 在 P4 和 P8 多删约 0.7k 兼容代码。
 
 依赖顺序：P0 → P1 → P2 → P3 → P4 → P5；P6a/P6s/P6b 依赖 P3，P6s 放在 P6b 之前；P7 依赖 P4；P8 放在最后。
 

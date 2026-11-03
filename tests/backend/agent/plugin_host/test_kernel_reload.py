@@ -20,9 +20,8 @@ from agent.plugin_host import (
     PluginReloadFailed,
     PluginReloadTimeout,
     PluginReloadUnsupported,
-    PluginState,
 )
-from tests.support.plugin_kernel import host_kernel
+from tests.support.plugin_kernel import host_kernel, set_plugin_enabled
 from infra.process.resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
@@ -180,6 +179,8 @@ def _write(root: Path, plugin_id: str, manifest: str, source: str) -> None:
         f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n{manifest}", encoding="utf-8"
     )
     (package / "backend/plugin.py").write_text(source, encoding="utf-8")
+    if "frontend:" in manifest:
+        (package / "frontend.mjs").write_text("export const ui = {};", encoding="utf-8")
 
 
 @pytest.fixture
@@ -210,6 +211,8 @@ async def _kernel(
     *,
     consumer_inject: str = _CONSUMER_INJECT,
     consumer_manifest: str = "",
+    provider_manifest: str = "",
+    bystander_manifest: str = "",
     configs: dict[str, dict] | None = None,
 ) -> tuple[
     PluginKernel, PluginGenerationSettings, ToolRegistry, PluginRpcRegistry[Any]
@@ -217,7 +220,7 @@ async def _kernel(
     _write(
         tmp_path,
         "provider",
-        "inject: [tools, rpc, services, process_resources, config, runtime]\n",
+        f"inject: [tools, rpc, services, process_resources, config, runtime]\n{provider_manifest}",
         _PROVIDER,
     )
     _write(
@@ -229,7 +232,7 @@ async def _kernel(
     _write(
         tmp_path,
         "bystander",
-        "inject: [tools]\n",
+        f"inject: [tools]\n{bystander_manifest}",
         _BYSTANDER,
     )
     tools = ToolRegistry()
@@ -397,7 +400,9 @@ async def test_drain_timeout_abandons_the_reload_unchanged(probe, tmp_path):
     assert ("drain", "consumer") in probe.events
     assert ("drain", "provider", "v1") not in probe.events
     assert not any(event[0] == "dispose" for event in probe.events)
-    assert all(row["state"] == "ACTIVE" for row in kernel.states())
+    assert all(
+        row["state"] == "ACTIVE" for row in [view.describe() for view in kernel.views()]
+    )
     # The sealed dependent was reopened and admits calls again.
     relay = asyncio.create_task(tools.execute("consumer_relay", {}))
     await _until(probe, ("relay-start",))
@@ -448,7 +453,9 @@ async def test_rollback_drain_timeout_is_reported_and_disposal_proceeds(
     assert isinstance(timeout, PluginReloadTimeout)
     assert timeout.busy == ("provider",)
     assert ("dispose", "provider", "consumer-fails") in probe.events
-    assert all(row["state"] == "ACTIVE" for row in kernel.states())
+    assert all(
+        row["state"] == "ACTIVE" for row in [view.describe() for view in kernel.views()]
+    )
     probe.release.set()
     assert await probe.pending[0] == "consumer-fails"
     await kernel.terminate_all(force=True)
@@ -565,6 +572,11 @@ async def test_cancelling_the_caller_during_setup_completes_the_reload(probe, tm
     kernel, settings, _, rpc = await _kernel(tmp_path)
     reload = asyncio.create_task(_reload(kernel, "slow-setup"))
     await _until(probe, ("setup-waiting",))
+    during = {view.plugin_id: view for view in kernel.views()}
+    assert during["bystander"].state == "ACTIVE"
+    for plugin_id in ("provider", "consumer"):
+        assert during[plugin_id].state == "BLOCKED"
+        assert during[plugin_id].diagnostic.code == "not_started"
 
     reload.cancel()
     for _ in range(5):
@@ -573,7 +585,9 @@ async def test_cancelling_the_caller_during_setup_completes_the_reload(probe, tm
     with pytest.raises(asyncio.CancelledError):
         await reload
 
-    states = {row["id"]: row["state"] for row in kernel.states()}
+    states = {
+        row["id"]: row["state"] for row in [view.describe() for view in kernel.views()]
+    }
     assert states == {"provider": "ACTIVE", "consumer": "ACTIVE", "bystander": "ACTIVE"}
     assert settings.plugin_configs["provider"] == {"label": "slow-setup"}
     assert await _echo(rpc) == {"label": "slow-setup"}
@@ -600,7 +614,9 @@ async def test_failed_reload_restores_the_old_config_instance(probe, tmp_path):
     assert caught.value.cleanup_errors == ()
     assert settings.plugin_configs["provider"] is old_tables
     assert settings.raw_plugin_configs["provider"] == {"label": "v1"}
-    states = {row["id"]: row["state"] for row in kernel.states()}
+    states = {
+        row["id"]: row["state"] for row in [view.describe() for view in kernel.views()]
+    }
     assert states == {"provider": "ACTIVE", "consumer": "ACTIVE", "bystander": "ACTIVE"}
     assert ("setup", "provider", "v1", True, True) in probe.events
     assert ("setup", "bystander") not in probe.events
@@ -642,7 +658,9 @@ async def test_reload_refuses_generation_only_closures_before_any_change(
     assert caught.value.plugin_ids == ("consumer",)
     assert probe.events == []
     assert settings.plugin_configs["provider"] == {"label": "v1"}
-    assert all(row["state"] == PluginState.ACTIVE.name for row in kernel.states())
+    assert all(
+        row["state"] == "ACTIVE" for row in [view.describe() for view in kernel.views()]
+    )
     await kernel.terminate_all(force=True)
 
 
@@ -807,7 +825,9 @@ def _toggle(kernel: PluginKernel, enabled: bool, commit=None, label: str = "v1")
 
 
 def _states(kernel: PluginKernel) -> dict[str, str]:
-    return {row["id"]: row["state"] for row in kernel.states()}
+    return {
+        row["id"]: row["state"] for row in [view.describe() for view in kernel.views()]
+    }
 
 
 @pytest.mark.asyncio
@@ -1161,7 +1181,9 @@ async def test_failed_plugin_is_retried_only_when_a_load_selects_it(probe, tmp_p
 
     # Selected by a load, it is tried again.
     probe.setup_gate.set()
-    assert await kernel.load("boom")
+    _ = await set_plugin_enabled(kernel, "boom", False)
+    _ = await set_plugin_enabled(kernel, "boom", True)
+    assert kernel.view("boom").state == "ACTIVE"
     assert probe.events[-1] == ("setup", "boom")
     assert failed == ["boom"]
     await kernel.terminate_all(force=True)
@@ -1246,9 +1268,10 @@ async def test_failed_enabled_provider_still_conflicts_with_a_newly_enabled_one(
     )
     states = _states(kernel)
     assert states == {"first": "BLOCKED", "second": "BLOCKED"}
-    assert {row["diagnostic"]["code"] for row in kernel.states()} == {
-        "duplicate_provider"
-    }
+    assert {
+        row["diagnostic"]["code"]
+        for row in [view.describe() for view in kernel.views()]
+    } == {"duplicate_provider"}
     assert probe.events == [("setup", "first")]
     await kernel.terminate_all(force=True)
 
@@ -1257,9 +1280,10 @@ async def test_failed_enabled_provider_still_conflicts_with_a_newly_enabled_one(
     restarted = host_kernel([tmp_path], settings=settings)
     await restarted.load_all()
     assert _states(restarted) == states
-    assert {row["diagnostic"]["code"] for row in restarted.states()} == {
-        "duplicate_provider"
-    }
+    assert {
+        row["diagnostic"]["code"]
+        for row in [view.describe() for view in restarted.views()]
+    } == {"duplicate_provider"}
     assert probe.events == []
     await restarted.terminate_all(force=True)
 
@@ -1312,3 +1336,145 @@ async def test_conflict_replanning_cannot_retry_an_unclean_failed_provider(
         assert probe.events == [("setup", "first")]
     finally:
         await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_renderer_reports_wait_for_reload_and_recheck_activation_tokens(
+    probe, tmp_path
+):
+    kernel, _, tools, _ = await _kernel(
+        tmp_path,
+        provider_manifest="frontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
+        bystander_manifest="frontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
+    )
+    token = kernel.view("bystander").activation_token
+    old_provider_token = kernel.view("provider").activation_token
+    call = asyncio.create_task(tools.execute("provider_slow", {}))
+    await _until(probe, ("call-start", "v1"))
+    reloading = asyncio.create_task(_reload(kernel, "v2"))
+    await _until(probe, ("drain", "consumer"))
+    reporting = asyncio.create_task(
+        kernel.fail_renderer_entry("bystander", "ui", "renderer failed", token)
+    )
+    stale = asyncio.create_task(
+        kernel.fail_renderer_entry(
+            "provider", "ui", "old renderer failed", old_provider_token
+        )
+    )
+    try:
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert not reporting.done() and not stale.done()
+        assert kernel.view("bystander").state == "ACTIVE"
+        probe.release.set()
+        await call
+        await reloading
+        assert await reporting is True
+        assert await stale is False
+        assert kernel.view("provider").state == "ACTIVE"
+        view = kernel.view("bystander")
+        assert view.state == "FAILED"
+        assert view.diagnostic.code == "renderer_ui_failed"
+        assert tools.get_tool("bystander_busy") is None
+    finally:
+        probe.release.set()
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_renderer_cleanup_failure_survives_conflict_planning(probe, tmp_path):
+    _write(
+        tmp_path,
+        "first",
+        "provides: [shared.engine]\nfrontend: {entry: frontend.mjs, exports: [ui], css: []}\n",
+        "import sys\nasync def setup(ctx):\n"
+        "    sys.modules['reload_probe'].events.append(('setup', 'first'))\n"
+        "    def stuck(): raise RuntimeError('cleanup failed')\n"
+        "    ctx.effect('stuck', stuck)\n",
+    )
+    _write(
+        tmp_path,
+        "second",
+        "provides: [shared.engine]\n",
+        "async def setup(ctx): pass\n",
+    )
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            plugin_configs={"second": {"enabled": False}}
+        ),
+    )
+    await kernel.load_all()
+    failed = _failures(kernel)
+    try:
+        assert await kernel.fail_renderer_entry(
+            "first", "ui", "renderer failed", kernel.view("first").activation_token
+        )
+        assert failed == ["first"]
+        for enabled in (True, False):
+            await set_plugin_enabled(kernel, "second", enabled)
+            view = kernel.view("first")
+            assert view.state == "RESTART_REQUIRED"
+            assert view.diagnostic.code == "rollback_cleanup_failed"
+            status = kernel.kernel.status("first")
+            assert status.state is KernelState.FAILED and status.cleanup_errors
+        assert probe.events == [("setup", "first")]
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_reload_reports_disposal_errors_without_blocking_the_new_instance(
+    probe, tmp_path
+):
+    kernel, settings, _, rpc = await _kernel(tmp_path)
+    failure = RuntimeError("ordinary disposal failed")
+
+    def fail_disposal():
+        raise failure
+
+    kernel.kernel.scope("provider").effect(fail_disposal, "disposal-probe")
+    try:
+        result = await _reload(kernel, "v2")
+        assert failure in result.cleanup_errors
+        assert kernel.view("provider").state == "ACTIVE"
+        assert await _echo(rpc) == {"label": "v2"}
+        assert settings.plugin_configs["provider"] == {"label": "v2"}
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_toggle_views_show_not_started_while_an_optional_consumer_restarts(
+    probe, tmp_path
+):
+    _write(tmp_path, "provider", "", "async def setup(ctx): ctx.expose(object())\n")
+    _write(
+        tmp_path,
+        "consumer",
+        "inject: [dependencies]\noptional_dependencies: [provider]\n",
+        "import sys\nfrom shiori_sdk.core.services import DEPENDENCIES\n"
+        "async def setup(ctx):\n"
+        "    if ctx.require(DEPENDENCIES).get_optional('provider') is not None:\n"
+        "        probe = sys.modules['reload_probe']\n"
+        "        probe.events.append(('optional-setup-waiting',))\n"
+        "        await probe.setup_gate.wait()\n",
+    )
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            plugin_configs={"provider": {"enabled": False}}
+        ),
+    )
+    await kernel.load_all()
+    enabling = asyncio.create_task(set_plugin_enabled(kernel, "provider", True))
+    try:
+        await _until(probe, ("optional-setup-waiting",))
+        view = kernel.view("consumer")
+        assert view.state == "BLOCKED" and view.diagnostic.code == "not_started"
+        assert kernel.view("provider").state == "ACTIVE"
+    finally:
+        probe.setup_gate.set()
+        await enabling
+    assert {view.state for view in kernel.views()} == {"ACTIVE"}
+    await kernel.terminate_all(force=True)

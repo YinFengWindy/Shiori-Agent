@@ -12,11 +12,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
+from agent.plugin_host.handle import PluginRecord
+from agent.plugin_host.state import PluginView
+from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.unload import (
     PluginReloadFailed,
     PluginReloadTimeout,
@@ -58,19 +60,20 @@ class PluginReloadResult:
 
 @dataclass(frozen=True)
 class ReloadSteps:
-    """Kernel operations a reload composes; the kernel keeps owning handles."""
+    """Operations a reload composes without owning or mirroring lifecycle state."""
 
     # Drains the closure (dependents first) within the timeout through the
     # kernel; abandons with every instance unchanged on timeout, ``on_drain``
     # failure or cancellation (``PluginReloadTimeout`` on timeout).
-    drain: Callable[[list[PluginHandle], float], Awaitable[None]]
+    drain: Callable[[list[PluginRecord], float], Awaitable[None]]
     # Disposes one handle and drops it from the kernel; returns cleanup errors.
-    dispose: Callable[[PluginHandle], Awaitable[list[Exception]]]
-    # Loads one record (after its dependencies) as a reactivation of the given
-    # plugin ids; returns the handle it ended up with.
-    activate: Callable[[PluginRecord, frozenset[str]], Awaitable[PluginHandle | None]]
+    dispose: Callable[[PluginRecord], Awaitable[list[Exception]]]
+    # Activate a record and derive its resulting presentation snapshot.
+    activate: Callable[[PluginRecord, frozenset[str]], Awaitable[PluginView]]
     # Holds the plugins' process resources across the swap, when the host has any.
     retain: Callable[[tuple[str, ...]], ProcessResourceHold | None]
+    # A live gate is optional for a failed or disabled presentation snapshot.
+    calls: Callable[[PluginRecord], PluginCallGate | None]
 
 
 @dataclass(frozen=True)
@@ -96,16 +99,16 @@ class ConfigTables:
         return previous
 
 
-def hot_unload_blockers(handles: Iterable[PluginHandle]) -> list[str]:
+def hot_unload_blockers(records: Iterable[PluginRecord]) -> list[str]:
     """Plugin ids among ``handles`` that declare ``supports_hot_unload: false``."""
     return [
-        handle.plugin_id
-        for handle in handles
-        if not handle.record.manifest.supports_hot_unload
+        record.manifest.id
+        for record in records
+        if not record.manifest.supports_hot_unload
     ]
 
 
-def _target_last(closure: list[PluginHandle], target: str) -> list[PluginHandle]:
+def _target_last(closure: list[PluginView], target: str) -> list[PluginView]:
     """``closure`` with ``target`` moved last, the others in their order.
 
     The kernel ranks a closure dependents first, but plugins that inject each
@@ -120,7 +123,7 @@ def _target_last(closure: list[PluginHandle], target: str) -> list[PluginHandle]
 
 async def reload_closure(
     target: str,
-    closure: list[PluginHandle],
+    closure: list[PluginView],
     *,
     values: dict[str, Any],
     raw_values: dict[str, Any],
@@ -139,7 +142,7 @@ async def reload_closure(
     ``commit`` (see ``PluginKernel.reload``).
     """
     closure = _target_last(closure, target)
-    await steps.drain(closure, drain_timeout)
+    await steps.drain([view.record for view in closure], drain_timeout)
     plugin_ids = frozenset(handle.plugin_id for handle in closure)
     replacement = asyncio.create_task(
         _replace(
@@ -162,7 +165,7 @@ async def reload_closure(
 
 async def toggle_closure(
     target: str,
-    closure: list[PluginHandle],
+    closure: list[PluginView],
     *,
     enabled: bool,
     staying: frozenset[str],
@@ -191,7 +194,7 @@ async def toggle_closure(
     closure = _target_last(closure, target)
     if staying:
         await steps.drain(
-            [handle for handle in closure if handle.plugin_id in staying],
+            [handle.record for handle in closure if handle.plugin_id in staying],
             drain_timeout,
         )
     replacement = asyncio.create_task(
@@ -253,7 +256,7 @@ async def _run_to_completion(
 
 async def _replace(
     target: str,
-    closure: list[PluginHandle],
+    closure: list[PluginView],
     *,
     values: dict[str, Any],
     raw_values: dict[str, Any],
@@ -283,13 +286,11 @@ async def _replace(
     restore_failed: dict[str, BaseException] = {}
     try:
         for handle in closure:
-            errors.extend(await steps.dispose(handle))
+            errors.extend(await steps.dispose(handle.record))
         previous = tables.swap(target, values, raw_values)
         handles = await _activate(records, steps, reactivating)
         if strict:
-            failed = _diverged(
-                records, handles, dict.fromkeys(plugin_ids, PluginState.ACTIVE)
-            )
+            failed = _diverged(records, handles, dict.fromkeys(plugin_ids, "ACTIVE"))
         if not failed and commit is not None:
             try:
                 commit(plugin_ids)
@@ -300,11 +301,11 @@ async def _replace(
         if failed:
             # New instances that did start may already serve calls; let those
             # finish (bounded) before disposing them.
-            loaded = [handle for handle in handles if handle is not None]
-            if timeout := await _seal_and_wait(loaded, drain_timeout):
+            loaded = handles
+            if timeout := await _seal_and_wait(loaded, steps.calls, drain_timeout):
                 errors.append(timeout)
             for handle in reversed(loaded):
-                errors.extend(await steps.dispose(handle))
+                errors.extend(await steps.dispose(handle.record))
             _ = tables.swap(target, *previous)
             restored = await _activate(records, steps, restoring)
             restore_failed = _diverged(records, restored, before)
@@ -326,48 +327,55 @@ async def _replace(
 
 
 async def _seal_and_wait(
-    handles: list[PluginHandle], timeout: float
+    handles: list[PluginView],
+    calls: Callable[[PluginRecord], PluginCallGate | None],
+    timeout: float,
 ) -> PluginReloadTimeout | None:
     """Seals ``handles`` and waits for their admitted calls, up to ``timeout``."""
-    for handle in handles:
-        handle.calls.seal()
+    gates = {
+        handle.plugin_id: gate
+        for handle in handles
+        if (gate := calls(handle.record)) is not None
+    }
+    for gate in gates.values():
+        gate.seal()
     waiting = asyncio.ensure_future(
-        asyncio.gather(*(handle.calls.wait_idle() for handle in handles))
+        asyncio.gather(*(gate.wait_idle() for gate in gates.values()))
     )
     done, _ = await asyncio.wait({waiting}, timeout=timeout)
     if done:
         return None
     _ = waiting.cancel()
-    busy = tuple(handle.plugin_id for handle in handles if handle.calls.in_flight)
+    busy = tuple(pid for pid, gate in gates.items() if gate.in_flight)
     return PluginReloadTimeout(busy, timeout)
 
 
 async def _activate(
     records: list[PluginRecord], steps: ReloadSteps, reactivating: frozenset[str]
-) -> list[PluginHandle | None]:
+) -> list[PluginView]:
     """Loads the closure in dependency order; returns each record's handle."""
     return [await steps.activate(record, reactivating) for record in records]
 
 
 def _diverged(
     records: list[PluginRecord],
-    handles: list[PluginHandle | None],
-    expected: dict[str, PluginState],
+    handles: list[PluginView],
+    expected: Mapping[str, str],
 ) -> dict[str, BaseException]:
     """Maps each plugin not in its ``expected`` state to the reason, in load order."""
     diverged: dict[str, BaseException] = {}
     for record, handle in zip(records, handles, strict=True):
         plugin_id = record.manifest.id
         state = expected[plugin_id]
-        if handle is not None and handle.state is state:
+        if handle.state == state:
             continue
         diverged[plugin_id] = (
             handle.error
-            if handle is not None and handle.error is not None
+            if handle.error is not None
             else RuntimeError(
                 f"插件 {plugin_id} 未能激活"
-                if state is PluginState.ACTIVE
-                else f"插件 {plugin_id} 未能恢复为 {state.name}"
+                if state == "ACTIVE"
+                else f"插件 {plugin_id} 未能恢复为 {state}"
             )
         )
     return diverged
