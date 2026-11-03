@@ -53,6 +53,8 @@ describe("language pairing (#806)", () => {
   ];
 
   it("pairs the two home pages with the same hreflang links, x-default on the Chinese one", () => {
+    assert.match(zhHome, /<html lang="zh-CN">/);
+    assert.match(enHome, /<html lang="en">/);
     assert.deepEqual(hreflangsOf(zhHome), pair);
     assert.deepEqual(hreflangsOf(enHome), pair);
     assert.equal(metaContent(zhHome, "property", "og:locale"), "zh_CN");

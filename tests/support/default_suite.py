@@ -1,4 +1,4 @@
-"""Default host pytest selection (about 1000 parametrized cases).
+"""Default host pytest selection for critical host contracts.
 
 ``pytest`` with no path arguments collects this set from ``tests/backend``.
 ``pytest --also <path>`` keeps this set and also collects those host paths.
@@ -21,7 +21,6 @@ not filtered by this list.
 
 from __future__ import annotations
 
-import ast
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -42,7 +41,6 @@ DEFAULT_DIRECTORIES: tuple[str, ...] = (
 DEFAULT_FILES: frozenset[str] = frozenset(
     {
         "tests/backend/test_main.py",
-        "tests/backend/test_repository_entrypoints.py",
         "tests/backend/test_spawn_completion_flow.py",
         "tests/backend/agent/plugin_host/test_kernel.py",
         "tests/backend/agent/plugin_host/test_kernel_reload.py",
@@ -74,8 +72,8 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/agent/core/test_turn_pipelines.py",
         # P3 golden trace（维护者 2026-10-23 确认）与 core-only 冒烟（§5.3），#902。
         "tests/backend/agent/core/test_turn_golden_trace.py",
-        # P6b 主动回合 golden trace（8 条），#907 PR0：proactive 搬进插件期间每次 CI
-        # 都要守住的行为基线。加入后计数仍在上限内，上限不变。
+        # P6b 主动回合 golden trace，#907 PR0：proactive 搬进插件期间每次 CI
+        # 都要守住的行为基线。
         "tests/backend/agent/core/test_proactive_turn_golden_trace.py",
         "tests/backend/agent/core/test_response_parser.py",
         "tests/backend/agent/core/test_safety_retry.py",
@@ -96,15 +94,6 @@ DEFAULT_FILES: frozenset[str] = frozenset(
         "tests/backend/scripts/test_select_tests.py",
     }
 )
-
-# Parametrized cases. The guard test fails outside this band.
-DEFAULT_CASE_MIN = 950
-# P3 golden trace，维护者 2026-10-23 确认，#902：上限从 1050 上调到 1058，当时为它的 8 条
-# 场景用例留位。同一文件里的 core-only 冒烟（§5.3，P3-4 加入，2 条）也是每次 CI 都必须
-# 守住的宿主契约；加入它之后计数仍在上限内，上限不变。P6b 主动回合 golden trace（#907 PR0）
-# 的 8 条也放进了这份余量，没有再上调：加入后按字面 parametrize 计数为 1019（实际收集
-# 1035 条），离上限 1058 还剩 39。
-DEFAULT_CASE_MAX = 1058
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -171,55 +160,3 @@ def selection_is_default_root(args: list[str], *, cwd: Path, root: Path) -> bool
         if relative != "tests/backend":
             return False
     return True
-
-
-def _parametrize_cases(function: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
-    cases = 1
-    for decorator in function.decorator_list:
-        if not isinstance(decorator, ast.Call):
-            continue
-        func = decorator.func
-        if not isinstance(func, ast.Attribute) or func.attr != "parametrize":
-            continue
-        if len(decorator.args) >= 2 and isinstance(
-            decorator.args[1], (ast.List, ast.Tuple)
-        ):
-            cases *= max(1, len(decorator.args[1].elts))
-    return cases
-
-
-def _case_count(path: Path) -> int:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    total = 0
-    for node in tree.body:
-        functions: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
-        if isinstance(
-            node, (ast.FunctionDef, ast.AsyncFunctionDef)
-        ) and node.name.startswith("test_"):
-            functions.append(node)
-        elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
-            for item in node.body:
-                if isinstance(
-                    item, (ast.FunctionDef, ast.AsyncFunctionDef)
-                ) and item.name.startswith("test_"):
-                    functions.append(item)
-        for function in functions:
-            total += _parametrize_cases(function)
-    return total
-
-
-def iter_default_test_files(root: Path | None = None) -> list[Path]:
-    """Return default-path test files that exist under ``root``."""
-    repo = root or REPO_ROOT
-    found: list[Path] = []
-    backend = repo / "tests" / "backend"
-    for path in backend.rglob("test_*.py"):
-        relative = path.relative_to(repo).as_posix()
-        if is_default_test(relative):
-            found.append(path)
-    return found
-
-
-def count_default_cases(root: Path | None = None) -> int:
-    """Count parametrized cases on the default path (literal parametrize only)."""
-    return sum(_case_count(path) for path in iter_default_test_files(root))

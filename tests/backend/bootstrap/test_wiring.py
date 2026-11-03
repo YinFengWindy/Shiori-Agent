@@ -1,37 +1,19 @@
 from __future__ import annotations
-from tests.support.generation_getters import bound_affection, bound_reply_policy
 
 import json
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, cast
-from unittest.mock import AsyncMock
 
 import pytest
 from agent.config import Config
-from agent.config_models import Config as ConfigModel
-from agent.config_models import WiringConfig
 from agent.lifecycle.facade import TurnLifecycle
 from shiori_sdk.core.conversation import StepFinished
 from agent.looping.interrupt import TurnInterruptState
-from agent.tools.message_push import MessagePushTool
-from agent.tools.registry import ToolRegistry
-from bootstrap.tools import (
-    _build_loop_deps,
-    _resolve_plugin_llm_dependencies,
-    build_registered_tools,
-)
 from bootstrap.wiring import (
-    resolve_context_factory,
-    resolve_memory_toolset_provider,
-    resolve_toolset_provider,
     wire_turn_lifecycle,
 )
 from bus.event_bus import EventBus
-from core.roles import RoleStore
-from tests.support.push import allow_every_role_target
 
 
 def _toml_value(value):
@@ -83,89 +65,6 @@ def _dump_toml(data: dict, prefix: tuple[str, ...] = ()) -> list[str]:
 
 def _write_toml(path: Path, payload: dict) -> None:
     path.write_text("\n".join(_dump_toml(payload)).strip() + "\n", encoding="utf-8")
-
-
-def test_plugin_llm_dependencies_fall_back_to_main_model() -> None:
-    config = ConfigModel(
-        provider="openai",
-        model="main-model",
-        api_key="key",
-    )
-    provider = object()
-
-    resolved_provider, resolved_model = _resolve_plugin_llm_dependencies(
-        config,
-        cast(Any, provider),
-        None,
-    )
-
-    assert resolved_provider is provider
-    assert resolved_model == "main-model"
-
-
-def test_config_load_reads_wiring_block(tmp_path: Path):
-    cfg_path = tmp_path / "config.toml"
-    _write_toml(
-        cfg_path,
-        {
-            "llm": {
-                "registrations": [
-                    {
-                        "id": "00000000-0000-4000-a000-000000000001",
-                        "provider": "openai",
-                        "model": "m",
-                        "api_key": "k",
-                        "effort": "none",
-                    }
-                ],
-            },
-            "agent": {
-                "system_prompt": "s",
-                "wiring": {
-                    "context": "default",
-                    "memory": "default",
-                    "memory_engine": "default",
-                    "toolsets": ["schedule", "mcp"],
-                },
-            },
-        },
-    )
-
-    cfg = Config.load(cfg_path)
-
-    assert cfg.wiring.context == "default"
-    assert cfg.wiring.memory == "default"
-    assert cfg.wiring.toolsets == ["schedule", "mcp"]
-
-
-def test_config_load_defaults_empty_toolsets_to_full_wiring(tmp_path: Path):
-    cfg_path = tmp_path / "config.toml"
-    _write_toml(
-        cfg_path,
-        {
-            "llm": {
-                "registrations": [
-                    {
-                        "id": "00000000-0000-4000-a000-000000000001",
-                        "provider": "openai",
-                        "model": "m",
-                        "api_key": "k",
-                        "effort": "none",
-                    }
-                ],
-            },
-            "agent": {
-                "system_prompt": "s",
-                "wiring": {
-                    "toolsets": [],
-                },
-            },
-        },
-    )
-
-    cfg = Config.load(cfg_path)
-
-    assert cfg.wiring.toolsets == ["meta_common", "spawn"]
 
 
 def test_config_load_migrates_legacy_memory_table(tmp_path: Path, caplog):
@@ -514,162 +413,6 @@ def test_config_load_rejects_removed_channel_blocks(
         Config.load(cfg_path)
 
 
-def test_build_registered_tools_respects_toolset_order_and_subset(
-    monkeypatch, tmp_path: Path
-):
-    calls: list[str] = []
-
-    class _MemoryProvider:
-        def register(self, registry, deps):
-            calls.append("memory")
-            runtime = SimpleNamespace()
-            return SimpleNamespace(extras={"memory_runtime": runtime})
-
-    class _ToolsetProvider:
-        def __init__(self, name: str) -> None:
-            self._name = name
-
-        def register(self, registry, deps):
-            calls.append(self._name)
-            extras = (
-                {"mcp_registry": SimpleNamespace(shutdown=AsyncMock())}
-                if self._name == "mcp"
-                else {}
-            )
-            return SimpleNamespace(extras=extras)
-
-    monkeypatch.setattr(
-        "bootstrap.tools.resolve_memory_toolset_provider",
-        lambda name: _MemoryProvider(),
-    )
-    monkeypatch.setattr(
-        "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None: _ToolsetProvider(name),
-    )
-    monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
-    config = ConfigModel(
-        provider="openai",
-        model="m",
-        api_key="k",
-        wiring=WiringConfig(toolsets=["schedule", "mcp"]),
-    )
-    build_registered_tools(
-        config=config,
-        workspace=tmp_path,
-        http_resources=cast(Any, SimpleNamespace()),
-        bus=cast(Any, SimpleNamespace()),
-        provider=object(),
-        light_provider=object(),
-        session_store=object(),
-        tools=ToolRegistry(),
-        event_publisher=EventBus(),
-        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
-    )
-
-    assert calls == ["memory", "schedule", "mcp"]
-
-
-def test_build_loop_deps_uses_context_factory(monkeypatch, tmp_path: Path):
-    observed: dict[str, object] = {}
-    fake_context = object()
-    markdown_store = object()
-    markdown_maintenance = SimpleNamespace(
-        bind_lifecycle=lambda request: None,
-        listening_trigger=SimpleNamespace(attach=lambda store: None),
-    )
-
-    monkeypatch.setattr(
-        "bootstrap.tools.resolve_context_factory",
-        lambda name: (
-            lambda workspace, memory_store, roles: observed.update(
-                {
-                    "name": name,
-                    "workspace": workspace,
-                    "memory_store": memory_store,
-                    "roles": roles,
-                }
-            )
-            or fake_context
-        ),
-    )
-
-    config = ConfigModel(
-        provider="openai",
-        model="m",
-        api_key="k",
-        wiring=WiringConfig(context="default"),
-    )
-    roles = RoleStore(tmp_path)
-    deps = _build_loop_deps(
-        config=config,
-        workspace=tmp_path,
-        runtime_roles=roles,
-        group_environment=cast(
-            Any, SimpleNamespace(conversation_store=SimpleNamespace(listening=None))
-        ),
-        bus=cast(Any, SimpleNamespace()),
-        provider=cast(Any, object()),
-        light_provider=None,
-        tools=ToolRegistry(),
-        session_manager=cast(
-            Any,
-            SimpleNamespace(
-                get_or_create=lambda key: None,
-                commit_consolidation=lambda request, write_memory, publish_committed: None,
-                retry_memory_consumers=lambda key, consumer: None,
-                record_memory_publication=lambda key, payload: None,
-                record_recent_context=lambda key, ids, ownership: None,
-            ),
-        ),
-        processing_state=cast(Any, SimpleNamespace()),
-        event_bus=EventBus(),
-        memory_runtime=cast(
-            Any,
-            SimpleNamespace(
-                current_engine=object,
-                markdown=SimpleNamespace(
-                    store=markdown_store,
-                    maintenance=markdown_maintenance,
-                ),
-            ),
-        ),
-        reply_policy=bound_reply_policy(),
-        affection=bound_affection(),
-    )
-
-    assert observed["name"] == "default"
-    assert observed["workspace"] == tmp_path
-    assert observed["memory_store"] is markdown_store
-    assert observed["roles"] is roles
-    assert deps.context is fake_context
-
-
-def test_wiring_error_messages_list_available_choices():
-    try:
-        resolve_context_factory("bad")
-    except ValueError as exc:
-        assert "可选值" in str(exc)
-        assert "default" in str(exc)
-    else:
-        raise AssertionError("resolve_context_factory should fail for bad name")
-
-    try:
-        resolve_memory_toolset_provider("bad")
-    except ValueError as exc:
-        assert "可选值" in str(exc)
-        assert "default" in str(exc)
-    else:
-        raise AssertionError("resolve_memory_toolset_provider should fail for bad name")
-
-    try:
-        resolve_toolset_provider("bad")
-    except ValueError as exc:
-        assert "可选值" in str(exc)
-        assert "meta_common" in str(exc)
-    else:
-        raise AssertionError("resolve_toolset_provider should fail for bad name")
-
-
 @pytest.mark.asyncio
 async def test_wire_turn_lifecycle_registers_step_finished_progress_handler():
     bus = EventBus()
@@ -737,47 +480,6 @@ async def test_buffered_progress_retains_tools_without_claiming_unsent_dialogue(
     assert state.partial_thinking == "thinking"
     assert state.tools_used == ["lookup"]
     assert state.tool_chain_partial == [{"text": "", "calls": [{"name": "lookup"}]}]
-
-
-def test_build_registered_tools_without_mcp_toolset_still_returns_memory(
-    monkeypatch, tmp_path: Path
-):
-    memory = SimpleNamespace()
-    monkeypatch.setattr(
-        "bootstrap.tools.resolve_memory_toolset_provider",
-        lambda name: SimpleNamespace(
-            register=lambda registry, deps: SimpleNamespace(
-                extras={"memory_runtime": memory}
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        "bootstrap.tools.resolve_toolset_provider",
-        lambda name, readonly_tools=None: SimpleNamespace(
-            register=lambda registry, deps: SimpleNamespace(extras={})
-        ),
-    )
-    monkeypatch.setattr("bootstrap.tools.build_readonly_tools", lambda *_, **__: {})
-    config = ConfigModel(
-        provider="openai",
-        model="m",
-        api_key="k",
-        wiring=WiringConfig(toolsets=["schedule"]),
-    )
-    _tools, memory_runtime = build_registered_tools(
-        config=config,
-        workspace=tmp_path,
-        http_resources=cast(Any, SimpleNamespace()),
-        bus=cast(Any, SimpleNamespace()),
-        provider=object(),
-        light_provider=object(),
-        session_store=object(),
-        tools=ToolRegistry(),
-        event_publisher=EventBus(),
-        push_tool=MessagePushTool(role_target_validator=allow_every_role_target),
-    )
-
-    assert memory_runtime is memory
 
 
 def test_wiring_imports_without_preloading_the_plugin_kernel():

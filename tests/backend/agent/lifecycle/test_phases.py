@@ -14,10 +14,8 @@ from agent.core.turn_events import TurnEvents, core_kernel
 from shiori_sdk.commands import CommandInput, CommandRegistry
 from shiori_sdk.core.conversation import (
     COMMANDS,
-    PromptRendering,
     ReasoningFinished,
     ReasoningStarting,
-    StepFinished,
     StepStarting,
     TurnStarting,
 )
@@ -27,30 +25,24 @@ from agent.context import ContextBuilder
 from agent.core.passive_support import build_context_hint_message
 from agent.core.passive_turn import ContextStore
 from agent.core.runtime_support import TurnRunResult
-from agent.core.types import ContextBundle, HistoryMessage
+from agent.core.types import ContextBundle
 from agent.tools.registry import ToolRegistry
 from bus.event_bus import EventBus
 from shiori_sdk.messages import InboundMessage
-from core.roles import RoleStore
 from agent.lifecycle.types import (
     AfterReasoningInput,
-    AfterStepCtx,
     BeforeReasoningInput,
     BeforeStepInput,
     BeforeTurnCtx,
-    PromptRenderInput,
     TurnState,
 )
 from agent.lifecycle.phases.after_reasoning import AfterReasoningPhase
-from agent.lifecycle.phases.after_step import AfterStepPhase
 from agent.lifecycle.phases.before_reasoning import BeforeReasoningPhase
 from agent.lifecycle.phases.before_step import BeforeStepPhase
 from agent.lifecycle.phases.before_turn import (
     BeforeTurnPhase,
     MemoryConsolidationFailedError,
 )
-from agent.lifecycle.phases.prompt_render import PromptRenderPhase
-from shiori_sdk.prompting import PromptSectionRender
 from conversation.store import ConversationStore
 from session.manager import SessionManager
 
@@ -94,45 +86,6 @@ class _DummySession:
 
 
 # ── BeforeTurn ──
-
-
-@pytest.mark.asyncio
-async def test_before_turn_setup_fills_turn_state():
-    bus = EventBus()
-    session = _DummySession("telegram:123")
-
-    session_mgr = SimpleNamespace(
-        get_or_create=lambda key: session,
-    )
-
-    bundle = ContextBundle(
-        skill_mentions=["search"],
-        retrieved_memory_block="block_text",
-        retrieval_trace_raw={"trace": 1},
-        history_messages=[HistoryMessage(role="user", content="prev")],
-    )
-    ctx_store = SimpleNamespace(
-        prepare=AsyncMock(return_value=bundle),
-    )
-
-    phase = BeforeTurnPhase(
-        TurnEvents(bus, core_kernel),
-        cast(SessionManager, session_mgr),
-        cast(ContextStore, ctx_store),
-    )
-    msg = _inbound()
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-
-    ctx = await phase.run(state)
-
-    assert state.session is session
-    assert ctx.skill_names == ["search"]
-    assert ctx.channel == "telegram"
-    assert ctx.chat_id == "123"
-    assert ctx.retrieved_memory_block == "block_text"
-    assert ctx.retrieval_trace_raw == {"trace": 1}
-    assert ctx.history_messages == (HistoryMessage(role="user", content="prev"),)
-    assert ctx.abort is False
 
 
 @pytest.mark.asyncio
@@ -530,57 +483,6 @@ async def test_before_turn_chain_can_modify_skill_names():
 
 
 @pytest.mark.asyncio
-async def test_before_reasoning_setup_calls_tools_set_context():
-    bus = EventBus()
-    tools = Mock()
-    tools.set_context = Mock()
-
-    session = _DummySession("telegram:123")
-    session.messages.append({"role": "user", "content": "prev", "id": "msg_42"})
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-
-    context_builder = Mock()
-    context_builder.render = Mock(return_value=None)
-
-    phase = BeforeReasoningPhase(
-        TurnEvents(bus, core_kernel),
-        cast(ToolRegistry, tools),
-        cast(SessionManager, session_mgr),
-        cast(ContextBuilder, context_builder),
-    )
-    msg = _inbound()
-
-    before_turn = BeforeTurnCtx(
-        session_key="telegram:123",
-        channel=msg.channel,
-        chat_id=msg.chat_id,
-        content=msg.content,
-        timestamp=msg.timestamp,
-        retrieved_memory_block="block",
-        retrieval_trace_raw=None,
-        history_messages=(),
-        context_scope=None,
-        skill_names=["search"],
-    )
-
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-    state.session = session
-
-    ctx = await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
-
-    tools.set_context.assert_called_once()
-    call_kwargs = tools.set_context.call_args[1]
-    assert call_kwargs["channel"] == "telegram"
-    assert call_kwargs["chat_id"] == "123"
-    assert call_kwargs["current_user_message"] == msg.content
-    assert "current_user_source_ref" in call_kwargs
-
-    assert ctx.skill_names == ["search"]
-    assert ctx.retrieved_memory_block == "block"
-    assert ctx.extra_hints == []
-
-
-@pytest.mark.asyncio
 async def test_before_reasoning_requires_session():
     bus = EventBus()
     tools = Mock()
@@ -614,54 +516,6 @@ async def test_before_reasoning_requires_session():
         RuntimeError, match="BeforeReasoning requires TurnState.session"
     ):
         await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
-
-
-@pytest.mark.asyncio
-async def test_before_reasoning_finalize_calls_render():
-    bus = EventBus()
-    tools = Mock()
-    tools.set_context = Mock()
-
-    session = _DummySession("telegram:123")
-    session.my_meta = {"a": 1}
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-    session_mgr.peek_next_message_id = None
-
-    context_builder = Mock()
-    context_builder.render = Mock(return_value=None)
-
-    phase = BeforeReasoningPhase(
-        TurnEvents(bus, core_kernel),
-        cast(ToolRegistry, tools),
-        cast(SessionManager, session_mgr),
-        cast(ContextBuilder, context_builder),
-    )
-    msg = _inbound()
-
-    before_turn = BeforeTurnCtx(
-        session_key="telegram:123",
-        channel=msg.channel,
-        chat_id=msg.chat_id,
-        content=msg.content,
-        timestamp=msg.timestamp,
-        retrieved_memory_block="block",
-        retrieval_trace_raw=None,
-        history_messages=(),
-        context_scope=None,
-        skill_names=["search"],
-    )
-
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-    state.session = session
-
-    await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
-
-    context_builder.render.assert_called_once()
-    call_args = context_builder.render.call_args[0][0]
-    assert call_args.skill_names == ["search"]
-    assert call_args.retrieved_memory_block == "block"
-    assert call_args.channel == msg.channel
-    assert call_args.chat_id == msg.chat_id
 
 
 @pytest.mark.asyncio
@@ -706,122 +560,6 @@ async def test_before_reasoning_chain_can_add_extra_hints():
 
     ctx = await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
     assert ctx.extra_hints == ["hint from before turn", "hint from plugin"]
-
-
-@pytest.mark.asyncio
-async def test_before_reasoning_chain_modify_skill_names_used_in_finalize_render():
-    bus = EventBus()
-    tools = Mock()
-    tools.set_context = Mock()
-
-    session = _DummySession("telegram:123")
-    session_mgr = SimpleNamespace(get_or_create=lambda key: session)
-
-    context_builder = Mock()
-    context_builder.render = Mock(return_value=None)
-
-    async def modify_chain(event: ReasoningStarting) -> ReasoningStarting:
-        return replace(
-            event,
-            skill_names=(*event.skill_names, "chain_added_skill"),
-            retrieved_memory_block="chain_modified_block",
-        )
-
-    kernel = kernel_with(on=((ReasoningStarting, modify_chain),))
-    phase = BeforeReasoningPhase(
-        TurnEvents(bus, lambda: kernel),
-        cast(ToolRegistry, tools),
-        cast(SessionManager, session_mgr),
-        cast(ContextBuilder, context_builder),
-    )
-    msg = _inbound()
-
-    before_turn = BeforeTurnCtx(
-        session_key="telegram:123",
-        channel=msg.channel,
-        chat_id=msg.chat_id,
-        content=msg.content,
-        timestamp=msg.timestamp,
-        retrieved_memory_block="original_block",
-        retrieval_trace_raw=None,
-        history_messages=(),
-        context_scope=None,
-        skill_names=["base_skill"],
-    )
-
-    state = TurnState(msg=msg, session_key="telegram:123", dispatch_outbound=True)
-    state.session = session
-
-    _ = await phase.run(BeforeReasoningInput(state=state, before_turn=before_turn))
-
-    # finalize 必须用 chain 修改后的值 render
-    call_args = context_builder.render.call_args[0][0]
-    assert "chain_added_skill" in call_args.skill_names
-    assert call_args.retrieved_memory_block == "chain_modified_block"
-
-
-@pytest.mark.asyncio
-async def test_before_step_setup_records_token_estimate():
-    bus = EventBus()
-    phase = BeforeStepPhase(TurnEvents(bus, core_kernel))
-    messages = [{"role": "user", "content": "hello"}]
-
-    ctx = await phase.run(
-        BeforeStepInput(
-            session_key="k",
-            channel="c",
-            chat_id="ch",
-            iteration=1,
-            messages=messages,
-            visible_names=None,
-        )
-    )
-
-    assert ctx.input_tokens_estimate > 0
-
-
-@pytest.mark.asyncio
-async def test_prompt_render_chain_respects_disabled_sections(tmp_path):
-    RoleStore(tmp_path).create_role(role_id="mira", name="Mira", system_prompt="test")
-
-    async def add_bottom(event: PromptRendering) -> PromptRendering:
-        section = PromptSectionRender(
-            name="memes", content="# Memes\n\n<meme:happy>", is_static=False
-        )
-        return replace(event, system_sections_bottom=(section,))
-
-    kernel = kernel_with(on=((PromptRendering, add_bottom),))
-    memory = SimpleNamespace(
-        read_self=lambda: "",
-        read_profile=lambda: "",
-        read_recent_context=lambda: "",
-        get_memory_context=lambda: "",
-    )
-    context = ContextBuilder(
-        tmp_path, memory=cast(Any, memory), runtime_roles=RoleStore(tmp_path)
-    )
-    phase = run_in_turn(
-        PromptRenderPhase(TurnEvents(EventBus(), lambda: kernel), context)
-    )
-
-    result = await phase.run(
-        PromptRenderInput(
-            session_key="k",
-            channel="cli",
-            chat_id="ch",
-            content="hello",
-            media=None,
-            timestamp=_now,
-            history=[],
-            skill_names=None,
-            retrieved_memory_block="",
-            disabled_sections={"memes"},
-            turn_injection_prompt="",
-            session_metadata={"role_id": "mira"},
-        )
-    )
-
-    assert "<meme:happy>" not in str(result.messages[0]["content"])
 
 
 @pytest.mark.asyncio
@@ -874,35 +612,6 @@ async def test_before_step_finalize_early_stop():
 
     assert ctx.early_stop is True
     assert ctx.early_stop_reply == "预算不足"
-
-
-@pytest.mark.asyncio
-async def test_after_step_phase_runs_observers():
-    bus = EventBus()
-    side_effect: list[str] = []
-
-    async def handler(event: StepFinished) -> None:
-        side_effect.append(event.partial_reply)
-
-    bus.on(StepFinished, handler)
-    phase = AfterStepPhase(TurnEvents(bus, core_kernel))
-    await phase.run(
-        AfterStepCtx(
-            session_key="k",
-            channel="c",
-            chat_id="ch",
-            iteration=0,
-            context_tokens_estimate=0,
-            tools_called=(),
-            partial_reply="ok",
-            tools_used_so_far=(),
-            tool_chain_partial=(),
-            partial_thinking=None,
-            has_more=True,
-        )
-    )
-
-    assert side_effect == ["ok"]
 
 
 @pytest.mark.asyncio

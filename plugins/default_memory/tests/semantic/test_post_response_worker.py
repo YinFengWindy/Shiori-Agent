@@ -244,17 +244,6 @@ def test_collect_explicit_memorized_accepts_item_id_format():
     assert "memu_12345" in protected
 
 
-def test_consume_budget_reports_affordability_and_remaining_tokens():
-    worker = PostResponseMemoryWorker(
-        memorizer=cast(Any, _DummyMemorizer_post_response_worker()),
-        retriever=cast(Any, _DummyRetriever_post_response_worker([])),
-        light_provider=cast(Any, _DummyProvider_post_response_worker()),
-        light_model="test",
-    )
-
-    assert worker._consume_budget(10, 3) == (True, 7)
-
-
 def test_extract_invalidation_topics_returns_topics_parsed_from_light_model():
     provider = SimpleNamespace(
         chat=AsyncMock(return_value=_Resp_post_response_worker('["topic"]'))

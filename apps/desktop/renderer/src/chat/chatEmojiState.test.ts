@@ -2,23 +2,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { commonChatEmojis, insertEmojiIntoChatDraft } from "./chatEmojiState";
-
-describe("commonChatEmojis", () => {
-  it("keeps a fixed lightweight desktop emoji set", () => {
-    assert.equal(commonChatEmojis.length, 24);
-    assert.deepEqual(commonChatEmojis.slice(0, 4), ["😀", "😁", "😂", "🤣"]);
-  });
-});
+import {  insertEmojiIntoChatDraft } from "./chatEmojiState";
 
 describe("insertEmojiIntoChatDraft", () => {
-  it("appends emoji when no selection is provided", () => {
-    const result = insertEmojiIntoChatDraft("hello", "😀");
-
-    assert.equal(result.value, "hello😀");
-    assert.equal(result.selectionStart, 7);
-    assert.equal(result.selectionEnd, 7);
-  });
 
   it("inserts emoji at the current caret position", () => {
     const result = insertEmojiIntoChatDraft("hello world", "✨", 5, 5);

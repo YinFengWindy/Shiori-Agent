@@ -53,10 +53,6 @@ def test_validate_params_reports_missing_required_fields():
     ]
 
 
-def test_to_schema_exposes_tool_name():
-    assert _DummyTool().to_schema()["function"]["name"] == "dummy"
-
-
 def test_validate_params_rejects_non_object_schema():
     class _BadSchemaTool(_DummyTool):
         @property

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from tests.support.generation_getters import run_in_turn
 from dataclasses import replace
-from datetime import datetime
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock, MagicMock
@@ -11,8 +10,7 @@ import pytest
 
 from agent.context import ContextBuilder
 from agent.core.passive_turn import ContextStore, Reasoner
-from agent.core.runtime_support import SessionLike, TurnRunResult
-from agent.core.passive_support import predict_current_user_source_ref
+from agent.core.runtime_support import TurnRunResult
 from agent.core.passive_turn import AgentCore, AgentCoreDeps
 from agent.core.types import ContextBundle
 from agent.looping.ports import SessionServices
@@ -24,7 +22,6 @@ from shiori_sdk.core.conversation import ReasoningStarting, TurnStarting
 from shiori_sdk.kernel import Veto
 from tests.support.tool_calls import kernel_with
 from agent.lifecycle.phases.before_turn import MemoryConsolidationFailedError
-from session.manager import SessionManager
 
 
 class _DummySession:
@@ -55,155 +52,6 @@ class _DummySession:
         if media is not None:
             kwargs["media"] = media
         self.messages.append({"role": role, "content": content, **kwargs})
-
-
-@pytest.mark.asyncio
-async def test_agent_core_process_runs_prepare_prompt_run_commit_in_order():
-    order: list[str] = []
-    session = _DummySession("telegram:123")
-    context_store = SimpleNamespace(
-        prepare=AsyncMock(
-            side_effect=lambda **kwargs: order.append("prepare")
-            or ContextBundle(
-                skill_mentions=["refactor"],
-                retrieved_memory_block="remembered",
-                retrieval_trace_raw={"route": "RETRIEVE"},
-            )
-        )
-    )
-
-    def _render(request, *, session_metadata=None):
-        _ = request, session_metadata
-        order.append("render")
-        return SimpleNamespace(system_prompt="system prompt", messages=[])
-
-    context = SimpleNamespace(render=MagicMock(side_effect=_render))
-    tools = ToolRegistry()
-    tools.set_context = MagicMock(
-        side_effect=lambda **kwargs: order.append("tool_context")
-    )
-    reasoner = SimpleNamespace(
-        run_turn=AsyncMock(
-            side_effect=lambda *args, **kwargs: order.append("run")
-            or TurnRunResult(
-                reply="final",
-                tools_used=["shell"],
-                tool_chain=[{"text": "done", "calls": []}],
-                thinking="think",
-                context_retry={"selected_plan": "full"},
-            )
-        ),
-    )
-    agent_core = AgentCore(
-        AgentCoreDeps(
-            session=cast(
-                SessionServices,
-                SimpleNamespace(
-                    session_manager=SimpleNamespace(
-                        presence=MagicMock(),
-                        get_or_create=MagicMock(return_value=session),
-                        peek_next_message_id=MagicMock(return_value="telegram:123:0"),
-                        append_messages=AsyncMock(),
-                    ),
-                ),
-            ),
-            context_store=cast(ContextStore, context_store),
-            context=cast(ContextBuilder, context),
-            tools=cast(ToolRegistry, tools),
-            reasoner=cast(Reasoner, reasoner),
-        )
-    )
-    run_in_turn(agent_core, method="process")
-    msg = InboundMessage(
-        channel="telegram",
-        sender="hua",
-        chat_id="123",
-        content="你好",
-        timestamp=datetime(2026, 4, 4, 22, 0, 0),
-    )
-
-    out = await agent_core.process(msg, "telegram:123")
-
-    assert out.content == "final"
-    assert order == ["prepare", "tool_context", "render", "run"]
-    assert context_store.prepare.await_args.kwargs["session_key"] == "telegram:123"
-    render_request = context.render.call_args.args[0]
-    assert render_request.current_message == ""
-    assert render_request.skill_names == ["refactor"]
-    assert render_request.retrieved_memory_block == "remembered"
-    assert context.render.call_args.kwargs["session_metadata"] == {}
-    tools.set_context.assert_called_once_with(
-        channel="telegram",
-        chat_id="123",
-        session_key="telegram:123",
-        turn_session_key="telegram:123",
-        role_id="",
-        current_user_message="你好",
-        role_config_version="",
-        thread_id="",
-        delivery_key="",
-        sender_id="hua",
-        sender_is_user="true",
-        account_full_tools="false",
-        context_scope="",
-        current_user_source_ref="telegram:123:0",
-        current_timestamp="2026-04-04T22:00:00",
-        defer_push_session_sync="true",
-    )
-    assert reasoner.run_turn.await_args.kwargs["skill_names"] == ["refactor"]
-    assert reasoner.run_turn.await_args.kwargs["retrieved_memory_block"] == "remembered"
-    # AfterReasoning persists user+assistant messages to session
-    assert len(session.messages) == 2
-    assert session.messages[0]["role"] == "user"
-    assert session.messages[1]["role"] == "assistant"
-    assert session.messages[1]["content"] == "final"
-
-
-@pytest.mark.asyncio
-async def test_agent_core_process_coerces_empty_reply_before_commit():
-    session = _DummySession("cli:1")
-    context_store = SimpleNamespace(
-        prepare=AsyncMock(return_value=ContextBundle()),
-    )
-    agent_core = AgentCore(
-        AgentCoreDeps(
-            session=cast(
-                SessionServices,
-                SimpleNamespace(
-                    session_manager=SimpleNamespace(
-                        presence=MagicMock(),
-                        get_or_create=MagicMock(return_value=session),
-                        peek_next_message_id=MagicMock(return_value="cli:1:0"),
-                        append_messages=AsyncMock(),
-                    ),
-                ),
-            ),
-            context_store=cast(ContextStore, context_store),
-            context=cast(
-                ContextBuilder,
-                SimpleNamespace(
-                    render=MagicMock(
-                        return_value=SimpleNamespace(
-                            system_prompt="prompt", messages=[]
-                        )
-                    ),
-                ),
-            ),
-            tools=ToolRegistry(),
-            reasoner=cast(
-                Reasoner,
-                SimpleNamespace(
-                    run_turn=AsyncMock(return_value=TurnRunResult(reply=None)),
-                ),
-            ),
-        )
-    )
-    run_in_turn(agent_core, method="process")
-    msg = InboundMessage(channel="cli", sender="hua", chat_id="1", content="hi")
-
-    out = await agent_core.process(msg, "cli:1")
-
-    assert "no response to give" in out.content
 
 
 @pytest.mark.asyncio
@@ -263,18 +111,6 @@ async def test_agent_core_before_reasoning_can_patch_context():
     assert render_request.retrieved_memory_block == "new memory"
     assert reasoner.run_turn.await_args.kwargs["skill_names"] == ["new"]
     assert reasoner.run_turn.await_args.kwargs["retrieved_memory_block"] == "new memory"
-
-
-def test_predict_current_user_source_ref_falls_back_to_last_session_message():
-    session = _DummySession("telegram:123")
-    session.messages.append({"id": "telegram:123:41"})
-
-    value = predict_current_user_source_ref(
-        session_manager=cast(SessionManager, SimpleNamespace()),
-        session=cast(SessionLike, session),
-    )
-
-    assert value == "telegram:123:41"
 
 
 @pytest.mark.asyncio

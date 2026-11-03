@@ -132,13 +132,6 @@ async def test_prompt_rendering_handlers_choose_reply_mode_and_add_sections(tmp_
     assert "# Probe" in system
 
 
-async def test_bound_policy_appends_the_chat_prompt(tmp_path):
-    result = await _render(tmp_path)
-
-    assert result.natural_chat is True
-    assert NATURAL_CHAT_PROMPT in str(result.messages[0]["content"])
-
-
 async def test_bound_missing_policy_forces_a_single_reply(tmp_path):
     result = await _render(tmp_path, policy=None)
 

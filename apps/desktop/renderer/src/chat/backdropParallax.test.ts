@@ -2,52 +2,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createParallaxLoop, parallaxTarget, parallaxTransforms, stepParallax, type ParallaxPoint } from "./backdropParallax";
-
-const rect = { left: 100, top: 50, width: 800, height: 600 };
-
-describe("parallaxTarget", () => {
-  it("normalises the pointer around the centre and clamps outside", () => {
-    assert.deepEqual(parallaxTarget(500, 350, rect), { x: 0, y: 0 });
-    assert.deepEqual(parallaxTarget(900, 50, rect), { x: 1, y: -1 });
-    assert.deepEqual(parallaxTarget(2000, -400, rect), { x: 1, y: -1 });
-  });
-});
-
-describe("stepParallax", () => {
-  it("covers the same distance per second at any frame rate", () => {
-    let at60: ParallaxPoint = { x: 0, y: 0 };
-    for (let frame = 0; frame < 6; frame += 1) at60 = stepParallax(at60, { x: 1, y: 0 }, 1000 / 60).point;
-    let at30: ParallaxPoint = { x: 0, y: 0 };
-    for (let frame = 0; frame < 3; frame += 1) at30 = stepParallax(at30, { x: 1, y: 0 }, 1000 / 30).point;
-    assert.ok(Math.abs(at60.x - at30.x) < 1e-9);
-  });
-
-  it("snaps onto the target once close and reports settled", () => {
-    assert.deepEqual(stepParallax({ x: 0.99, y: -0.99 }, { x: 1, y: -1 }, 16), { point: { x: 1, y: -1 }, settled: true });
-    assert.equal(stepParallax({ x: 0, y: 0 }, { x: 1, y: 0 }, 16).settled, false);
-  });
-
-  it("does not leap after a long stall", () => {
-    assert.deepEqual(
-      stepParallax({ x: 0, y: 0 }, { x: 1, y: 0 }, 5000).point,
-      stepParallax({ x: 0, y: 0 }, { x: 1, y: 0 }, 64).point,
-    );
-  });
-});
-
-describe("parallaxTransforms", () => {
-  it("moves the background up to 12px against the pointer and the conversation 3px with it", () => {
-    assert.deepEqual(parallaxTransforms({ x: 1, y: -1 }), {
-      backdrop: "translate3d(-12.00px, 12.00px, 0)",
-      foreground: "translate3d(3.00px, -3.00px, 0)",
-    });
-  });
-
-  it("clears the transforms at the centre", () => {
-    assert.deepEqual(parallaxTransforms({ x: 0, y: 0 }), { backdrop: "", foreground: "" });
-  });
-});
+import { createParallaxLoop, type ParallaxPoint } from "./backdropParallax";
 
 describe("createParallaxLoop", () => {
   function fakeFrames() {

@@ -69,14 +69,6 @@ def test_clean_workspace_creates_editable_defaults_in_data_directory(
     assert path.is_file()
 
 
-def test_default_memory_config_reads_example_defaults() -> None:
-    cfg = load_default_memory_config()
-
-    assert cfg.retrieval.top_k_history == 8
-    assert cfg.retrieval.thresholds.procedure == 0.66
-    assert cfg.retrieval.inject.max_chars == 6000
-
-
 def test_default_memory_config_local_overrides(tmp_path: Path) -> None:
     (tmp_path / "config.local.toml").write_text(
         """

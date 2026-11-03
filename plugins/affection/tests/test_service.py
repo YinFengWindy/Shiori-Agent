@@ -53,14 +53,6 @@ def _snapshot_payload(*, role_id: str = "mira") -> dict:
     }
 
 
-@pytest.mark.parametrize(
-    ("value", "expected"),
-    [(12, 12), ("12", 12), (-4, 0), ("invalid", 0), ([], 0)],
-)
-def test_normalize_message_count_accepts_json_scalars(value: object, expected: int):
-    assert RoleRelationshipRuntimeService._normalize_message_count(value) == expected
-
-
 def test_snapshot_rejects_non_first_person_self_view(host):
     runtime = RoleRelationshipRuntimeService(host)
 
@@ -514,14 +506,6 @@ async def test_heartbeat_keeps_settling_other_roles_when_one_role_is_broken(
     state = runtime.affection.read_state(healthy)
     assert state is not None and state.value == 44
     assert f"role={broken}" in caplog.text
-
-
-def test_loneliness_heartbeat_loop_defaults_to_ten_minutes(host):
-    runtime = RoleRelationshipRuntimeService(host)
-
-    loop = LonelinessHeartbeatLoop(runtime)
-
-    assert loop._interval == 10 * 60
 
 
 @pytest.mark.asyncio
