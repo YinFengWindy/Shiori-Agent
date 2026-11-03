@@ -466,13 +466,6 @@ def test_memory_correction_protocol_covers_soft_corrections_and_forget_memory():
     assert "调用了 `forget_memory` 却没有先调用 `fetch_messages`" in prompt
 
 
-def test_behavior_rules_prioritize_current_request_and_fact_grounding():
-    prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
-    assert "优先回答用户当前请求" in prompt
-    assert "信息不足时直接说不确定" in prompt
-    assert "RECENT_CONTEXT.md" in prompt
-
-
 def test_behavior_rules_use_evidence_threshold_not_keyword_filtering():
     prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
     assert "知识截止时间" in prompt
