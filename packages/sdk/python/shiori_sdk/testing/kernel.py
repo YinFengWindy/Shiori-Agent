@@ -27,8 +27,8 @@ class KernelHarness:
         kernel: Kernel | None = None,
     ) -> None:
         self.kernel = kernel or Kernel()
-        # A later plan can exclude a still-running plugin from order(). Keep
-        # activation order so stop still releases it after its consumers.
+        # A later plan can exclude a still-running plugin from order(). Remember
+        # running ids so stop also releases those missing from the current plan.
         self._started = dict.fromkeys(
             plugin_id
             for plugin_id in self.kernel.order()
@@ -94,9 +94,10 @@ class KernelHarness:
     async def stop(self) -> list[Exception]:
         """Stops every running plugin; returns the cleanup errors."""
         errors: list[Exception] = []
-        # Include any instances activated directly on an injected kernel too.
-        order = dict.fromkeys((*self._started, *self.kernel.order()))
-        for plugin_id in reversed(order):
+        # Current dependency order wins over activation history: an optional
+        # consumer may have started before its provider. Excluded ids follow.
+        order = dict.fromkeys((*reversed(self.kernel.order()), *self._started))
+        for plugin_id in order:
             errors.extend(await self.kernel.deactivate(plugin_id))
             _ = self._started.pop(plugin_id, None)
         return errors
