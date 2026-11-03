@@ -1,7 +1,5 @@
 """Contract fakes exercise setup, declared keys and cleanup without host storage."""
 
-from pathlib import Path
-
 import pytest
 
 from shiori_sdk.core.services import HTTP, KV, RPC
@@ -9,16 +7,6 @@ from shiori_sdk.kernel import KernelError
 from shiori_sdk.testing import FakePluginContext
 from shiori_sdk.testing.memory_context import FakeRpc
 from shiori_sdk.testing.storage import FakeKV
-
-
-@pytest.fixture
-def sdk_plugin_dir(tmp_path: Path) -> Path:
-    package = tmp_path / "package"
-    package.mkdir()
-    (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: probe\ninject:\n  - rpc\n", encoding="utf-8"
-    )
-    return package
 
 
 async def test_cleanup_is_lifo_stops_events_first_and_rejects_cached_registrations() -> (

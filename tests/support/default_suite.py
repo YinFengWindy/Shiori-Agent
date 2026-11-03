@@ -32,7 +32,6 @@ DEFAULT_DIRECTORIES: tuple[str, ...] = (
     "tests/backend/agent/lifecycle",
     "tests/backend/agent/looping",
     "tests/backend/agent/turns",
-    "tests/backend/agent/policies",
     "tests/backend/agent/background",
     "tests/backend/agent/account_delivery",
 )

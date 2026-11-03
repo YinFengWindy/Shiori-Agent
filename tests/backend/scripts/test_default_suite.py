@@ -13,7 +13,7 @@ from tests.support.default_suite import (
 
 def test_allowlist_paths_exist() -> None:
     for directory in DEFAULT_DIRECTORIES:
-        assert (REPO_ROOT / directory).is_dir(), directory
+        assert any((REPO_ROOT / directory).rglob("test_*.py")), directory
     for relative in DEFAULT_FILES:
         assert (REPO_ROOT / relative).is_file(), relative
 
