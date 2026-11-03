@@ -1,6 +1,7 @@
 """Host plugin assembly entry points used by bootstrap and bridge callers."""
 
-from agent.plugin_host.kernel import PluginGenerationSettings, PluginKernel
+from agent.plugin_host.kernel import PluginKernel
+from agent.plugin_host.settings import PluginGenerationSettings
 from agent.plugin_host.unload import (
     PluginReloadFailed,
     PluginReloadTimeout,

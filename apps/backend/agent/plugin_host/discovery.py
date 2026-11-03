@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from shiori_sdk.kernel import PackageContractError, PluginDiagnostic
-from agent.plugin_host.handle import PluginRecord
+from agent.plugin_host.record import PluginRecord
 from agent.plugin_host.manifest import (
     IncompatibleSdkError,
     ManifestError,

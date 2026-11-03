@@ -71,3 +71,33 @@ T5 工作树实测（同上口径）：
 | shiori_sdk/kernel/*.py | 7 | 1047 | 688 |
 
 宿主与两组 bridge 插件模块合计从 T4 的 6436 物理行 / 4778 代码行变为 6423 / 4762。通信迁移主要改变职责归属，净减少仅 13 物理行 / 16 代码行；不能把宿主目录的缩小当作整体删除。T6 继续拆分宿主大文件。
+
+
+## T6 宿主按职责拆分
+
+`PluginKernel` 保留每代状态、转换锁与公开入口；辅助函数通过显式参数使用原有 owner，不新增状态镜像或通用上下文包装。`settings.py` 接收原代际配置与启用判定；`record.py` 由 `handle.py` 改名并集中候选定位。准入和预检归 `admission.py`，可信导入、schema 与上下文装配归 `plugin_setup.py`，闭包选择、D14 拒绝及逐成员排空归 `closures.py`，渲染门与激活令牌归 `renderer_gate.py`。`reload.py`、`state.py` 只更新候选类型的导入位置。公开方法签名与测试断言保持不变。
+
+T6 工作树实测（同上口径）：
+
+| 范围 | Python 文件 | 物理行 | 代码行 |
+|---|---|---|---|
+| agent/plugin_host/*.py | 32 | 4511 | 3310 |
+| desktop_bridge/runtime/plugin_*.py | 10 | 1649 | 1261 |
+| desktop_bridge/plugin_rpc/*.py | 6 | 551 | 424 |
+| shiori_sdk/kernel/*.py | 7 | 1047 | 688 |
+
+宿主与两组 bridge 插件模块合计由 T5 的 6423 物理行 / 4762 代码行变为 6711 / 4995，增加 288 / 233；增加来自模块导入、显式参数和调用装配。此阶段是职责拆分，不能把 `kernel.py` 缩小视为整体净删除。
+
+| 宿主模块 | 物理行 |
+|---|---|
+| kernel.py | 590 |
+| settings.py | 50 |
+| admission.py | 235 |
+| plugin_setup.py | 267 |
+| closures.py | 147 |
+| renderer_gate.py | 91 |
+| record.py | 51 |
+| reload.py | 381 |
+| state.py | 139 |
+
+宿主全部 Python 业务文件均不超过 600 物理行；`kernel.py` 为 590 行，仍接近上限。SDK 内核仍是 688/700；T6 不改变 API、运行行为或发布门闩。

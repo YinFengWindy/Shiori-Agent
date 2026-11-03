@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent.plugin_host import PluginGenerationSettings
+from agent.plugin_host.settings import PluginGenerationSettings
 from desktop_bridge.runtime.plugin_management import memory_engine_provider
 from tests.support.plugin_kernel import host_kernel
 

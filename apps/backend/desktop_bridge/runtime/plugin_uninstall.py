@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from agent.plugin_host.handle import PluginRecord
+from agent.plugin_host.record import PluginRecord
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from desktop_bridge.runtime.apply import RuntimeApplyError
 from desktop_bridge.runtime.plugin_package_store import (

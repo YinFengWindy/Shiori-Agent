@@ -21,11 +21,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agent.plugin_host.kernel import (
-    PLUGIN_ENABLED_CONFIG_KEY,
-    PluginKernel,
-    plugin_enabled,
-)
+from agent.plugin_host.kernel import PluginKernel
+from agent.plugin_host.settings import PLUGIN_ENABLED_CONFIG_KEY, plugin_enabled
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from agent.plugin_host.manifest import PluginManifest
 from bootstrap.app import AppRuntime

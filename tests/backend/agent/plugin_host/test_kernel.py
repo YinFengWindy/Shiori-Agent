@@ -10,7 +10,7 @@ from functools import partial
 import pytest
 from tests.support.plugin_kernel import set_plugin_enabled
 
-from agent.plugin_host import PluginGenerationSettings
+from agent.plugin_host.settings import PluginGenerationSettings
 from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from shiori_sdk.core.services import LIGHT_PROVIDER
 from agent.plugin_host.manifest import group_listening_channels
@@ -1529,7 +1529,7 @@ async def test_plugin_dependency_rejection_keeps_contract_diagnostic(
 async def test_external_package_never_executes_even_with_config_enablement(
     contract_package, enabled
 ):
-    from agent.plugin_host import PluginGenerationSettings
+    from agent.plugin_host.settings import PluginGenerationSettings
 
     marker = contract_package / "executed.txt"
     (contract_package / "backend/plugin.py").write_text(
