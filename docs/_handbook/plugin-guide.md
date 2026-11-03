@@ -25,7 +25,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `frontend.entry` | 否 | 包内前端入口，具名导出 `ui` / `background` / `surface`。外部构建生成同一 ESM 的 `frontend.exports`、`frontend.css` 和 `frontend.peers`，见[前端契约](plugin-frontend.md#入口与产物) |
 | `assets` | 否 | 必须存在的包内常规文件列表，默认 `[]` |
 | `dependencies` / `optional_dependencies` | 否 | 插件 ID 列表（强 / 可选），不能重复出现在两边 |
-| `supports_hot_unload` | 否 | 布尔，默认 `true`；`false` 的插件只能随重启变化 |
+| `supports_hot_unload` | 否 | 布尔，默认 `true`；只有证实无法安全卸载的原生扩展才写 `false`。声明渠道的插件由宿主判为不可代内重载；TTS/ASR 保持默认。闭包含不可重载插件时整体走需重启路径 |
 | `display_name` / `category` / `default_enabled` | 否 | 标题、`feature` / `channel` / `system` 分组、默认启用（严格布尔） |
 | `distribution` | 否 | `builtin`（默认）或 `external` |
 | `desc` / `author` / `config_model` | 否 | 描述与配置模型 |
@@ -53,6 +53,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 上下文上**没有** `spawn`、`on_drain`、`log`、`config`、`data_dir`。它们都是服务：
 
 - 后台任务：`ctx.require(BACKGROUND).spawn(coro, name=...)`；需要保留调用方运行租约直到任务结束的用 `spawn_runtime`。卸载时取消，不排空。
+- `RUNTIME.on_drain` 只等待已接受的工作，可重复调用，也可能在放弃重载后继续存活；不得在回调里拆资源，清理登记到 `ctx.effect`。
 - 重载前的排空：`ctx.require(RUNTIME).on_drain(callback)`；`RUNTIME.was_active` 为 `True` 表示这个插件在本次 setup 之前已经在运行：代内重载重新拉起的实例、可选依赖的提供方代内启停时随之重新 setup 的实例都是这样，换代时上一代处于 `ACTIVE` 的插件也是这样；首次启动和从停用状态启用时为 `False`。用它跳过只该做一次的启动恢复。语义见[生命周期](plugin-lifecycle.md#代内重载)。
 - 配置：`ctx.require(CONFIG)`；私有数据目录与迁移：`STORAGE`；工作区目录：`WORKSPACE`。
 - 日志：用标准库 `logging`。

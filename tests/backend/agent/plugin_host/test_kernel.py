@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
+from functools import partial
 
 import pytest
 
@@ -13,7 +14,7 @@ from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
 from shiori_sdk.core.services import LIGHT_PROVIDER
 from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
-from agent.plugin_host.trust_store import PluginTrustStore
+from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
 from shiori_sdk.kernel import PluginFailed
 from shiori_sdk.storage import plugin_data_dir
@@ -169,7 +170,10 @@ async def test_external_source_import_boundary_is_reclaimed_with_plugin_effects(
     kernel = host_kernel(
         [tmp_path],
         external_plugin_dirs=[tmp_path],
-        settings=PluginGenerationSettings(workspace=tmp_path),
+        settings=PluginGenerationSettings(
+            workspace=tmp_path,
+            is_trusted=partial(PluginTrustStore(tmp_path).is_trusted, activation=True),
+        ),
     )
     before = set(sys.meta_path)
     try:
@@ -1535,7 +1539,10 @@ async def test_package_changed_after_discovery_is_not_started_by_the_kernel(
     kernel = host_kernel(
         [tmp_path],
         external_plugin_dirs=[tmp_path],
-        settings=PluginGenerationSettings(workspace=tmp_path),
+        settings=PluginGenerationSettings(
+            workspace=tmp_path,
+            is_trusted=partial(PluginTrustStore(tmp_path).is_trusted, activation=True),
+        ),
     )
     _ = kernel.discover()
     marker = tmp_path / "executed.txt"
@@ -1590,7 +1597,10 @@ async def test_refused_duplicate_provider_leaves_the_key_to_the_other(tmp_path):
     kernel = host_kernel(
         [workspace],
         external_plugin_dirs=[workspace],
-        settings=PluginGenerationSettings(workspace=tmp_path),
+        settings=PluginGenerationSettings(
+            workspace=tmp_path,
+            is_trusted=partial(PluginTrustStore(tmp_path).is_trusted, activation=True),
+        ),
     )
     _ = kernel.discover()
     (workspace / "beta/backend/plugin.py").write_text(

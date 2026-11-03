@@ -36,6 +36,7 @@ from agent.plugin_host.config_schema import (
 )
 from agent.plugin_host.dependencies import PluginDependencies, PluginDependencyError
 from agent.plugin_host.discovery import (
+    TrustCheck,
     ExternalSourceDiagnostic,
     discover_plugins,
     find_uninstalled_external_sources,
@@ -43,7 +44,6 @@ from agent.plugin_host.discovery import (
 )
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.handle import PluginHandle, PluginRecord, PluginState
-from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
     ManifestError,
     PluginManifest,
@@ -57,7 +57,6 @@ from agent.plugin_host.plugin_data import (
 )
 from agent.plugin_host.runtime_context import PluginRuntimeContext
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
-from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.execution_identity import PluginExecutionIdentity
 from agent.plugin_host.trusted_imports import TrustedPluginImports
 from agent.plugin_host.reload import (
@@ -163,7 +162,7 @@ class PluginGenerationSettings:
     within the generation, so a later re-enable is a fresh start.
     """
 
-    # Trust store, execution identity and plugin KV root; None in host tests
+    # Execution identity and plugin KV root; None in host tests
     # without a workspace (a plugin declaring ``kv`` then fails before setup).
     workspace: Path | None = None
     plugin_configs: dict[str, dict[str, Any]] = field(default_factory=dict)
@@ -174,8 +173,8 @@ class PluginGenerationSettings:
     process_resources: ProcessResourceSource | None = None
     is_reload: bool = False
     previously_active_plugins: frozenset[str] = frozenset()
-    # Frozen hosts may supply their build's dependency inventory and renderer ABI.
-    plugin_runtime_contract: HostRuntimeContract | None = None
+    # Live activation approval supplied by bootstrap; no checker means untrusted.
+    is_trusted: TrustCheck | None = None
 
 
 class PluginKernel:
@@ -276,12 +275,8 @@ class PluginKernel:
             external_roots=self._external_dirs,
             namespace=self._namespace,
             strict=self._strict,
-            host=self._settings.plugin_runtime_contract,
-            trust=(
-                PluginTrustStore(self._settings.workspace)
-                if self._settings.workspace is not None
-                else None
-            ),
+            workspace=self._settings.workspace,
+            is_trusted=self._settings.is_trusted,
         )
 
     async def admit_trusted_candidate(self, candidate: PluginRecord) -> None:
@@ -309,10 +304,10 @@ class PluginKernel:
                 record.candidate_id: record.admission for record in records
             }
             records[records.index(previous)] = candidate
-            workspace = self._settings.workspace
-            if workspace is None:
-                raise ValueError("插件工作区不可用")
-            refresh_dependency_admission(records, PluginTrustStore(workspace))
+            is_trusted = self._settings.is_trusted
+            if is_trusted is None:
+                raise ValueError("插件信任检查不可用")
+            refresh_dependency_admission(records, is_trusted)
             self._records = records
             for record in records:
                 target = record.candidate_id == candidate.candidate_id

@@ -41,10 +41,10 @@ jobs:
       - name: Validate plugin manifests against the manifest schema
         run: .venv/bin/python -m scripts.check_manifest_schema
       # Plugin refactor (#899 P0, #901 P2): every layer contract holds, so a
-      # broken one fails the job. The kernel LOC budget still only reports (P8).
+      # broken one fails the job. The kernel LOC budget is also enforced (P8).
       - name: Enforce layer contracts (import-linter)
         run: .venv/bin/lint-imports --no-cache
-      - name: Report kernel LOC budget (non-blocking)
+      - name: Enforce kernel LOC budget
         run: .venv/bin/python -m scripts.kernel_loc_budget
 
       - name: Run pyright

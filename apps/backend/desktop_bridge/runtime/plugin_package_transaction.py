@@ -10,7 +10,7 @@ from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.discovery import discover_plugins
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_fingerprint import inspect_package_content
-from agent.plugin_host.trust_store import PluginTrustStore
+from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
 from bootstrap.paths import plugin_roots
 from desktop_bridge.plugin_config_text import remove_plugin_table
 from desktop_bridge.runtime.plugin_package_store import (
@@ -52,7 +52,6 @@ def _check_conflicts(store: PluginPackageStore, operation: PackageOperation) -> 
         external_roots=[root],
         namespace="install",
         strict=False,
-        host=None,
     )
     if any(
         record.manifest.id == operation.plugin_id

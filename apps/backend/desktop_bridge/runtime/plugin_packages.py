@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from pathlib import Path
 import re
 
-from agent.plugin_host.package_archive import extract_package_zip
+from desktop_bridge.runtime.plugin_package_archive import extract_package_zip
 from shiori_sdk.kernel import PackageContractError
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from desktop_bridge.runtime.apply import RuntimeApplyError

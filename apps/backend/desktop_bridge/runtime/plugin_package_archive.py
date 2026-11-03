@@ -9,7 +9,6 @@ from tempfile import TemporaryDirectory
 from zipfile import BadZipFile, ZipFile
 
 from shiori_sdk.kernel import PackageContractError
-from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.package_contract import ValidatedPackage, validate_package
 from agent.plugin_host.package_paths import package_path
 
@@ -17,21 +16,17 @@ MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 MAX_PACKAGE_MEMBERS = 4096
 
 
-def validate_package_zip(
-    archive: Path, *, host: HostRuntimeContract | None = None
-) -> ValidatedPackage:
+def validate_package_zip(archive: Path) -> ValidatedPackage:
     """Validate canonical zip members, then inspect a temporary extraction.
 
     This performs no installation, trust grant, workspace write or code execution.
     A release zip has manifest.yaml at its root (no wrapping plugin-ID directory).
     """
     with TemporaryDirectory(prefix="shiori-contract-") as scratch:
-        return extract_package_zip(archive, Path(scratch) / "package", host=host)
+        return extract_package_zip(archive, Path(scratch) / "package")
 
 
-def extract_package_zip(
-    archive: Path, destination: Path, *, host: HostRuntimeContract | None = None
-) -> ValidatedPackage:
+def extract_package_zip(archive: Path, destination: Path) -> ValidatedPackage:
     """Extract into a new owned directory; failed validation removes all staged bytes."""
     destination.mkdir(parents=True, exist_ok=False)
     try:
@@ -88,7 +83,7 @@ def extract_package_zip(
                 else:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     _ = target.write_bytes(source.read(member))
-            return validate_package(root, host=host)
+            return validate_package(root)
     except (OSError, BadZipFile, RuntimeError, NotImplementedError) as exc:
         shutil.rmtree(destination)
         raise PackageContractError(

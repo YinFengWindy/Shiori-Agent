@@ -34,7 +34,6 @@ def plugin_package_env(tmp_path, monkeypatch):
             external_roots=[root],
             namespace="test",
             strict=False,
-            host=None,
         )
 
     management = SimpleNamespace(
