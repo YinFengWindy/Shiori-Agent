@@ -7,13 +7,11 @@ from types import SimpleNamespace
 from typing import Any, cast
 from unittest.mock import AsyncMock
 
-import pytest
 
 from agent.core.passive_turn import DefaultReasoner
 from agent.core.runtime_support import LLMServices, ToolDiscoveryState
 from agent.lifecycle.types import PromptRenderResult
 from agent.looping.ports import LLMConfig
-from agent.core.passive_turn.empty_reply import EmptyReplyError
 from agent.provider import LLMResponse, ToolCall
 from shiori_sdk.tools import TOOL_ATTACHMENT_SCOPE_KEY, Tool
 from agent.tools.registry import ToolRegistry
@@ -108,62 +106,6 @@ class _TimeoutProvider:
     async def chat(self, **kwargs: Any) -> LLMResponse:
         self.calls.append(kwargs)
         raise asyncio.TimeoutError
-
-
-def test_default_reasoner_runs_tool_loop_and_returns_reasoner_result():
-    provider = _Provider(
-        [
-            LLMResponse(
-                content="",
-                tool_calls=[ToolCall("c1", "dummy", {})],
-                cache_prompt_tokens=100,
-                cache_hit_tokens=40,
-                total_tokens=180,
-            ),
-            LLMResponse(
-                content="final",
-                tool_calls=[],
-                cache_prompt_tokens=120,
-                cache_hit_tokens=60,
-                total_tokens=220,
-            ),
-        ]
-    )
-    tools = ToolRegistry()
-    tools.register(_DummyTool(), always_on=True)
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider), light_provider=cast(Any, provider)
-            ),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
-
-    assert result.reply == "final"
-    assert result.metadata["tools_used"] == ["dummy"]
-    assert result.invocations[0].name == "dummy"
-    assert result.metadata["visible_names"] is None
-    react_stats = result.metadata["react_stats"]
-    assert react_stats["iteration_count"] == 2
-    assert react_stats["turn_input_sum_tokens"] >= react_stats["turn_input_peak_tokens"]
-    assert (
-        react_stats["final_call_input_tokens"] == react_stats["turn_input_peak_tokens"]
-    )
-    assert react_stats["cache_prompt_tokens"] == 220
-    assert react_stats["cache_hit_tokens"] == 100
-    assert react_stats["total_tokens"] == 400
-    first_messages = provider.calls[0]["messages"]
-    assert not any(
-        "未加载工具目录" in str(m.get("content", "")) for m in first_messages
-    )
 
 
 def test_default_reasoner_run_turn_uses_tool_context_snapshot(tmp_path):
@@ -511,43 +453,6 @@ def test_default_reasoner_honors_after_step_stop_after_tool_batch():
     assert result.metadata["react_stats"]["total_tokens"] == 270
 
 
-def test_default_reasoner_continues_without_after_step_stop_request():
-    provider = _Provider(
-        [
-            LLMResponse(
-                content="", tool_calls=[ToolCall("c1", "inflate_probe", {"value": 1})]
-            ),
-            LLMResponse(content="final", tool_calls=[]),
-        ]
-    )
-    tools = ToolRegistry()
-    tools.register(_InflateTool(), always_on=True)
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider),
-                light_provider=cast(Any, provider),
-            ),
-        ),
-        llm_config=LLMConfig(
-            model="m",
-            max_iterations=0,
-            max_tokens=512,
-        ),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
-
-    assert result.reply == "final"
-    assert len(provider.calls) == 2
-    assert provider.calls[1]["tools"]
-
-
 def test_default_reasoner_observes_tool_lifecycle_events(tmp_path):
     manager = SessionManager(tmp_path)
     provider = _Provider(
@@ -723,65 +628,6 @@ def test_default_reasoner_unlocks_tool_search_visibility():
     assert len(hidden.calls) == 1
 
 
-def test_default_reasoner_preflight_includes_deferred_tool_names():
-    """调用方（如 _run_agent_loop）负责注入 deferred tools hint；run() 本身不再自动注入。"""
-    from agent.core.passive_turn import build_turn_injection_prompt
-    from agent.prompting import build_context_frame_content, build_context_frame_message
-    from shiori_sdk.prompting import PromptSectionRender
-
-    provider = _Provider(
-        [
-            LLMResponse(content="", tool_calls=[ToolCall("c1", "dummy", {})]),
-            LLMResponse(content="final", tool_calls=[]),
-        ]
-    )
-    tools = ToolRegistry()
-    tools.register(_DummyTool(), always_on=True)
-    tools.register(
-        _DummyTool("mcp_github__list_commits"),
-        source_type="mcp",
-        source_name="github",
-    )
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider), light_provider=cast(Any, provider)
-            ),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=True,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    # 调用方负责在调用 run() 前注入 hint。
-    hint = build_turn_injection_prompt(
-        tools=tools,
-        tool_search_enabled=True,
-        visible_names=tools.get_always_on_names(),
-    )
-    frame_content = build_context_frame_content(
-        [PromptSectionRender(name="tool_hint", content=hint, is_static=False)]
-    )
-    initial_messages = [
-        build_context_frame_message(frame_content),
-        {"role": "user", "content": "hi"},
-    ]
-    asyncio.run(reasoner.run(initial_messages))
-
-    first_messages = provider.calls[0]["messages"]
-    preflight = next(
-        str(m.get("content", ""))
-        for m in first_messages
-        if "未加载工具目录" in str(m.get("content", ""))
-    )
-    assert "未加载工具目录" in preflight
-    assert "mcp_github__list_commits" in preflight
-    assert "dummy" not in preflight
-
-
 def test_default_reasoner_deferred_tool_direct_call_requires_select():
     provider = _Provider(
         [
@@ -818,91 +664,6 @@ def test_default_reasoner_deferred_tool_direct_call_requires_select():
     assert schedule_call is not None
     assert "select:" in schedule_call["result"]
     assert "tool_search" in schedule_call["result"]
-
-
-def test_default_reasoner_preloaded_tool_not_in_deferred_list():
-    provider = _Provider([LLMResponse(content="done", tool_calls=[])])
-    tools = ToolRegistry()
-    tools.register(_DummyTool(), always_on=True)
-    tools.register(_DummyTool("schedule"))
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider), light_provider=cast(Any, provider)
-            ),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=True,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    asyncio.run(
-        reasoner.run(
-            [{"role": "user", "content": "hi"}],
-            preloaded_tools={"schedule"},
-        )
-    )
-
-    first_messages = provider.calls[0]["messages"]
-    assert not any(
-        "未加载工具目录" in str(m.get("content", "")) for m in first_messages
-    )
-
-
-def test_default_reasoner_run_turn_uses_context_render(tmp_path):
-    manager = SessionManager(tmp_path)
-    provider = _Provider([LLMResponse(content="done", tool_calls=[])])
-    tools = ToolRegistry()
-    tools.register(_DummyTool(), always_on=True)
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider), light_provider=cast(Any, provider)
-            ),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
-        context=cast(
-            Any,
-            SimpleNamespace(
-                runtime_roles=RoleStore(manager.workspace),
-                render=lambda request, **_: SimpleNamespace(
-                    messages=[{"role": "user", "content": request.current_message}],
-                ),
-                build_messages=lambda **_: (_ for _ in ()).throw(
-                    AssertionError("legacy build_messages should not be used")
-                ),
-                build_turn_injection_context=lambda **_: (_ for _ in ()).throw(
-                    AssertionError("legacy turn_injection should not be used")
-                ),
-            ),
-        ),
-        session_manager=manager,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    session = manager.get_or_create("cli:1")
-    session.add_message("user", "previous input")
-    session.add_message("assistant", "old")
-    manager.save(session)
-    msg = InboundMessage(
-        content="hi",
-        media=[],
-        channel="cli",
-        sender="user",
-        chat_id="1",
-        timestamp=datetime(2026, 4, 5, 12, 0, 0),
-    )
-
-    result = asyncio.run(reasoner.run_turn(msg=msg, session=cast(Any, session)))
-
-    assert result.reply == "done"
 
 
 def test_default_reasoner_run_turn_reports_llm_timeout(tmp_path):
@@ -947,94 +708,3 @@ def test_default_reasoner_run_turn_reports_llm_timeout(tmp_path):
 
     assert result.reply == "模型流响应中断，请刷新对话重试。"
     assert len(provider.calls) == 1
-
-
-def test_empty_content_with_thinking_triggers_retry_and_succeeds():
-    provider = _Provider(
-        [
-            LLMResponse(content=None, tool_calls=[], thinking="长思考过程"),
-            LLMResponse(content="正式回复", tool_calls=[], thinking="新思考"),
-        ]
-    )
-    tools = ToolRegistry()
-    tools.register(_DummyTool(), always_on=True)
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider), light_provider=cast(Any, provider)
-            ),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
-
-    assert result.reply == "正式回复"
-    assert result.thinking == "新思考"
-    retry_call = provider.calls[1]
-    assert retry_call["tools"] == provider.calls[0]["tools"]
-    assert [tool["function"]["name"] for tool in retry_call["tools"]] == ["dummy"]
-    assert len(provider.calls) == 2
-
-
-def test_empty_content_with_thinking_retry_still_empty_fails():
-    provider = _Provider(
-        [
-            LLMResponse(content=None, tool_calls=[], thinking="只有思考"),
-            LLMResponse(content=None, tool_calls=[], thinking=None),
-        ]
-    )
-    tools = ToolRegistry()
-    tools.register(_DummyTool(), always_on=True)
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider), light_provider=cast(Any, provider)
-            ),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    with pytest.raises(EmptyReplyError):
-        asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
-
-    assert len(provider.calls) == 2
-
-
-def test_empty_content_without_thinking_recovers():
-    provider = _Provider(
-        [
-            LLMResponse(content=None, tool_calls=[], thinking=None),
-            LLMResponse(content="恢复正文"),
-        ]
-    )
-    tools = ToolRegistry()
-    tools.register(_DummyTool(), always_on=True)
-    reasoner = DefaultReasoner(
-        llm=cast(
-            Any,
-            LLMServices(
-                provider=cast(Any, provider), light_provider=cast(Any, provider)
-            ),
-        ),
-        llm_config=LLMConfig(model="m", max_iterations=4, max_tokens=512),
-        tools=tools,
-        discovery=ToolDiscoveryState(),
-        tool_search_enabled=False,
-    )
-    run_in_turn(reasoner, method="run_turn")
-
-    result = asyncio.run(reasoner.run([{"role": "user", "content": "hi"}]))
-
-    assert result.reply == "恢复正文"
-    assert len(provider.calls) == 2

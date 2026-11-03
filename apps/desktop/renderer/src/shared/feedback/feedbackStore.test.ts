@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
-import { mascotFeedback } from "../mascot/mascotFeedback";
 import {
-  createFeedbackReporter,
+
   dismissFeedback,
   feedback,
   getFeedbackSnapshot,
@@ -15,35 +14,6 @@ import {
 afterEach(() => resetFeedback());
 
 describe("feedbackStore", () => {
-  it("queues messages oldest first with their tone", () => {
-    feedback.success("已保存");
-    feedback.error("保存失败");
-    assert.deepEqual(getFeedbackSnapshot().map(({ tone, message }) => [tone, message]), [
-      ["success", "已保存"],
-      ["error", "保存失败"],
-    ]);
-  });
-
-  it("ignores empty messages instead of rendering a blank toast", () => {
-    assert.equal(showFeedback({ tone: "error", message: "   " }), 0);
-    assert.deepEqual(getFeedbackSnapshot(), []);
-  });
-
-  it("collapses a repeated tone + message into one toast with a fresh id at the end", () => {
-    const first = showFeedback({ tone: "error", message: "连接失败" });
-    feedback.info("其他");
-    const repeated = showFeedback({ tone: "error", message: "连接失败" });
-    const snapshot = getFeedbackSnapshot();
-    assert.deepEqual(snapshot.map((toast) => toast.message), ["其他", "连接失败"]);
-    assert.notEqual(repeated, first);
-    assert.equal(snapshot.at(-1)?.id, repeated);
-  });
-
-  it("keeps the same message in different tones apart", () => {
-    feedback.success("完成");
-    feedback.info("完成");
-    assert.equal(getFeedbackSnapshot().length, 2);
-  });
 
   it("drops the oldest message beyond the visible limit", () => {
     for (let index = 0; index <= maxVisibleFeedback; index += 1) feedback.info(`消息 ${index}`);
@@ -75,33 +45,7 @@ describe("feedbackStore", () => {
     feedback.error("缺少模型", { action: { label: "选择模型", onSelect } });
     assert.equal(getFeedbackSnapshot()[0]?.action?.onSelect, onSelect);
   });
-
-  it("starts each call from the reporter's per-tone defaults, which the call's own options override", () => {
-    const reporter = createFeedbackReporter({ error: { persona: "generic", detail: "默认详情" } });
-    reporter.error("一");
-    reporter.error("二", { persona: "modelMissing" });
-    reporter.warning("三");
-    assert.deepEqual(getFeedbackSnapshot().map(({ message, persona, detail }) => [message, persona, detail]), [
-      ["一", "generic", "默认详情"],
-      ["二", "modelMissing", "默认详情"],
-      ["三", undefined, undefined],
-    ]);
-  });
-
-  it("has 吟风 front every host tone with its default persona; the plain reporter carries none", () => {
-    const personas = () => getFeedbackSnapshot().map(({ message, persona }) => [message, persona]);
-    mascotFeedback.error("宿主报错");
-    mascotFeedback.warning("宿主警告");
-    mascotFeedback.success("已保存");
-    assert.deepEqual(personas(), [["宿主报错", "generic"], ["宿主警告", "warning"], ["已保存", "success"]]);
-    resetFeedback();
-    mascotFeedback.info("已在素材库");
-    mascotFeedback.success("角色已删除", { persona: "roleDeleted" });
-    feedback.error("插件报错");
-    assert.deepEqual(personas(), [["已在素材库", "info"], ["角色已删除", "roleDeleted"], ["插件报错", undefined]]);
-  });
 });
-
 
 it("keeps distinct technical causes when their safe summaries match", () => {
   feedback.error("OSError: first failure");

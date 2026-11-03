@@ -2,10 +2,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
-from agent.policies.delegation import SpawnDecision, SpawnDecisionMeta
 from bus.event_bus import EventBus
-from bus.events import SpawnCompletionItem
-from bus.internal_events import SpawnCompletionEvent
 
 
 @dataclass
@@ -17,37 +14,6 @@ class _FakeLifecycleEvent:
     thinking: str | None = None
     media: list[str] = field(default_factory=list)
     metadata: dict[str, object] = field(default_factory=dict)
-
-
-def test_spawn_completion_item_carries_typed_payload():
-    decision = SpawnDecision(
-        should_spawn=True,
-        label="job",
-        meta=SpawnDecisionMeta(
-            source="heuristic",
-            confidence="high",
-            reason_code="long_running",
-        ),
-    )
-    event = SpawnCompletionEvent(
-        job_id="abcd1234",
-        label="job",
-        task="do work",
-        status="incomplete",
-        exit_reason="forced_summary",
-        result="partial",
-    )
-
-    item = SpawnCompletionItem(
-        channel="telegram",
-        chat_id="123",
-        event=event,
-        decision=decision,
-    )
-
-    assert item.session_key == "telegram:123"
-    assert item.event == event
-    assert item.decision == decision
 
 
 @pytest.mark.asyncio

@@ -84,7 +84,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 |---|---|
 | TypeScript 源文件 | 同目录并列（`main.ts` / `main.test.ts`）；e2e 放 `apps/desktop/tests/` |
 | `apps/backend/` | `tests/backend/`，目录结构镜像源码 |
-| `apps/site/` | `apps/site/tests/`：构建产物断言（`pnpm run site:test` 先 `astro build` 再跑，更新日志读 `tests/fixtures/releases.json` 不联网）与素材检查 |
+| `apps/site/` | `apps/site/tests/`：发布边界、可访问性和关键导航的构建产物断言（`pnpm run site:test` 先 `astro build` 再跑，更新日志读 `tests/fixtures/releases.json` 不联网） |
 | `plugins/<id>/` | `plugins/<id>/tests/`，自包含；测试支持来自 `shiori-sdk[testing]`，不依赖根 conftest（见 `docs/agents/plugin-testing.md`） |
 | `packages/sdk/` | `packages/sdk/tests/`，结构镜像 `python/shiori_sdk/` |
 | 宿主测试 fixture 包 | 包在 `packages/shiori-host-testing/`，测试在 `tests/backend/shiori_host_testing/` |
@@ -93,6 +93,8 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 
 ## 写测试
 
+- 默认只保留业务主链路与高后果失败的自动回归：持久化、权限与隔离、外部协议、取消与资源清理、失败恢复、可访问性。新增测试要说明它独立守住哪种失败，不按组件或 helper 数量配套测试。
+- 普通文案、装饰、布局数值、图片编码/尺寸预算、简单展示映射和框架已保证的赋值行为，不单独维护常规单测。视觉效果通过改动时的定向检查确认；影响焦点、交互命中区、可访问性或内容丢失的布局约束仍保留。
 - **NEVER** 为了提高覆盖率加测试。覆盖率上升不能作为新增用例或合并的理由。PR 若只因覆盖率上升而加测试，不要加。仓库没有覆盖率门槛；`pytest-cov` 只是开发依赖，**NEVER** 添加 `fail_under` 或覆盖率 CI。
 - 新用例必须能单独抓住一种失败：行为、顺序、参数、真实装配或隔离边界。**NEVER** 加只检查 mock 是否被调用、提示词子串、构造参数回声、或同义词/输入矩阵的测试。
 - 优先补进已有测试文件。默认契约集是故意收窄的；不要把新文件写进 `tests/support/default_suite.py`，除非每次 CI 都必须守住这条宿主契约。

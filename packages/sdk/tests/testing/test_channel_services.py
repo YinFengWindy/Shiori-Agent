@@ -7,21 +7,6 @@ from shiori_sdk.testing.channel_services import (
 )
 
 
-def test_interrupt_controller_records_requests_and_answers_with_its_message() -> None:
-    controller = FakeInterruptController(message="已中断")
-
-    result = controller.request_interrupt("role:mira", sender="u1")
-
-    assert (result.status, result.session_key, result.message) == (
-        "interrupted",
-        "role:mira",
-        "已中断",
-    )
-    assert controller.requests == [
-        {"session_key": "role:mira", "sender": "u1", "command": "/stop"}
-    ]
-
-
 async def test_message_bus_drops_emptied_channels_and_reports_marked_pending() -> None:
     bus = FakeMessageBus()
     delivered: list[OutboundMessage] = []

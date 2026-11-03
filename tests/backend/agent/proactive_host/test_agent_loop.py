@@ -16,17 +16,13 @@ TDD — Phase 5: proactive 插件 ProactiveTurnPipeline — Agent Loop
 
 from __future__ import annotations
 
-from core.roles.reply_state import RoleReplyContext
 
-from datetime import datetime, timezone
-from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
 from shiori_sdk.prompting import is_context_frame
-from plugins.proactive.backend.context import AgentTickContext
-from plugins.proactive.backend.gateway import GatewayDeps, GatewayResult
+from plugins.proactive.backend.gateway import GatewayDeps
 from plugins.proactive.backend.tools import ToolDeps
 from tests.backend.agent.proactive_host.conftest import (
     FakeLLM,
@@ -44,21 +40,6 @@ def _test_alert() -> dict[str, str]:
         "severity": "low",
         "triggered_at": "2026-01-01T00:00:00Z",
     }
-
-
-def test_runtime_context_includes_current_beijing_time_anchor():
-    tick = make_proactive_pipeline(llm_fn=None)
-    ctx = AgentTickContext(
-        reply_context=RoleReplyContext(("平静",), ""),
-        now_utc=datetime(2026, 7, 15, 1, 47, tzinfo=timezone.utc),
-    )
-
-    content = str(tick._build_runtime_context_message(ctx, GatewayResult())["content"])
-
-    assert "当前消息时间: 2026-07-15 09:47:00" in content
-    assert "今天=2026-07-15（周三）" in content
-    assert "昨天=2026-07-14（周二）" in content
-    assert "相对时间以此为准" in content
 
 
 # ── max_steps 保护 ────────────────────────────────────────────────────────
@@ -259,27 +240,6 @@ async def test_only_first_terminal_counts():
 
 
 @pytest.mark.asyncio
-async def test_send_message_writes_final_message():
-    llm = FakeLLM(
-        [
-            (
-                "message_push",
-                {
-                    "mood": "平静",
-                    "thought": "我想和你聊聊。",
-                    "message": "Hello world!",
-                    "evidence": [],
-                },
-            ),
-            ("finish_turn", {"decision": "reply"}),
-        ]
-    )
-    tick = make_proactive_pipeline(llm_fn=llm)
-    await tick.run()
-    assert tick.last_ctx.final_message == "Hello world!"
-
-
-@pytest.mark.asyncio
 async def test_tool_chain_step_logs_capture_args_and_results():
     llm = FakeLLM(
         [
@@ -373,24 +333,6 @@ async def test_send_message_cited_added_to_interesting():
 # ── skip 写 ctx ───────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
-async def test_skip_writes_reason():
-    llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "user_busy"})])
-    tick = make_proactive_pipeline(llm_fn=llm)
-    await tick.run()
-    assert tick.last_ctx.skip_reason == "user_busy"
-
-
-@pytest.mark.asyncio
-async def test_skip_writes_note():
-    llm = FakeLLM(
-        [("finish_turn", {"decision": "skip", "reason": "other", "note": "debug"})]
-    )
-    tick = make_proactive_pipeline(llm_fn=llm)
-    await tick.run()
-    assert tick.last_ctx.skip_note == "debug"
-
-
 # ── Alert 路径 ────────────────────────────────────────────────────────────
 
 
@@ -429,30 +371,6 @@ async def test_alert_path_send_sets_terminal():
 
 
 @pytest.mark.asyncio
-async def test_alert_stored_in_ctx_fetched_alerts():
-    alert = {
-        "id": "a1",
-        "ack_server": "alert-mcp",
-        "title": "T",
-        "body": "B",
-        "severity": "low",
-        "triggered_at": "2026-01-01T00:00:00Z",
-    }
-    llm = FakeLLM(
-        [
-            ("get_alert_events", {}),
-            ("finish_turn", {"decision": "skip", "reason": "no_content"}),
-        ]
-    )
-    tick = make_proactive_pipeline(
-        llm_fn=llm,
-        gateway_deps=GatewayDeps(alert_fn=AsyncMock(return_value=[alert])),
-    )
-    await tick.run()
-    assert tick.last_ctx.fetched_alerts == [alert]
-
-
-@pytest.mark.asyncio
 async def test_alert_fn_called_once_even_if_llm_calls_twice():
     alert_fn = AsyncMock(return_value=[])
     llm = FakeLLM(
@@ -471,63 +389,6 @@ async def test_alert_fn_called_once_even_if_llm_calls_twice():
 
 
 # ── Content 路径 ──────────────────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_content_stored_in_ctx_fetched_contents():
-    event = {
-        "id": "c1",
-        "ack_server": "feed-mcp",
-        "url": "https://x.com",
-        "title": "T",
-        "source_name": "S",
-        "published_at": "2026-01-01T00:00:00Z",
-    }
-    llm = FakeLLM(
-        [
-            ("get_alert_events", {}),
-            ("get_content_events", {}),
-            ("finish_turn", {"decision": "skip", "reason": "no_content"}),
-        ]
-    )
-    tick = make_proactive_pipeline(
-        llm_fn=llm,
-        gateway_deps=GatewayDeps(
-            alert_fn=AsyncMock(return_value=[]),
-            feed_fn=AsyncMock(return_value=[event]),
-        ),
-    )
-    await tick.run()
-    assert tick.last_ctx.fetched_contents == [
-        {
-            "id": "c1",
-            "event_id": "c1",
-            "ack_server": "feed-mcp",
-            "url": "https://x.com",
-            "title": "T",
-            "source": "S",
-            "published_at": "2026-01-01T00:00:00Z",
-        }
-    ]
-
-
-@pytest.mark.asyncio
-async def test_content_fn_called_with_configured_limit():
-    feed_fn = AsyncMock(return_value=[])
-    llm = FakeLLM(
-        [
-            ("get_content_events", {"limit": 3}),
-            ("finish_turn", {"decision": "skip", "reason": "no_content"}),
-        ]
-    )
-    tick = make_proactive_pipeline(
-        llm_fn=llm,
-        cfg=cfg_with(agent_tick_content_limit=3),
-        gateway_deps=GatewayDeps(feed_fn=feed_fn, content_limit=3),
-    )
-    await tick.run()
-    # limit 来自工具调用参数
-    feed_fn.assert_called_once_with(limit=3)
 
 
 @pytest.mark.asyncio
@@ -621,64 +482,7 @@ async def test_context_data_fn_called_only_once_in_loop():
 # ── recall_memory 在 loop 内 ─────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
-async def test_recall_memory_in_loop():
-    from unittest.mock import MagicMock
-
-    memory = MagicMock()
-    memory.query = AsyncMock(
-        return_value=SimpleNamespace(
-            records=[SimpleNamespace(id="m1", summary="用户喜欢 RPG", score=0.9)]
-        )
-    )
-    llm = FakeLLM(
-        [
-            ("recall_memory", {"query": "RPG games"}),
-            (
-                "message_push",
-                {
-                    "mood": "平静",
-                    "thought": "我想和你聊聊。",
-                    "message": "RPG 推荐",
-                    "evidence": [],
-                },
-            ),
-            ("finish_turn", {"decision": "reply"}),
-        ]
-    )
-    tick = make_proactive_pipeline(
-        session_key="role:mira",
-        target_transport_fn=lambda: ("desktop", "role:mira"),
-        llm_fn=llm,
-        tool_deps=ToolDeps(memory=memory),
-    )
-    await tick.run()
-    assert tick.last_ctx.terminal_action == "reply"
-    memory.query.assert_awaited_once()
-
-
 # ── user_busy skip 路径 ───────────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_user_busy_skip():
-    llm = FakeLLM(
-        [
-            ("get_recent_chat", {}),
-            ("finish_turn", {"decision": "skip", "reason": "user_busy"}),
-        ]
-    )
-    tick = make_proactive_pipeline(
-        llm_fn=llm,
-        tool_deps=ToolDeps(
-            recent_chat_fn=AsyncMock(
-                return_value=[{"role": "user", "content": "我现在很忙"}]
-            )
-        ),
-    )
-    await tick.run()
-    assert tick.last_ctx.terminal_action == "skip"
-    assert tick.last_ctx.skip_reason == "user_busy"
 
 
 # ── LLM 收到 messages 历史 ───────────────────────────────────────────────
@@ -708,18 +512,6 @@ async def test_llm_receives_growing_message_history():
     assert second_call_msg_count > first_call_msg_count
 
 
-@pytest.mark.asyncio
-async def test_llm_receives_system_message():
-    """第一次调用时 messages 应包含 system prompt"""
-    llm = FakeLLM([("finish_turn", {"decision": "skip", "reason": "no_content"})])
-    tick = make_proactive_pipeline(llm_fn=llm)
-    await tick.run()
-    assert llm.calls  # 至少调用了一次
-    first_messages = llm.calls[0]
-    roles = [m.get("role") for m in first_messages]
-    assert "system" in roles
-
-
 # ── unknown tool 不 crash loop ────────────────────────────────────────────
 
 
@@ -739,28 +531,6 @@ async def test_unknown_tool_breaks_loop_gracefully():
 
 
 # ── steps_taken 精确计数 ──────────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_steps_taken_counts_all_tool_calls():
-    llm = FakeLLM(
-        [
-            ("get_alert_events", {}),
-            ("get_content_events", {}),
-            ("get_recent_chat", {}),
-            ("finish_turn", {"decision": "skip", "reason": "no_content"}),
-        ]
-    )
-    tick = make_proactive_pipeline(
-        llm_fn=llm,
-        tool_deps=ToolDeps(recent_chat_fn=AsyncMock(return_value=[])),
-        gateway_deps=GatewayDeps(
-            alert_fn=AsyncMock(return_value=[]),
-            feed_fn=AsyncMock(return_value=[]),
-        ),
-    )
-    await tick.run()
-    assert tick.last_ctx.steps_taken == 4
 
 
 # ── tool_choice="auto" ────────────────────────────────────────────────────

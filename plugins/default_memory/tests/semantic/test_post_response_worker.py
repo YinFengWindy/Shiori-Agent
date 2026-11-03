@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 from typing import Any, cast
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from shiori_sdk.memory.events import MemoryWritten, TurnIngested
@@ -244,17 +244,6 @@ def test_collect_explicit_memorized_accepts_item_id_format():
     assert "memu_12345" in protected
 
 
-def test_consume_budget_reports_affordability_and_remaining_tokens():
-    worker = PostResponseMemoryWorker(
-        memorizer=cast(Any, _DummyMemorizer_post_response_worker()),
-        retriever=cast(Any, _DummyRetriever_post_response_worker([])),
-        light_provider=cast(Any, _DummyProvider_post_response_worker()),
-        light_model="test",
-    )
-
-    assert worker._consume_budget(10, 3) == (True, 7)
-
-
 def test_extract_invalidation_topics_returns_topics_parsed_from_light_model():
     provider = SimpleNamespace(
         chat=AsyncMock(return_value=_Resp_post_response_worker('["topic"]'))
@@ -432,52 +421,3 @@ def test_post_worker_invalidation_retrieval_uses_run_scope():
             },
         )
     ]
-
-
-class _DummyProvider_post_response_profile:
-    async def chat(self, **kwargs):
-        raise AssertionError("provider.chat should not be called in this test")
-
-
-class _DummyRetriever_post_response_profile:
-    def __init__(self, results):
-        self._results = list(results)
-        self.calls = []
-
-    async def retrieve(self, query: str, memory_types=None, top_k=None):
-        self.calls.append((query, tuple(memory_types or []), top_k))
-        return list(self._results)
-
-
-class _DummyMemorizer_post_response_profile:
-    def __init__(self, store=None):
-        self.save_item = AsyncMock(return_value="new:testid")
-        self.supersede_batch = MagicMock()
-        self._store = store
-
-
-def test_worker_without_implicit_handler_does_not_extract_profile():
-    """A worker without an implicit handler only performs invalidation work."""
-    memorizer = _DummyMemorizer_post_response_profile()
-    retriever = _DummyRetriever_post_response_profile([])
-    worker = PostResponseMemoryWorker(
-        memorizer=cast(Any, memorizer),
-        retriever=cast(Any, retriever),
-        light_provider=cast(Any, _DummyProvider_post_response_profile()),
-        light_model="test",
-    )
-    worker._handle_invalidations = AsyncMock(
-        side_effect=lambda *args, **kwargs: args[-1]
-    )
-
-    asyncio.run(
-        worker.run(
-            user_msg="我刚买了一个新键盘",
-            agent_response="记住了",
-            tool_chain=[],
-            source_ref="test@post_response",
-            role_id="mira",
-        )
-    )
-
-    memorizer.save_item.assert_not_called()

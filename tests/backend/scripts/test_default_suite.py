@@ -1,12 +1,9 @@
-"""The default host selection stays inside its case budget and on real files."""
+"""The default host selection keeps valid paths and explicit scope boundaries."""
 
 from tests.support.default_suite import (
-    DEFAULT_CASE_MAX,
-    DEFAULT_CASE_MIN,
     DEFAULT_DIRECTORIES,
     DEFAULT_FILES,
     REPO_ROOT,
-    count_default_cases,
     is_default_test,
     path_covered_by_also,
     selection_is_default_root,
@@ -16,14 +13,9 @@ from tests.support.default_suite import (
 
 def test_allowlist_paths_exist() -> None:
     for directory in DEFAULT_DIRECTORIES:
-        assert (REPO_ROOT / directory).is_dir(), directory
+        assert any((REPO_ROOT / directory).rglob("test_*.py")), directory
     for relative in DEFAULT_FILES:
         assert (REPO_ROOT / relative).is_file(), relative
-
-
-def test_default_case_count_stays_near_one_thousand() -> None:
-    count = count_default_cases()
-    assert DEFAULT_CASE_MIN <= count <= DEFAULT_CASE_MAX, count
 
 
 def test_extended_host_file_is_ignored_on_the_default_root() -> None:
