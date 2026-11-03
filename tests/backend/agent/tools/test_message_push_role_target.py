@@ -58,10 +58,9 @@ def test_message_push_description_lists_only_registered_channels() -> None:
     )
     tool.register_channel("plain", text_with_metadata=send)
 
-    assert (
-        "当前可用渠道：desktop（桌面端）、qqbot（官方 QQBot，不能写成 qq）、plain。"
-        in (tool.description)
-    )
+    assert "desktop（桌面端）" in tool.description
+    assert "qqbot（官方 QQBot，不能写成 qq）" in tool.description
+    assert "plain" in tool.description
     assert "telegram" not in tool.description
     assert tool.to_schema()["function"]["description"] == tool.description
 

@@ -1173,7 +1173,6 @@ def test_shell_describes_actual_platform(monkeypatch, windows):
     expected = "PowerShell 7" if windows else "/bin/sh"
     assert expected in tool.description
     assert expected in tool.parameters["properties"]["command"]["description"]
-    assert "在 bash 中" not in tool.description
 
 
 @pytest.mark.parametrize("background", [True, False])

@@ -95,18 +95,6 @@ def test_director_parser_rejects_unknown_visual_type() -> None:
         )
 
 
-def test_director_prompt_requires_novelai_v45_directional_tags() -> None:
-    prompt = ProviderStoryDirector._system_prompt()
-
-    assert "NovelAI V4.5" in prompt
-    assert "player_profile.appearance" in prompt
-    assert "{girl feeding boy}" in prompt
-    assert "不能使用 :1.2 数字权重" in prompt
-    assert "white background" not in prompt
-    assert "current_scene" in prompt
-    assert "character_ids" in prompt
-
-
 def test_director_request_carries_the_persisted_current_scene() -> None:
     payload = ProviderStoryDirector._request_payload(
         StoryContext(

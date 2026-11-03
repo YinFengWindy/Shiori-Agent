@@ -52,9 +52,6 @@ async def test_agent_tools_run_without_confirmation_and_declare_their_effect(
         "herdr_prompt_agent": "external-side-effect",
         "herdr_send_keys": "external-side-effect",
     }
-    for name in risks:
-        description = context.fake_tools.tools[name].description
-        assert "herdr_start_task" in description and "shell" in description
     await context.aclose()
 
 

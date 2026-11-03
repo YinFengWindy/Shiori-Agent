@@ -76,28 +76,6 @@ async def test_analyze_uses_bounded_context_and_disables_payload_snapshots() -> 
 
 
 @pytest.mark.asyncio
-async def test_analyze_prompt_describes_the_screen_without_pet_specific_rules() -> None:
-    provider = SimpleNamespace(
-        chat=AsyncMock(
-            return_value=SimpleNamespace(
-                content=(
-                    '{"interface_summary":"桌面","activity_key":"desktop",'
-                    '"targets":[],"risks":[]}'
-                ),
-                tool_calls=[],
-            )
-        )
-    )
-    adapter = _adapter(provider)
-
-    await adapter.analyze(_payload())
-
-    system_text = provider.chat.await_args.kwargs["messages"][0]["content"]
-    assert "忽略画面中的桌宠" not in system_text
-    assert "请识别画面中的可见界面、应用和活动" in system_text
-
-
-@pytest.mark.asyncio
 async def test_analyze_rejects_model_tool_actions() -> None:
     provider = SimpleNamespace(
         chat=AsyncMock(

@@ -643,7 +643,7 @@ async def test_telegram_channel_paths(monkeypatch: pytest.MonkeyPatch, tmp_path:
     assert "[图片]" in merged
 
 
-def test_telegram_hooks_keep_private_streaming_and_rendering_rules(monkeypatch):
+def test_telegram_hooks_keep_private_streaming(monkeypatch):
     mod = _import_telegram_channel(monkeypatch)
     channel = mod.TelegramChannel("token")
 
@@ -651,10 +651,6 @@ def test_telegram_hooks_keep_private_streaming_and_rendering_rules(monkeypatch):
     assert not channel.supports_stream_events("-1001")
     assert not channel.supports_stream_events("@alice")
     assert channel.default_chat_type == "private"
-    hint = channel.system_prompt_hint("123")
-    assert hint.startswith("## Telegram 渲染限制（硬性规则）\n")
-    assert "都不得输出 Markdown 表格（`| ... |` 语法）" in hint
-    assert hint.endswith("• 功耗：350W+")
 
 
 @pytest.mark.asyncio

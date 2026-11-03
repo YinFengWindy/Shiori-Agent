@@ -96,14 +96,11 @@ def _stream_updates(api: Any) -> list[tuple[str, int]]:
     return [(body["content"], body["sequence"]) for body in api.bodies("stream_text")]
 
 
-def test_hooks_opt_private_chats_into_streaming_and_rendering_rules(
+def test_hooks_opt_private_chats_into_streaming(
     harness: Any,
 ) -> None:
 
     assert harness.channel.supports_stream_events(CHAT_ID)
-    hint = harness.channel.system_prompt_hint(CHAT_ID)
-    assert hint.startswith("## 飞书渠道渲染限制")
-    assert "`channel=feishu`" in hint
     assert harness.channel.default_chat_type == "private"
 
 

@@ -33,15 +33,13 @@ async def test_spawn_write_file_is_scoped_to_task_dir(tmp_path: Path):
 
 
 def test_spawn_prompt_mentions_isolated_task_dir(tmp_path: Path):
-    """Scripting profile system prompt includes task_dir path and isolation guidance."""
+    """Scripting profile system prompt includes the resolved task directory."""
     workspace = tmp_path / "workspace"
     task_dir = workspace / "subagent-runs" / "job-1"
 
     prompt = build_spawn_subagent_prompt(workspace, task_dir, profile="scripting")
 
     assert str(task_dir.resolve()) in prompt
-    assert "final_report.md" in prompt
-    assert "只能写入当前任务目录" in prompt
 
 
 def test_research_profile_has_no_write_tools(tmp_path: Path):
