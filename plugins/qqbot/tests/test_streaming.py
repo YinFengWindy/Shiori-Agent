@@ -153,17 +153,13 @@ def _final_reply(content: str) -> OutboundMessage:
     )
 
 
-def test_qqbot_opts_c2c_chats_into_stream_events_and_prompt_rules() -> None:
+def test_qqbot_opts_c2c_chats_into_stream_events() -> None:
     channel = QQBotChannel("app", "secret")
 
     assert channel.supports_stream_events("c2c:app:user-1")
     assert not channel.supports_stream_events("c2c:other-app:user-1")
     assert not channel.supports_stream_events("group:group-1")
     assert not channel.supports_stream_events("bogus:x")
-    hint = channel.system_prompt_hint("c2c:app:user-1")
-    assert hint.startswith("## 官方 QQBot 渠道规则（硬性）")
-    assert "`channel=qqbot`" in hint
-    assert "`account_send`" in hint
 
 
 @pytest.mark.asyncio

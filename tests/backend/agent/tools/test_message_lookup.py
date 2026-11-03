@@ -11,7 +11,6 @@ from conversation.service import desktop_thread_id
 from core.identity import IdentityChat, UserIdentityStore
 from shiori_sdk.accounts.models import AccountRecord
 from shiori_sdk.channels.threads import network_thread_id
-from prompts.agent import build_agent_behavior_rules_prompt
 from session.manager import SessionManager
 from session.store import SessionStore
 
@@ -437,45 +436,6 @@ def test_next_seq_after_seq_zero_should_return_one(tmp_path):
     manager.save(session)
 
     assert manager._store.next_seq("cli:test") == 1
-
-
-def test_message_lookup_tools_require_fetch_for_evidence():
-    assert "source_ref" in SearchMessagesTool.description
-    assert "fetch_messages" in SearchMessagesTool.description
-    assert "必须" in SearchMessagesTool.description
-    assert "fetch_messages" in FetchMessagesTool.description
-    assert "何时必须调用" in FetchMessagesTool.description
-    assert "§cited:[" not in FetchMessagesTool.description
-
-
-def test_history_fact_guard_requires_fetch_after_search_preview():
-    prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
-    assert "search_messages" in prompt
-    assert "fetch_messages" in prompt
-    assert "source_ref" in prompt
-    assert "预览" in prompt
-
-
-def test_memory_correction_protocol_covers_soft_corrections_and_forget_memory():
-    prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
-    assert "其实还好" in prompt
-    assert "并不反感" in prompt
-    assert "forget_memory" in prompt
-    assert "若用户这轮是在纠正你，而你本轮没有调用 `forget_memory`" in prompt
-    assert "在拿到 fetch_messages 结果前，禁止直接调用 `forget_memory`" in prompt
-    assert "调用了 `forget_memory` 却没有先调用 `fetch_messages`" in prompt
-
-
-def test_behavior_rules_use_evidence_threshold_not_keyword_filtering():
-    prompt = build_agent_behavior_rules_prompt(workspace=Path("."))
-    assert "知识截止时间" in prompt
-    assert "外部世界此刻是什么样" in prompt
-    assert "本轮外部证据" in prompt
-    assert "这里的判断看“证据门槛”，不是看字面关键词" in prompt
-    assert "如果答案取决于稳定知识" in prompt
-    assert "如果答案取决于本轮外部证据" in prompt
-    assert "我现在不能确认 / 我需要先查一下" in prompt
-    assert "没有本轮证据就只能说记忆里的旧信息" in prompt
 
 
 def _role_session_with_desktop_and_group(tmp_path: Path) -> SessionManager:

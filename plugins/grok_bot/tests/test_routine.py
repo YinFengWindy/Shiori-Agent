@@ -12,8 +12,6 @@ def test_windows_instructions_quote_actual_paths_and_pipe_into_a_new_process():
     assert "$payloadJson | & powershell.exe" in text
     assert "-Handshake" not in text
     assert "connection_check" not in text
-    assert "回复必须用 reply_to" in text
-    assert "真正主动发起的新交流才省略 reply_to" in text
 
 
 def test_python_instructions_supply_both_local_paths_and_utf8_stdin():

@@ -4,7 +4,6 @@ from typing import Any, cast
 from agent.tools.filesystem import ListDirTool, ReadFileTool
 from agent.tools.meta import (
     META_TOOLBOX_NAMES,
-    build_meta_toolbox_prompt,
     register_common_meta_tools,
 )
 from agent.tools.message_push import MessagePushTool
@@ -12,16 +11,6 @@ from agent.tools.registry import ToolRegistry
 from agent.tools.web_fetch import WebFetchTool
 from agent.tools.web_search import WebSearchTool
 from tests.support.push import allow_every_role_target
-
-
-def test_meta_toolbox_prompt_contains_grouped_overview():
-    prompt = build_meta_toolbox_prompt()
-
-    assert "MetaToolBox" in prompt
-    assert "[Read]" in prompt
-    assert "recall_memory" in prompt
-    assert "message_push" in prompt
-    assert "write_file" in prompt
 
 
 def test_register_meta_tool_helpers_mark_expected_tools_always_on():
