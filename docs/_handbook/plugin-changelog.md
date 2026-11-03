@@ -4,6 +4,9 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 ## 4.0.0
 
+- **breaking**（P8b-3，#980）：4.0 发布前将 `Kernel` 收敛为原语，删除 `start` / `reload` / `stop` / `reload_closure`、构造参数 `drain_timeout` 与内核导出的 `DRAIN_TIMEOUT`。宿主自行按计划顺序激活选中的插件，测试使用 `shiori_sdk.testing.KernelHarness`；测试 harness 的默认排空仍为 60 秒。`Kernel.drain` 必须显式传 `timeout`，对已持有 scope 的插件再次 `activate` 抛 `already_running` 并保留原实例。启动失败但仍启用的插件继续参与重复提供、冲突与替换判定，代内启用结果与重启后的相同启用集合一致。
+- P8b-3 保留失败回滚的重启屏障：`Kernel.plan` 不覆盖 `FAILED` 状态中的清理错误，宿主继续展示 `RESTART_REQUIRED`；引入或解除重复提供冲突不能让清理失败的插件自动重试。
+
 - **breaking**（P8，#909）：在 4.0 发布前删除无调用者的 `STORAGE` Key、`PrivateStorage.migrate_data` 及宿主/fake 的对应供给。插件私有路径直接使用 `shiori_sdk.storage.plugin_data_dir`，JSON 状态用 `KV`；记忆端口 `MemoryStorage.resolve_config` / `open_database` 保留。0.5.x 的 `plugin-data/<id>/`、kv、配置与启用状态不变，不复制旧数据。
 
 - P7-6（#967）：同代码插件重载会重挂受影响的设置/导航/角色设置/图片动作/surface 子树，并重置 surface 错误边界；组件私有状态重新创建，宿主角色草稿和持久偏好保留。复用已求值模块与 CSS，无变化配置及无关插件重载不重挂旁观实例。真实 Electron 验收保留通用音频能力：使用生成的 WebAudio 输入和 loopback 协议服务，经过实际语音插件、聊天分发、采集/播放、取消和重复启停；不代表物理麦克风、真实模型或冻结包验证。

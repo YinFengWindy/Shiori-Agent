@@ -16,7 +16,7 @@ from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
 from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
 from agent.plugin_host.trusted_imports import TrustedPluginImports
-from shiori_sdk.kernel import PluginFailed
+from shiori_sdk.kernel import KernelError, KernelState, PluginFailed
 from shiori_sdk.storage import plugin_data_dir
 from core.roles.store import RoleStore
 from agent.tools.registry import ToolRegistry
@@ -193,6 +193,7 @@ async def test_external_source_import_boundary_is_reclaimed_with_plugin_effects(
 async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, strict):
     # ``zlater`` is ordered after ``waiting``, so the cancelled start never
     # reaches it.
+    marker = tmp_path / "unprepared-import.txt"
     for name in ("active", "waiting", "zlater"):
         package = tmp_path / name
         (package / "backend").mkdir(parents=True)
@@ -202,7 +203,13 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         )
         (package / "backend/plugin.py").write_text(
             "import asyncio\n"
-            "from shiori_sdk.core.services import EVENTS\n"
+            + (
+                "from pathlib import Path\n"
+                f"Path({str(marker)!r}).write_text('imported', encoding='utf-8')\n"
+                if name == "zlater"
+                else ""
+            )
+            + "from shiori_sdk.core.services import EVENTS\n"
             "async def setup(ctx):\n"
             "    state = ['started']\n"
             "    ctx.expose(state)\n"
@@ -233,9 +240,13 @@ async def test_setup_cancellation_rolls_back_before_force_cleanup(tmp_path, stri
         assert waiting.state is PluginState.FAILED
         assert isinstance(waiting.error, asyncio.CancelledError)
         assert str((tmp_path / "zlater").absolute()) not in kernel._handles
-        # Neither the cancelled plugin nor the unreached one is left runnable.
-        await kernel.kernel.start([])
-        assert kernel.kernel.status("zlater") is None
+        # The unreached spec is enabled, but direct activation cannot import
+        # code without this round's host handle and screened content.
+        refused = await kernel.kernel.activate("zlater")
+        assert refused.state is KernelState.FAILED
+        assert refused.diagnostic is not None
+        assert refused.diagnostic.code == "setup_failed"
+        assert not marker.exists()
         assert await bus.emit([]) == ["active"]
         assert active_state == ["started"]
     finally:
@@ -1569,7 +1580,9 @@ async def test_package_changed_after_discovery_is_not_started_by_the_kernel(
     assert kernel.kernel.status("external_demo") is None
     assert failed == []
 
-    await kernel.kernel.start([])
+    with pytest.raises(KernelError) as refused:
+        _ = await kernel.kernel.activate("external_demo")
+    assert refused.value.diagnostic.code == "not_runnable"
 
     assert not marker.exists()
     assert kernel.kernel.status("external_demo") is None

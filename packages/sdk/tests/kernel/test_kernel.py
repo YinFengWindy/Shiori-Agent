@@ -102,6 +102,38 @@ async def test_lifecycle_events_report_started_failed_and_stopped() -> None:
     assert failed.diagnostic.state == "FAILED"
 
 
+async def test_repeated_activation_preserves_the_scope_during_setup() -> None:
+    entered, finish = asyncio.Event(), asyncio.Event()
+    provided = object()
+    released: list[object] = []
+
+    async def setup(ctx: Context) -> None:
+        ctx.provide(SERVICE, provided)
+        ctx.effect(lambda: released.append(provided))
+        entered.set()
+        await finish.wait()
+
+    harness = KernelHarness()
+    kernel = harness.kernel
+    starting = asyncio.create_task(
+        harness.start(PluginSpec("provider", setup, provides=("service",)))
+    )
+    await entered.wait()
+    scope = kernel.scope("provider")
+    try:
+        with pytest.raises(KernelError) as refused:
+            _ = await kernel.activate("provider")
+        assert refused.value.diagnostic.code == "already_running"
+        assert kernel.scope("provider") is scope
+        assert kernel.get(SERVICE) is provided
+    finally:
+        finish.set()
+        _ = await starting
+        _ = await harness.stop()
+    assert released == [provided]
+    assert kernel.get(SERVICE) is None
+
+
 async def test_require_and_provide_must_be_declared_in_the_manifest() -> None:
     async def sneaky(ctx: Context) -> None:
         ctx.require(SERVICE)

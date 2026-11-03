@@ -18,7 +18,7 @@
 
 ## 规划
 
-每一轮启动（应用启动、代际替换、代内重载或启停）先把全部 spec 交给内核 `plan`，再由 `Kernel.start` 依次 setup。规划规则（`shiori_sdk/kernel/graph.py`）：
+每一轮启动（应用启动、代际替换、代内重载或启停）先把本轮 spec 交给内核 `plan`，内核重新规划所有已登记的 spec，再由宿主按计划顺序逐个 `activate` 本轮选中的插件。测试使用 `shiori_sdk.testing.KernelHarness` 组合启动、重载和停止。规划规则（`shiori_sdk/kernel/graph.py`）：
 
 - **顺序**：依赖深度，再按插件 ID。深度由 `inject` 和 `optional_inject` 指向的提供方算出。这个顺序就是 setup 顺序、`on` 链与 watcher 的顺序，也是工具钩子、渠道和命令的聚合顺序，代内重载后不变。只登记的 spec 也参与排序，好让排名稳定。
 - **重复提供**：两个可运行插件 `provides` 同一个 Key、又没有 `replaces` / `conflicts` 关系时，双方都 `BLOCKED`（`duplicate_provider`），谁也不赢。
@@ -28,12 +28,12 @@
 
 ## 只登记的插件
 
-spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失败（契约无效、缺宿主依赖）、本轮选中但不启动，或者 setup 失败 / 被释放之后都会重新规划成只登记，这样别人的 `start` 不会顺带把它跑起来。
+spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失败（契约无效、缺宿主依赖）。`runnable` 只取决于准入与启用状态；启动失败但仍启用的插件继续参与重复提供、冲突与替换判定。宿主只激活本轮选中的插件，启动另一个插件不会顺带重试先前失败的插件。
 
 - `Kernel.activate` 拒绝只登记的 spec，抛 `KernelError("not_runnable")`，状态不变，不会变成 `ACTIVE`。
 - 只登记的插件不参与重复提供、`replaces` / `conflicts` 和成环判定。可运行插件依赖它时不算环：可运行的一方照常排序，之后因依赖不可用被 `BLOCKED`，不会被报成 `dependency_cycle`。只登记的成员本身不被标 `BLOCKED`，也不发 `PluginFailed`。
 - 没有可运行插件认领某个 Key、但有只登记的插件声明了它时，这个 Key 记在 ID 最小的那个只登记插件名下。依赖它的插件因此得到 `dependency_unavailable`（「未启用或加载失败」），而不是 `missing_dependency`（「不存在」，没有任何插件声明这个 Key）。两者的诊断都是 stage `dependency`、field `inject[<序号>]`。
-- 后面某一轮再选中它（`load`、依赖拉起、代内重载或启用、代际替换）时重新规划为可运行并重试。
+- 后面某一轮再选中它（`load`、依赖拉起、代内重载或启用、代际替换），并且准入与启用状态都允许时，才会重新激活。
 
 安装专有的 ZIP 解包和持久化信任记录由 `desktop_bridge/runtime/plugin_package_archive.py`、`plugin_trust_store.py` 管理。宿主发现与加载通过启动装配传入的信任查询读取当前批准；查询不缓存，每次以目录、内容指纹和应用 session 判断。静态目录包校验仍由 `agent.plugin_host` 提供，安装和加载共用。具体边界见 [P8 决策](../decisions/2026-11-03-p8-installer-and-gates.md)。
 
@@ -45,8 +45,10 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 
 - 硬依赖的 Key 没有提供方：`BLOCKED`，见上节两种诊断码。
 - setup 抛错：内核先释放它登记的一切（提供的 Key、订阅、任务、effect），状态 `FAILED`（`setup_failed`），发 `PluginFailed`；硬依赖它的插件随后 `BLOCKED`。
+- 若失败回滚还留有清理错误，宿主展示 `RESTART_REQUIRED`；后续冲突规划不得覆盖内核保存的清理错误，冲突解除也不能自动重试这个实例。
 - setup 成功：`ACTIVE`，发 `PluginStarted`，宿主为它铸一个新的 `activation_token`（见[前端契约](plugin-frontend.md#资源授权与加载)）。
-- `start` 被取消：还没轮到的插件恢复原来的句柄状态，不会停在 `LOADING`。
+- 启动被取消：还没轮到的插件恢复原来的句柄状态，不会停在 `LOADING`。
+- `Kernel.activate` 拒绝已经持有 scope 的插件（包括 setup 尚未完成的实例），抛 `already_running`，不替换原 scope。
 
 ## 代内重载
 
