@@ -31,4 +31,4 @@ contributes:
           chat_id_hint: QQ 群号
           prefix: 'gqq:'
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

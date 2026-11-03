@@ -276,7 +276,7 @@ async def _until(probe: ModuleType, event: tuple) -> None:
 
 
 async def _echo(rpc: PluginRpcRegistry[Any]) -> dict[str, object] | None:
-    resolved = rpc.resolve("plugin.provider.echo")
+    resolved = rpc.resolve("provider.echo")
     assert resolved is not None
     return await resolved[1]({})
 
@@ -319,7 +319,7 @@ async def test_reload_waits_for_closure_calls_only_and_rejects_new_ones(
 ):
     kernel, _, tools, rpc = await _kernel(tmp_path)
     old_tool = tools.get_tool("provider_slow")
-    resolved = rpc.resolve("plugin.provider.echo")
+    resolved = rpc.resolve("provider.echo")
     assert old_tool is not None and resolved is not None
     old_rpc = resolved[1]
     bystander = asyncio.create_task(tools.execute("bystander_busy", {}))
@@ -833,7 +833,7 @@ async def test_disable_and_enable_only_touch_the_closure_within_the_generation(
     }
     assert settings.plugin_configs["provider"] == {"label": "v1", "enabled": False}
     assert tools.get_tool("provider_slow") is None
-    assert rpc.resolve("plugin.provider.echo") is None
+    assert rpc.resolve("provider.echo") is None
     # Nothing re-acquires the provider's process resource, so it is closed.
     assert probe.resources[0].closed == 1
     probe.release.set()

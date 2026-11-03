@@ -26,4 +26,4 @@ contributes:
           chat_id_label: Bot
           prefix: 'dm:'
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

@@ -34,7 +34,7 @@ from shiori_sdk.roles import Roles
 from .config import ProactiveConfig
 from .config_loader import load_proactive_config
 from .loop import ProactiveLoop
-from .session_key import role_session_key
+from shiori_sdk.session_keys import role_session_key
 from .turn.gates import ProactiveGate
 from .turn.strategies import (
     RelationshipStrategy,

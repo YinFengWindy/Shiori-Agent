@@ -29,9 +29,9 @@ export class SpeechApp extends DevelopmentApp {
     const owner = randomUUID();
     const { generation } = await this.call("plugins.communication.open", { plugin_id: pluginId, owner });
     try {
-      return await this.call(background ? "plugins.communication.call" : `plugin.${pluginId}.${name}`, background
+      return await this.call(background ? "plugins.communication.call" : `${pluginId}.${name}`, background
         ? { plugin_id: pluginId, owner, generation, target: pluginId, name, payload }
-        : { ...payload, __plugin_context: { plugin_id: pluginId, generation } });
+        : { ...payload, __plugin_context: { plugin_id: pluginId, generation, owner } });
     } finally { await this.call("plugins.communication.close", { plugin_id: pluginId, owner, generation }); }
   }
   async pick(path: string, namespace: string, extension: string) {

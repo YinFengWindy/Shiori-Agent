@@ -1,8 +1,9 @@
+import type { PluginFrontendModule } from "@yinfengwindy/shiori-sdk";
 import type { PluginSurfaceModule } from "@yinfengwindy/shiori-sdk";
 import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
 /**
- * Narrows an unknown default export without an unsafe cast. Exported so
+ * Narrows an unknown named export without an unsafe cast. Exported so
  * `runtimePluginSurface.ts` can apply the identical structural check to a
  * runtime-loaded module, not a second hand-rolled copy of it.
  */
@@ -14,7 +15,7 @@ export function isPluginSurfaceModule(value: unknown): value is PluginSurfaceMod
 }
 
 /**
- * Registers every plugin surface module found by the build-time glob.
+ * Registers every plugin surface module found by the frontend inventory.
  *
  * Pure and DOM-free (it only mutates the registry it is handed) so it is unit
  * testable against a hand-built module record, which is the only way to
@@ -22,13 +23,14 @@ export function isPluginSurfaceModule(value: unknown): value is PluginSurfaceMod
  * `pluginSurfaceModules.ts`.
  */
 export function applyPluginSurfaceModules(
-  modules: Record<string, { default: PluginSurfaceModule }>,
+  modules: Record<string, PluginFrontendModule>,
   registry: PluginSurfaceRegistry = pluginSurfaceRegistry,
 ): void {
   for (const [path, mod] of Object.entries(modules)) {
-    const surfaceModule = mod.default;
+    const surfaceModule = mod.surface;
+    if (mod.surface === undefined) continue;
     if (!isPluginSurfaceModule(surfaceModule)) {
-      console.error(`[pluginSurfaceModules] ${path} 的默认导出不是合法的 PluginSurfaceModule，已跳过`);
+      console.error(`[pluginSurfaceModules] ${path} 的surface 导出不是合法的 PluginSurfaceModule，已跳过`);
       continue;
     }
     registry.register({

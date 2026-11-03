@@ -12,4 +12,4 @@ inject:
 provides:
   - affection
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

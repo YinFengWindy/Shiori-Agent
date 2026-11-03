@@ -200,9 +200,9 @@ export function createBackgroundCtx(options: {
     hostEvents: {
       on(method, handler) {
         scope.ensureActive(`event:${method}`);
-        if (method.startsWith("plugin.")) throw new Error("插件事件请使用 ctx.events 或依赖 client.events");
+        if (method.startsWith(`${pluginId}.`) || method.startsWith("plugin.")) throw new Error("插件事件请使用 ctx.events 或依赖 client.events");
         const unsubscribe = onEvent((event) => {
-          if (event.method === method) handler(event.payload, event);
+          if (event.pluginGeneration === undefined && event.method === method) handler(event.payload, event);
         });
         scope.addEventEffect(`event:${method}`, unsubscribe);
       },

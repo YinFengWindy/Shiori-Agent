@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from agent.plugin_host.bridge_events import PluginBridgeEvent
 from shiori_sdk.rpc import PluginRpcError
-from agent.plugin_host.renderer_requests import RendererRequests
+from agent.plugin_host.renderer_requests import CommunicationEndReason, RendererRequests
 
 if TYPE_CHECKING:
     from agent.plugin_host.rpc import PluginRpcRegistry
@@ -71,6 +71,15 @@ class PluginCommunication:
             )
         return self._resolve(target) is not None
 
+    def authorize_context(
+        self, caller: str, target: str, generation: str, owner: str
+    ) -> bool:
+        """Reject a revoked renderer owner, including within the same generation."""
+        available = self.authorize(caller, target, generation)
+        if not owner or self._owners.get(owner) != caller:
+            raise PluginRpcError("plugin_invalid_owner", "插件调用上下文不匹配或已失效")
+        return available
+
     async def handle(self, operation: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Handles transport operations independently of plugin backend RPC policies."""
         if operation == "disconnect":
@@ -94,10 +103,14 @@ class PluginCommunication:
             if generation == self.generation:
                 self.remove_owner(owner)
             return {}
-        if operation in {"services.list", "services.call", "native.authorize"}:
-            self.authorize(caller, caller, generation)
-            if not owner or self._owners.get(owner) != caller:
-                raise PluginRpcError("plugin_invalid_owner", "插件调用上下文不匹配")
+        service_operation = operation in {
+            "services.list",
+            "services.call",
+            "native.authorize",
+        }
+        target = caller if service_operation else str(payload.get("target") or caller)
+        available = self.authorize_context(caller, target, generation, owner)
+        if service_operation:
             if operation == "native.authorize":
                 return {"plugin_id": caller, "generation": self.generation}
             if operation == "services.list":
@@ -118,14 +131,10 @@ class PluginCommunication:
                 and self._owners.get(owner) == caller
                 and self._resolve(caller) is not None,
             )
-        target = str(payload.get("target") or caller)
-        available = self.authorize(caller, target, generation)
         if operation == "resolve":
             return {"available": available}
         if not available:
             raise PluginRpcError("plugin_unavailable", f"插件 {target} 不可用")
-        if not owner:
-            raise PluginRpcError("plugin_invalid_request", "插件通信缺少调用方标识")
         if operation == "reply":
             self._requests.reply(str(payload.get("request_id") or ""), owner, payload)
             return {}
@@ -156,7 +165,7 @@ class PluginCommunication:
         request_id, request = self._requests.create(owner, provider)
         try:
             event = PluginBridgeEvent(
-                f"plugin.{target}.__request",
+                f"{target}.__request",
                 {
                     "owner": provider,
                     "request_id": request_id,
@@ -181,20 +190,24 @@ class PluginCommunication:
                 # Transport failure may win the race with owner retirement.
                 _ = request.future.exception()
 
-    def remove_owner(self, owner: str) -> None:
+    def remove_owner(
+        self, owner: str, *, reason: CommunicationEndReason = "context_disposed"
+    ) -> None:
         """Unregisters one context and cancels calls owned by either side of it."""
         self._owners.pop(owner, None)
         self._renderers.pop(owner, None)
         self._handlers = {
             key: value for key, value in self._handlers.items() if value != owner
         }
-        self._requests.cancel(owner)
+        self._requests.cancel(owner, reason=reason)
 
-    def remove_plugin(self, plugin_id: str) -> None:
+    def remove_plugin(
+        self, plugin_id: str, *, reason: CommunicationEndReason = "context_disposed"
+    ) -> None:
         """Reclaims registrations when plugin setup fails or its scope is disposed."""
         for owner, target in list(self._owners.items()):
             if target == plugin_id:
-                self.remove_owner(owner)
+                self.remove_owner(owner, reason=reason)
 
     def retire(self) -> None:
         """Ends renderer rendezvous immediately; ordinary leased chat can still drain."""
@@ -202,4 +215,4 @@ class PluginCommunication:
         self._handlers.clear()
         self._owners.clear()
         self._renderers.clear()
-        self._requests.cancel()
+        self._requests.cancel(reason="runtime_replaced")

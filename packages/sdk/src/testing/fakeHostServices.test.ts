@@ -44,10 +44,10 @@ test("emit delivers a bridge event to onEvent listeners until they unsubscribe",
   const fake = createFakeHostServices();
   const methods: string[] = [];
   const unsubscribe = fake.host.onEvent((event) => methods.push(event.method));
-  fake.emit({ id: "1", type: "event", method: "plugin.story.gallery", payload: {} });
+  fake.emit({ id: "1", type: "event", method: "story.gallery", payload: {} });
   unsubscribe();
-  fake.emit({ id: "2", type: "event", method: "plugin.story.gallery", payload: {} });
-  assert.deepEqual(methods, ["plugin.story.gallery"]);
+  fake.emit({ id: "2", type: "event", method: "story.gallery", payload: {} });
+  assert.deepEqual(methods, ["story.gallery"]);
 });
 
 test("external link fake records the request and preserves host failures", async () => {

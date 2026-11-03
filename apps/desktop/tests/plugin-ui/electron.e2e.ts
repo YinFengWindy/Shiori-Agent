@@ -18,7 +18,7 @@ import { PluginBridgeError } from "@yinfengwindy/shiori-sdk";
 import { label } from "./chunk.mjs";
 globalThis.pluginUiQaSdkError = PluginBridgeError;
 globalThis.pluginUiQaEvaluations = (globalThis.pluginUiQaEvaluations ?? 0) + 1;
-export default { pluginId: "demo", navPage: { label, component: function Demo() {
+export const ui = { pluginId: "demo", navPage: { label, component: function Demo() {
   const [count, setCount] = useState(0);
   return React.createElement("button", { className: "plugin-ui-qa", onClick: () => setCount(count + 1) }, label + " " + count);
 } } };`, "utf8");
@@ -50,7 +50,7 @@ try {
   const demo = plugins.find((plugin: { id: string }) => plugin.id === "demo");
   const modifiedLazyChunk = await page.evaluate(async (entry) => {
     try { await import(/* @vite-ignore */ new URL("lazy.mjs", entry).href); return false; } catch { return Reflect.get(globalThis, "pluginUiQaLazyVersion") === undefined; }
-  }, demo.rendererUi.entry);
+  }, demo.frontend.entry);
   assert.equal(modifiedLazyChunk, true);
   assert.equal(await page.evaluate(() => document.querySelector<HTMLLinkElement>('link[rel="stylesheet"]')!.href), before);
   await app.evaluate(() => { Reflect.set(globalThis, "pluginUiQaEnabled", false); });

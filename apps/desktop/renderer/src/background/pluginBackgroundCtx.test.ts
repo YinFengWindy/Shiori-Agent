@@ -128,10 +128,14 @@ test("ctx.surfaces binds the plugin id ahead of every call", async () => {
   ]);
 });
 
-test("ctx.rpc scopes calls to plugin.<id>.* and returns the unwrapped payload", async () => {
+test("ctx.rpc scopes calls to <pluginId>.* and returns the unwrapped payload", async () => {
   const requests: unknown[] = [];
+  let owner: unknown;
   const invoke: DesktopInvoke = (request) => {
-    if (request.method === "plugins.communication.open") return Promise.resolve({ id: "open", type: "response", method: request.method, payload: { generation: "g1" }, error: null });
+    if (request.method === "plugins.communication.open") {
+      owner = request.payload.owner;
+      return Promise.resolve({ id: "open", type: "response", method: request.method, payload: { generation: "g1" }, error: null });
+    }
     requests.push(request);
     return Promise.resolve({ id: "x", type: "response", method: request.method, payload: { ok: true }, error: null });
   };
@@ -139,19 +143,20 @@ test("ctx.rpc scopes calls to plugin.<id>.* and returns the unwrapped payload", 
 
   const result = await ctx.rpc.call<{ ok: boolean }>("doThing", { a: 1 });
 
-  assert.deepEqual(requests, [{ method: "plugin.demo.doThing", payload: { a: 1, __plugin_context: { plugin_id: "demo", generation: "g1" } } }]);
+  assert.deepEqual(requests, [{ method: "demo.doThing", payload: { a: 1, __plugin_context: { plugin_id: "demo", generation: "g1", owner } } }]);
   assert.deepEqual(result, { ok: true });
 });
 
-test("ctx.events.on filters by method and ignores everything else", () => {
+test("ctx.hostEvents filters by method and excludes plugin-owned envelopes", () => {
   const source = fakeEventSource();
   const ctx = makeCtx({ onEvent: source.onEvent });
 
   const received: unknown[] = [];
-  ctx.hostEvents.on("demo.thing.happened", (payload) => received.push(payload));
+  ctx.hostEvents.on("session.updated", (payload) => received.push(payload));
 
-  source.emit({ id: "1", type: "event", method: "demo.thing.happened", payload: { n: 1 } });
+  source.emit({ id: "1", type: "event", method: "session.updated", payload: { n: 1 } });
   source.emit({ id: "2", type: "event", method: "unrelated.event", payload: { n: 2 } });
+  source.emit({ id: "3", type: "event", method: "session.updated", payload: { n: 3 }, pluginGeneration: "g1" });
 
   assert.deepEqual(received, [{ n: 1 }]);
 });
@@ -176,7 +181,7 @@ test("ctx.events.on registers its unsubscribe as an event-phase effect, released
   const scope = new BackgroundEffectScope();
   const ctx = makeCtx({ onEvent: source.onEvent, scope });
 
-  ctx.hostEvents.on("demo.thing.happened", () => {});
+  ctx.hostEvents.on("session.updated", () => {});
   assert.equal(source.listenerCount(), 1);
 
   await scope.disposeAll();
@@ -197,7 +202,7 @@ test("ctx.effect's terminate always runs after ctx.events.on's unsubscribe, in #
 
   // Natural, "readable" authoring order that broke the backend twice (#227):
   // subscribe first, register the terminate-style effect after.
-  ctx.hostEvents.on("demo.thing.happened", () => {});
+  ctx.hostEvents.on("session.updated", () => {});
   ctx.effect("controller_terminate", () => { order.push("terminate"); });
 
   await scope.disposeAll();

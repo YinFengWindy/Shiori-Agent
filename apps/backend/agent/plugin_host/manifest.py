@@ -15,6 +15,7 @@ from shiori_sdk.channels.chat_types import (
     parse_chat_type,
 )
 from agent.plugin_host.versions import satisfies
+from agent.plugin_host.rpc_names import HOST_RPC_NAMESPACES
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +222,8 @@ def _parse_manifest(
     if any(not isinstance(key, str) for key in raw):
         raise ManifestError("manifest keys must be strings")
     plugin_id = str(raw.get("id") or raw.get("name") or directory_name)
+    if plugin_id in HOST_RPC_NAMESPACES:
+        raise ManifestError(f"插件 id 使用了宿主保留命名空间: {plugin_id}")
     distribution = raw.get("distribution", "builtin")
     if not isinstance(distribution, str) or distribution not in ("builtin", "external"):
         raise ManifestError("distribution 必须是 builtin / external 之一")
@@ -269,9 +272,9 @@ def _parse_manifest(
     )
 
 
-# renderer 字段在 api: 4 中临时保留：激活门与 build-plugin.mjs 仍读取，P7 统一
-# frontend 入口时删除。
 _REMOVED_FIELDS = (
+    "renderer",
+    "peer_dependencies",
     "capabilities",
     "runtime_api",
     "package_contract",
@@ -292,7 +295,7 @@ def _parse_sdk(value: object) -> str:
 
 
 def _reject_removed_fields(raw: dict[str, object]) -> None:
-    """api: 4 drops the v2 capability manifest fields."""
+    """Reject retired capability and multi-entry frontend declarations."""
     present = [name for name in _REMOVED_FIELDS if name in raw]
     if present:
         raise ManifestError(
@@ -346,14 +349,28 @@ def _parse_contributed_channels(
 
 
 def _parse_frontend(raw: dict[str, object], plugin_dir: Path) -> str | None:
-    """``frontend.entry``, a file inside the package. The host still globs kinds."""
+    """Source entry, or a compiled entry with build-derived exports and CSS."""
     if "frontend" not in raw:
         return None
     value = raw["frontend"]
     if not isinstance(value, dict) or any(not isinstance(key, str) for key in value):
         raise ManifestError("frontend 必须是对象")
-    if set(value) != {"entry"}:
-        raise ManifestError("frontend 只能包含 entry")
+    if "entry" not in value or set(value) - {"entry", "css", "exports", "peers"}:
+        raise ManifestError("frontend 只能包含 entry、css、exports 和 peers")
+    if ("css" in value) != ("exports" in value):
+        raise ManifestError("已编译 frontend 必须同时包含 css 和 exports")
+    if "exports" in value:
+        exports = value["exports"]
+        css = value["css"]
+        if (
+            not isinstance(exports, list)
+            or not exports
+            or any(name not in ("ui", "background", "surface") for name in exports)
+            or len(set(exports)) != len(exports)
+            or not isinstance(css, list)
+            or any(not isinstance(path, str) for path in css)
+        ):
+            raise ManifestError("frontend exports 或 css 无效")
     entry = value.get("entry")
     if not isinstance(entry, str) or not entry.strip() or entry != entry.strip():
         raise ManifestError("frontend.entry 必须是非空相对路径")

@@ -6,6 +6,7 @@ import { SpeechApp, playbackCommands } from "./distributionSpeechApp";
 import { speechAssets, speechConfiguration } from "./distributionSpeechFixtures";
 import { SpeechServer } from "./distributionSpeechServer";
 import { prepareSpeech } from "./distributionSpeechSetup";
+import { verifySpeechReloadLifecycle } from "./distributionReload";
 import { eventually } from "./packagedApp";
 import { Evidence, record } from "./packagedEvidence";
 
@@ -69,6 +70,8 @@ try {
   await app.screenshot("desktop-pet-composed-speech", pet);
   const responseAudio = server.audioResponses.map(({ index, audioBase64, at }) => ({ index, at, sha256: createHash("sha256").update(Buffer.from(audioBase64, "base64")).digest("hex") }));
   await app.evidence.add("cancelled-result-discarded-and-new-turn-serialized", { requests: server.requests, responseAudio, events, history, native: await app.nativeEvents(), commands: await commands() });
+  await verifySpeechReloadLifecycle(app);
+  assert.deepEqual(app.errors, []);
   await app.evidence.add("complete", { realModel: false, realLlm: false, realMicrophone: false, frozenRuntime: false, desktopPetEnabled: true, builtinPluginsEnabled: true, actualNativeCaptureAndPlayback: true, input: "generated WebAudio MediaStream", services: "loopback HTTP protocol doubles; real ASR/TTS plugin implementations and chat dispatcher", errors: app.errors });
 } catch (error) {
   if (app.page) { await writeFile(resolve(output, "failure-dom.txt"), await app.page.locator("body").innerText(), "utf8"); await app.screenshot("failure"); }

@@ -74,7 +74,7 @@ class AffectionApi:
 
 
 # Renderer event after a role's sidebar data changed outside a turn
-# (``plugin.affection.chat_status.changed``, payload ``{role_id}``).
+# (``affection.chat_status.changed``, payload ``{role_id}``).
 STATUS_CHANGED_EVENT = "chat_status.changed"
 
 

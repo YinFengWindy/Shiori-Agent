@@ -27,10 +27,9 @@ from agent.plugin_host.package_schema import (
     string_list,
     object_field,
 )
-from agent.plugin_host.renderer_contract import RendererEntry, validate_renderer
+from agent.plugin_host.frontend_contract import FrontendEntry, validate_frontend
 
-# api: 4 external package fields. ``renderer`` and its ``peer_dependencies``
-# stay until P7 unifies the frontend entry.
+# External API 4 packages declare one frontend entry.
 _PACKAGE_FIELDS = {
     "api",
     "id",
@@ -53,8 +52,6 @@ _PACKAGE_FIELDS = {
     "contributes",
     "frontend",
     "assets",
-    "renderer",
-    "peer_dependencies",
 }
 
 
@@ -63,7 +60,7 @@ class ValidatedPackage:
     """Static package descriptor; validation neither grants trust nor activates code."""
 
     manifest: PluginManifest
-    renderer: tuple[RendererEntry, ...]
+    frontend: FrontendEntry | None
     assets: tuple[str, ...]
 
 
@@ -106,8 +103,8 @@ def validate_package(
         raise PackageContractError("invalid_version", "version", str(exc)) from exc
     runtime = host or HostRuntimeContract()
     _ = validate_artifact(root, raw.get("entry"), "entry", ".py")
-    renderer = validate_renderer(root, raw, runtime)
+    frontend = validate_frontend(root, raw, runtime)
     assets = string_list(raw.get("assets", []), "assets")
     for index, path in enumerate(assets):
         _ = contained_file(root, path, f"assets[{index}]")
-    return ValidatedPackage(manifest, renderer, assets)
+    return ValidatedPackage(manifest, frontend, assets)

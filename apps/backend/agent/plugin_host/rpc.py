@@ -1,4 +1,4 @@
-"""插件 RPC 命名空间注册表：宿主分发器/路由经此解析 plugin.<id>.<method>。
+"""插件 RPC 命名空间注册表：宿主分发器/路由经此解析 <pluginId>.<method>。
 
 每个 runtime generation 由 bootstrap 创建一份，作为 ``host.bridge`` 核心服务
 提供给内核（#901 P2）。注册表不关心策略的具体类型 ``P``：桌面桥接登记并读取
@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from agent.plugin_host.communication import PluginCommunication
 from agent.plugin_host.services import PluginServiceRegistry
+from agent.plugin_host.rpc_names import plugin_method_owner
 from typing import Any
 
 # handler 签名：接收 payload，返回结果 dict 或 None（None 视为空结果）
@@ -27,7 +28,7 @@ class _RpcEntry[P]:
 
 
 class PluginRpcRegistry[P]:
-    """维护 ``plugin.<id>.<method>`` 全名 -> (plugin_id, handler, policy)。
+    """维护 ``<pluginId>.<method>`` 全名 -> (plugin_id, handler, policy)。
 
     生命周期与单个 runtime generation 的 PluginKernel 一一对应；插件卸载或
     加载失败回滚时经插件 Scope 反注册（见 ``desktop_bridge.plugin_capability``
@@ -48,6 +49,8 @@ class PluginRpcRegistry[P]:
         policy: P,
     ) -> None:
         """登记一个全名方法；同名重复注册视为编程错误，直接报错。"""
+        if plugin_method_owner(full_name) != plugin_id:
+            raise ValueError(f"插件 RPC 不属于允许的插件命名空间: {full_name}")
         if full_name in self._entries:
             raise ValueError(f"RPC 方法已注册: {full_name}")
         self._entries[full_name] = _RpcEntry(plugin_id, handler, policy)

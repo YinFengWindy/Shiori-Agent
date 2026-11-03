@@ -37,7 +37,7 @@ describe("createStoryBridgeClient", () => {
     };
 
     assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentStoryDate: "2026-08-02", currentTimeBand: "上午", currentScene: { key: "station", name: "车站", characterIds: [] } }]);
-    assert.deepEqual(requests, [{ method: "plugin.story.list", payload: {} }]);
+    assert.deepEqual(requests, [{ method: "story.list", payload: {} }]);
   });
 
   it("loads CG collections grouped by Story", async () => {
@@ -48,7 +48,7 @@ describe("createStoryBridgeClient", () => {
     };
 
     assert.deepEqual(await createStoryBridgeClient(invoke).listCgGallery(), [{ storyId: "story-1", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", items: [] }]);
-    assert.deepEqual(requests, [{ method: "plugin.story.cg.list", payload: {} }]);
+    assert.deepEqual(requests, [{ method: "story.cg.list", payload: {} }]);
   });
 
   it("returns the repository Story read model without a compatibility projection", async () => {
@@ -67,18 +67,18 @@ describe("createStoryBridgeClient", () => {
       return { payload: { story: storyPayload(0, "generating") }, error: null };
     });
     await client.createStory({ title: "雨港", background: "潮汐", storyDate: "2026-08-01", timeBand: "上午", roleId: "role-1", playerProfile: { displayName: "岚", appearance: "短发", identity: "抄写员" } }, "creation-1");
-    assert.deepEqual(requests[0], { method: "plugin.story.create", payload: { title: "雨港", background: "潮汐", story_date: "2026-08-01", time_band: "上午", role_id: "role-1", creation_id: "creation-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
+    assert.deepEqual(requests[0], { method: "story.create", payload: { title: "雨港", background: "潮汐", story_date: "2026-08-01", time_band: "上午", role_id: "role-1", creation_id: "creation-1", player_profile: { display_name: "岚", appearance: "短发", identity: "抄写员" } } });
   });
 
   it("submits player input with the latest Story revision", async () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
       requests.push(request);
-      return { payload: { story: storyPayload(request.method === "plugin.story.get" ? 4 : 5, "generating") }, error: null };
+      return { payload: { story: storyPayload(request.method === "story.get" ? 4 : 5, "generating") }, error: null };
     });
     await client.getStory("story-1");
     await client.submitInput("story-1", "推开门。");
-    assert.deepEqual(requests[1], { method: "plugin.story.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 4 } });
+    assert.deepEqual(requests[1], { method: "story.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 4 } });
   });
 
   it("regenerates the selected Story CG", async () => {
@@ -90,7 +90,7 @@ describe("createStoryBridgeClient", () => {
 
     await client.regenerateCg("story-1", "resource-1");
 
-    assert.deepEqual(requests, [{ method: "plugin.story.cg.regenerate", payload: { story_id: "story-1", resource_id: "resource-1" } }]);
+    assert.deepEqual(requests, [{ method: "story.cg.regenerate", payload: { story_id: "story-1", resource_id: "resource-1" } }]);
   });
 
   it("does not let an older read move the remembered revision backwards", async () => {
@@ -100,7 +100,7 @@ describe("createStoryBridgeClient", () => {
     let reads = 0;
     const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
       requests.push(request);
-      if (request.method === "plugin.story.get") {
+      if (request.method === "story.get") {
         reads += 1;
         return reads === 1 ? older.promise : newer.promise;
       }
@@ -115,7 +115,7 @@ describe("createStoryBridgeClient", () => {
     await olderRead;
     await client.submitInput("story-1", "推开门。");
 
-    assert.deepEqual(requests[2], { method: "plugin.story.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 5 } });
+    assert.deepEqual(requests[2], { method: "story.input", payload: { story_id: "story-1", input: "推开门。", expected_revision: 5 } });
   });
 
   it("keeps the newest resource state when equal-revision reads arrive out of order", async () => {
@@ -139,7 +139,7 @@ describe("createStoryBridgeClient", () => {
     const newer = deferred<FakeStoryResponse>();
     let reads = 0;
     const client = createStoryBridgeClient(async (request): Promise<FakeStoryResponse> => {
-      if (request.method !== "plugin.story.get") return { payload: { story: storyPayload() }, error: null };
+      if (request.method !== "story.get") return { payload: { story: storyPayload() }, error: null };
       reads += 1;
       return reads === 1 ? older.promise : newer.promise;
     });
@@ -162,7 +162,7 @@ describe("createStoryBridgeClient", () => {
   });
 });
 
-/** One story RPC as it reaches the backend: the wire method `plugin.story.<name>` and its payload. */
+/** One story RPC as it reaches the backend: the wire method `story.<name>` and its payload. */
 type FakeStoryRequest = { method: string; payload: Record<string, unknown> };
 
 /** The fake backend answer: the call result, or an error the injected client raises as `PluginBridgeError`. */
@@ -172,7 +172,7 @@ type FakeStoryResponse = { payload: Record<string, unknown>; error: { code: stri
 function createStoryBridgeClient(invoke: (request: FakeStoryRequest) => Promise<FakeStoryResponse>) {
   return makeStoryClient(createFakePluginClient({
     async call<T>(name: string, payload: Record<string, unknown> = {}) {
-      const response = await invoke({ method: `plugin.story.${name}`, payload });
+      const response = await invoke({ method: `story.${name}`, payload });
       if (response.error) throw new PluginBridgeError(response.error.message, response.error.code);
       return response.payload as T;
     },

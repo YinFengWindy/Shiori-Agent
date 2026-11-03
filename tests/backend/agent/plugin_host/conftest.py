@@ -34,18 +34,16 @@ def contract_package(tmp_path: Path) -> Path:
     (package / "manifest.yaml").write_text(
         "api: 4\nsdk: '>=4.0.0'\nid: external_demo\nversion: 1.2.3\n"
         "entry: backend/plugin.py\n"
-        "peer_dependencies: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0'}\n"
-        "renderer:\n  ui: {entry: renderer/ui.mjs, css: [renderer/style.css]}\n"
-        "  background: {entry: renderer/background.mjs, css: []}\n"
-        "  surface: {entry: renderer/surface.mjs, css: [renderer/style.css]}\n",
+        "frontend:\n  entry: renderer/frontend.mjs\n  exports: [ui, background, surface]\n  css: [renderer/style.css]\n"
+        "  peers: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0', '@yinfengwindy/shiori-sdk': '>=4.0.0 <5.0.0'}\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
         "async def setup(ctx):\n    ctx.expose({'ready': True})\n", encoding="utf-8"
     )
-    for name in ("ui", "background", "surface"):
-        (package / f"renderer/{name}.mjs").write_text(
-            'export default {pluginId: "external_demo"};\n', encoding="utf-8"
-        )
+    (package / "renderer/frontend.mjs").write_text(
+        'export const ui = {pluginId: "external_demo"}; export const background = {}; export const surface = {};\n',
+        encoding="utf-8",
+    )
     (package / "renderer/style.css").write_text(".demo {}\n", encoding="utf-8")
     return package

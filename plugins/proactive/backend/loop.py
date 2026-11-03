@@ -38,12 +38,13 @@ from .memory_sampler import sample_memory_chunks
 from .sensor import Sensor
 from .state import ProactiveStateStore
 from .target_selection import ProactiveTargetResolver
-from .session_key import SessionWorkspace
+from .session_workspace import SessionWorkspace
 from shiori_sdk.core.conversation import Conversation
 from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
 from shiori_sdk.processes import Processes
 from shiori_sdk.roles import Roles
+from shiori_sdk.session_keys import role_id_from_session_key
 
 logger = logging.getLogger(__name__)
 
@@ -486,11 +487,7 @@ class ProactiveLoop:
             memory = cast("MemoryProfileApi", self._memory)
             bind_session_metadata = getattr(memory, "bind_session_metadata", None)
             target_session_key = self._target_session_key()
-            role_id = (
-                target_session_key.split(":", 1)[1]
-                if target_session_key.startswith("role:")
-                else ""
-            )
+            role_id = role_id_from_session_key(target_session_key)
             if callable(bind_session_metadata):
                 bind_session_metadata({"role_id": role_id} if role_id else None)
             raw = str(memory.read_long_term() or "").strip()

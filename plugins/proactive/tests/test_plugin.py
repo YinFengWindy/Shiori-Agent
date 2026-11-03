@@ -34,9 +34,6 @@ class _Host:
     def configured_max_tokens(self) -> int:
         return 128
 
-    def builtin_skills_dir(self) -> str:
-        return str(Path("/tmp/shiori-no-builtin-skills"))
-
     def compile_role_prompt(self, role_id: str) -> str:
         return role_id
 

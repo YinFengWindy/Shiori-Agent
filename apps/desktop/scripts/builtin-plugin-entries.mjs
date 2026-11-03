@@ -1,15 +1,19 @@
-import { existsSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
-import { builtinPluginDirectories, PLUGIN_RENDERER_SOURCES } from "../../../scripts/plugin-distribution.mjs";
+import { builtinPluginDirectories, readPluginManifest } from "../../../scripts/plugin-distribution.mjs";
 
-const prefix = "virtual:shiori-builtin-plugins/";
+import { frontendExports } from "../../../scripts/plugin-frontend.mjs";
+
+const moduleId = "virtual:shiori-builtin-plugins";
 
 /** Generate imports before bundling, so external source never enters the host graph. */
-export async function builtinPluginEntrySource(pluginsRoot, kind) {
-  if (!Object.hasOwn(PLUGIN_RENDERER_SOURCES, kind)) throw new Error(`Unknown plugin entry kind: ${kind}`);
-  const paths = (await builtinPluginDirectories(pluginsRoot))
-    .map((directory) => join(directory, PLUGIN_RENDERER_SOURCES[kind]))
-    .filter(existsSync);
+export async function builtinPluginEntrySource(pluginsRoot) {
+  const paths = [];
+  for (const directory of await builtinPluginDirectories(pluginsRoot)) {
+    const manifest = await readPluginManifest(directory);
+    if (!manifest.frontend) continue;
+    await frontendExports(directory, manifest);
+    paths.push(join(directory, manifest.frontend.entry));
+  }
   return {
     paths,
     code: [
@@ -19,16 +23,15 @@ export async function builtinPluginEntrySource(pluginsRoot, kind) {
   };
 }
 
-/** Vite boundary for the three host-owned static contribution registries. */
+/** One Vite module inventories all declared builtin frontend namespaces. */
 export function builtinPluginEntries(pluginsRoot) {
-  const ids = Object.keys(PLUGIN_RENDERER_SOURCES).map((kind) => prefix + kind);
+  const ids = [moduleId];
   return {
     name: "shiori-builtin-plugin-entries",
     resolveId(id) { if (ids.includes(id)) return `\0${id}`; },
     async load(id) {
       if (!ids.some((candidate) => id === `\0${candidate}`)) return;
-      const kind = id.slice(id.lastIndexOf("/") + 1);
-      const result = await builtinPluginEntrySource(pluginsRoot, kind);
+      const result = await builtinPluginEntrySource(pluginsRoot);
       for (const path of result.paths) this.addWatchFile(path);
       return result.code;
     },
@@ -39,7 +42,7 @@ export function builtinPluginEntries(pluginsRoot) {
       const changed = (path, includeEntries = false) => {
         const parts = relative(resolve(pluginsRoot), resolve(path)).replaceAll("\\", "/").split("/");
         const manifestChanged = parts.length === 2 && parts[1] === "manifest.yaml";
-        const entryChanged = includeEntries && Object.values(PLUGIN_RENDERER_SOURCES).includes(parts.slice(1).join("/"));
+        const entryChanged = includeEntries && /\.[cm]?[jt]sx?$/.test(parts.at(-1));
         if (parts[0] === ".." || (!manifestChanged && !entryChanged)) return;
         for (const id of ids) {
           const module = server.moduleGraph.getModuleById(`\0${id}`);

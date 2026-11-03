@@ -67,10 +67,9 @@ class ReloadableDesktopService:
         self._entries = [self._current]
         self._listeners: set = set()
         self._retirements = TaskCollector("Desktop runtime retirement")
-        # One `plugins.reloaded` publication per applied reload, keyed by its
-        # operation ID while it is being sent (see `_plugins_reloaded`).
+        # Owns delivery independently of request cancellation. Settings waits
+        # for the returned publication task before reporting the outcome.
         self._reload_events = TaskCollector("Plugin reload notification")
-        self._pending_reload_events: dict[str, asyncio.Task[None]] = {}
 
     @property
     def has_event_listeners(self) -> bool:
@@ -160,7 +159,7 @@ class ReloadableDesktopService:
                 )
 
                 if method == "plugin.config.set":
-                    await self._announce_plugin_write(request_id, payload, result)
+                    await self._announce_plugin_write(request_id, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -181,11 +180,7 @@ class ReloadableDesktopService:
                         prepare_service=self._prepare,
                         publish_service=self._publish,
                     )
-                    await self._announce_plugin_write(
-                        request_id,
-                        {**payload, "operation_id": result["operation_id"]},
-                        result,
-                    )
+                    await self._announce_plugin_write(request_id, result)
                     return result
                 if (
                     method.startswith("plugins.install.")
@@ -228,7 +223,7 @@ class ReloadableDesktopService:
                     prepare_service=self._prepare,
                     publish_service=self._publish,
                 )
-                await self._announce_plugin_write(request_id, payload, result)
+                await self._announce_plugin_write(request_id, result)
                 return result
 
             return await self._respond_or_apply_error(
@@ -312,19 +307,14 @@ class ReloadableDesktopService:
             if not entry.requests:
                 entry.idle.set()
 
-    async def _announce_plugin_write(self, request_id, payload, result):
+    async def _announce_plugin_write(self, request_id, result):
         """Announces one plugin's config or enable write before its response.
 
-        An in-generation reload, load or unload was announced once, by its own
-        commit (``plugins.reloaded``); waiting for that keeps the event ahead
-        of the response, and a memo replay finds nothing pending and emits
-        nothing. Any other outcome is a generation swap or a refresh-only save.
+        An in-generation replacement announces ``plugins.reloaded`` once when
+        it settles. The settings application waits even on failure; a memo
+        replay emits nothing. Other outcomes swap generations or refresh only.
         """
-        if result.get("reloaded_plugins"):
-            pending = self._pending_reload_events.get(str(payload.get("operation_id")))
-            if pending is not None:
-                _ = await asyncio.wait({pending})
-        else:
+        if not result.get("reloaded_plugins"):
             await self._notify_applied(request_id, result)
 
     async def _notify_applied(self, request_id, result):
@@ -348,10 +338,11 @@ class ReloadableDesktopService:
 
     def _plugins_reloaded(
         self, operation_id: str, generation: int, plugin_ids: tuple[str, ...]
-    ) -> None:
+    ) -> asyncio.Task[None]:
         """Announces plugins reloaded, loaded or unloaded in the generation, once.
 
-        Called synchronously from the reload's uninterruptible commit, so the
+        Called synchronously after the uninterruptible replacement settles,
+        including rollback to the old config and partially failed restores. The
         event goes out even when the saving request was cancelled after the
         drain; the request itself only waits for it to keep the event ahead of
         its response. Only these plugins' renderer contexts, background entries
@@ -359,20 +350,35 @@ class ReloadableDesktopService:
         for a generation swap and refresh-only saves, so nothing else (roles,
         other plugins) refreshes.
         """
-        task = self._reload_events.spawn(
-            self._notify_reloaded(operation_id, generation, plugin_ids),
+        kernel = self.app.core.plugin_manager
+        states = {entry["id"]: entry["state"] for entry in kernel.states()}
+        # FAILED (including a failed restore) is not a user disable. Only
+        # disabled roots and their blocked hard dependents have that cause.
+        disabled_closure = {
+            dependent
+            for plugin_id in plugin_ids
+            if states.get(plugin_id) == "DISABLED"
+            for dependent in kernel.kernel.closure(
+                plugin_id, optional=False, among=plugin_ids
+            )
+        }
+        disabled = tuple(
+            plugin_id
+            for plugin_id in plugin_ids
+            if plugin_id in disabled_closure
+            and states.get(plugin_id) in {"DISABLED", "BLOCKED"}
+        )
+        return self._reload_events.spawn(
+            self._notify_reloaded(operation_id, generation, plugin_ids, disabled),
             name="plugins-reloaded-event",
         )
-        self._pending_reload_events[operation_id] = task
-
-        def forget(done: asyncio.Task[None]) -> None:
-            if self._pending_reload_events.get(operation_id) is done:
-                del self._pending_reload_events[operation_id]
-
-        task.add_done_callback(forget)
 
     async def _notify_reloaded(
-        self, operation_id: str, generation: int, plugin_ids: tuple[str, ...]
+        self,
+        operation_id: str,
+        generation: int,
+        plugin_ids: tuple[str, ...],
+        disabled_plugin_ids: tuple[str, ...],
     ) -> None:
         entry = self._current
         if generation != entry.lease.generation:
@@ -382,7 +388,11 @@ class ReloadableDesktopService:
                 "id": operation_id,
                 "type": "event",
                 "method": "plugins.reloaded",
-                "payload": {"generation": generation, "plugin_ids": list(plugin_ids)},
+                "payload": {
+                    "generation": generation,
+                    "plugin_ids": list(plugin_ids),
+                    "disabled_plugin_ids": list(disabled_plugin_ids),
+                },
             }
         )
 
@@ -444,7 +454,7 @@ class ReloadableDesktopService:
     def _plugin_rpc_registry(self) -> "PluginRpcRegistry[MethodPolicy]":
         """Returns the active generation's plugin RPC registry.
 
-        Only called for ``plugin.<id>.<method>`` requests (see
+        Only called for ``<pluginId>.<method>`` requests (see
         ``resolve_plugin_method_policy``); other methods never touch
         ``self.app.core``.
         """

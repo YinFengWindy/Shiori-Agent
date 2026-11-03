@@ -2,7 +2,7 @@ import { type PluginRpcClient, PluginBridgeError } from "@yinfengwindy/shiori-sd
 import { createPluginCommunicationClient } from "./pluginCommunicationClient";
 import { invokeBridgePayload, type DesktopInvoke } from "../shared/bridgeInvoke";
 import type { JsonSchema } from "./jsonSchemaForm";
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 import type { RoleChatType } from "../shared/types";
 
 /**
@@ -130,12 +130,8 @@ export type PluginSummary = {
   error: string;
   /** Renderer-stage failure; backend activation status remains independently visible. */
   rendererError?: string;
-  /** Main-process granted URLs; never inferred from a renderer-supplied directory. */
-  rendererUi?: RuntimePluginUi;
-  /** Main-process granted URLs for this plugin's `plugin-host.html` background entry, if declared. */
-  rendererBackground?: RuntimePluginUi;
-  /** Main-process granted URLs for this plugin's `surface.html` desktop-surface entry, if declared. */
-  rendererSurface?: RuntimePluginUi;
+  /** Resource grant for the plugin's single frontend entry. */
+  frontend?: RuntimePluginFrontend;
   diagnostic: PluginDiagnostic | null;
   hasConfigSchema: boolean;
   /** Services the plugin takes with `ctx.require`. Account plugins list `accounts`. */
@@ -192,7 +188,7 @@ export type PluginSetEnabledResult = {
 /**
  * Outcome a renderer reports for one admitted `renderer.<kind>` entry
  * (#262). `activationToken` is the admitted entry's own
- * `RuntimePluginUi.activationToken` (copied verbatim, not invented by the
+ * `RuntimePluginFrontend.activationToken` (copied verbatim, not invented by the
  * caller) — the backend rejects a report whose token does not match its
  * current handle for that plugin, which is what makes an abandoned load
  * from a disable/re-enable cycle harmless if it resolves late.
@@ -273,9 +269,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         id: string; name: string; version: string; description: string;
         candidate_id: string; source: "builtin" | "workspace"; directory: string;
         can_toggle: boolean; diagnostic: PluginDiagnostic | null;
-        renderer_ui?: RuntimePluginUi;
-        renderer_background?: RuntimePluginUi;
-        renderer_surface?: RuntimePluginUi;
+        frontend_grant?: RuntimePluginFrontend;
         can_trust?: boolean; trusted?: boolean; trust_fingerprint?: string | null; content_fingerprint?: string | null; trust_directory?: string; trust_pending_restart?: boolean;
         enabled: boolean; state: string; error: string; has_config_schema: boolean; supports_hot_unload: boolean;
         pending_renderer_kinds?: string[];
@@ -296,9 +290,7 @@ export function createPluginBridgeClient(invoke?: DesktopInvoke): PluginBridgeCl
         state: item.state,
         error: item.error,
         diagnostic: item.diagnostic,
-        rendererUi: item.renderer_ui,
-        rendererBackground: item.renderer_background,
-        rendererSurface: item.renderer_surface,
+        frontend: item.frontend_grant,
         canTrust: item.can_trust,
         trusted: item.trusted,
         trustFingerprint: item.trust_fingerprint,

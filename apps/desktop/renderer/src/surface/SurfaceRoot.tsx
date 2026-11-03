@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { usePluginRpcClient } from "../plugins/usePluginRpcClient";
+import { usePluginRpcScope } from "../plugins/usePluginRpcClient";
 import { SurfaceFailure } from "./SurfaceFailure";
 import { SurfaceErrorBoundary } from "./SurfaceErrorBoundary";
 // The main process builds this query string; sharing the parser keeps the two
@@ -33,18 +33,19 @@ export function SurfaceRoot(props: {
   }
   const Component = entry.Component;
   return (
-    <SurfaceErrorBoundary key={`${key.pluginId}/${key.surfaceId}`} surface={props.surface}>
-      <BoundSurface
-        Component={Component}
-        pluginId={key.pluginId}
-        surfaceId={key.surfaceId}
-        surface={props.surface}
-      />
-    </SurfaceErrorBoundary>
+    <BoundSurface
+      key={`${key.pluginId}/${key.surfaceId}`}
+      Component={Component}
+      pluginId={key.pluginId}
+      surfaceId={key.surfaceId}
+      surface={props.surface}
+    />
   );
 }
 
 function BoundSurface({ pluginId, Component, ...props }: Omit<PluginSurfaceComponentProps, "client"> & { pluginId: string; Component: ComponentType<PluginSurfaceComponentProps> }) {
-  const client = usePluginRpcClient(pluginId);
-  return <Component {...props} client={client} />;
+  const { client, generation } = usePluginRpcScope(pluginId);
+  return <SurfaceErrorBoundary key={generation} surface={props.surface}>
+    <Component {...props} client={client} />
+  </SurfaceErrorBoundary>;
 }

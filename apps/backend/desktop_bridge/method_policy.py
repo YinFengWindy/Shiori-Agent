@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
 
 from shiori_sdk.rpc import Concurrency
+from agent.plugin_host.rpc_names import plugin_method_owner
 
 
 class Handler(Enum):
@@ -194,15 +195,6 @@ def method_policy(method: str) -> MethodPolicy:
     return METHOD_POLICIES.get(method, _DEFAULT_POLICY)
 
 
-# ``plugin.<id>.<method>`` methods are not in the static table above: their
-# policy is whatever the owning plugin declared via ``ctx.rpc.register``.
-# ``plugin.config.*`` is excluded from that because it is served directly by
-# ``ReloadableDesktopService`` (declared statically above), never through a
-# plugin-declared RPC registration.
-_PLUGIN_METHOD_PREFIX = "plugin."
-_PLUGIN_CONFIG_METHOD_PREFIX = "plugin.config."
-
-
 def resolve_plugin_method_policy(
     method: str,
     registry_provider: "Callable[[], PluginRpcRegistry[MethodPolicy] | None]",
@@ -211,16 +203,14 @@ def resolve_plugin_method_policy(
 
     Shared by ``DesktopBridgeService`` (single generation) and
     ``ReloadableDesktopService`` (leases the active generation's registry)
-    so the ``plugin.`` prefix rule is declared in exactly one place.
+    using the same reserved host namespaces as manifest admission and routing.
 
-    ``registry_provider`` is only called for ``plugin.<id>.<method>``: most
+    ``registry_provider`` is only called for ``<pluginId>.<method>``: most
     requests never touch a plugin registry at all, and ``ReloadableDesktopService``
     only has one to offer once it has resolved the active generation's kernel,
     which callers should not have to do for every request regardless of method.
     """
-    if method.startswith(_PLUGIN_METHOD_PREFIX) and not method.startswith(
-        _PLUGIN_CONFIG_METHOD_PREFIX,
-    ):
+    if plugin_method_owner(method) is not None:
         registry = registry_provider()
         if registry is not None:
             policy = registry.policy_for(method)

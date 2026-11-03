@@ -1,8 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { createElement, isValidElement, type ReactElement } from "react";
+import { act, createElement, isValidElement, useEffect, useState, type ReactElement } from "react";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { PluginUiModule, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import type { BridgeEvent, PluginInjectedProps, PluginUiModule, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { applyPluginUiModules } from "./pluginUiModuleContract.js";
 import { PluginUiRegistry } from "./pluginUiRegistry.js";
 import { pluginHostServicesFor } from "./pluginHostServices.js";
@@ -28,13 +29,50 @@ function renderElement<TProps>(
 }
 
 describe("applyPluginUiModules", () => {
+  it("remounts a bound settings instance and cannot apply a retired client's late result", async () => {
+    const registry = new PluginUiRegistry();
+    const listeners = new Set<(event: BridgeEvent) => void>();
+    let release!: () => void;
+    const oldResponse = new Promise<void>((resolve) => { release = resolve; });
+    let reads = 0;
+    function Settings({ client }: PluginInjectedProps) {
+      const [count, setCount] = useState(0);
+      const [value, setValue] = useState("pending");
+      useEffect(() => {
+        void client.call<{ value: string }>("read").then((result) => setValue(result.value)).catch(() => {});
+      }, [client]);
+      return createElement("button", { onClick: () => setCount((previous) => previous + 1) }, `${count}:${value}`);
+    }
+    applyPluginUiModules({ sample: { ui: { pluginId: "sample", settingsSection: { kind: "component", label: "Sample", component: Settings } } } }, registry);
+    const Entry = registry.getSettingsSubsection("plugins", "sample")!.Component;
+    const view = await mountTestComponent(createElement(Entry, { subsectionId: "sample" }), { windowGlobals: { miraDesktop: {
+      onEvent: (listener: (event: BridgeEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+      invoke: async ({ method }: { method: string }) => {
+        let value = "fresh";
+        if (method === "sample.read" && reads++ === 0) { await oldResponse; value = "retired"; }
+        return { error: null, payload: method.endsWith(".open") ? { generation: "g1" } : { value } };
+      },
+    } } });
+    try {
+      await act(async () => view.container.querySelector("button")!.click());
+      assert.equal(view.container.textContent, "1:pending");
+      await act(async () => {
+        for (const listener of [...listeners]) listener({ id: "reload", type: "event", method: "plugins.reloaded", payload: { plugin_ids: ["sample"] } });
+      });
+      assert.equal(view.container.textContent, "0:fresh");
+      await act(async () => { release(); await oldResponse; });
+      assert.equal(view.container.textContent, "0:fresh");
+    } finally { release(); await view.cleanup(); }
+    assert.equal(listeners.size, 0);
+  });
+
   it("binds and unloads account.detail for its provider", () => {
     const registry = new PluginUiRegistry();
     function AccountControls() { return null; }
     function AccountIcon() { return null; }
     applyPluginUiModules({
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", accountDetail: { label: "Demo", icon: AccountIcon, component: AccountControls } },
+        ui: { pluginId: "demo", accountDetail: { label: "Demo", icon: AccountIcon, component: AccountControls } },
       },
     }, registry);
     const entry = registry.getAccountDetail("demo", () => true);
@@ -53,9 +91,9 @@ describe("applyPluginUiModules", () => {
 
   it("registers a schema-driven settings.section as a subtab of the built-in 'plugins' section, not a top-level entry", () => {
     const registry = new PluginUiRegistry();
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", settingsSection: { kind: "schema", label: "Demo" } },
+        ui: { pluginId: "demo", settingsSection: { kind: "schema", label: "Demo" } },
       },
     };
 
@@ -74,9 +112,9 @@ describe("applyPluginUiModules", () => {
     const registry = new PluginUiRegistry();
     function CustomSection() { return null; }
     function NavPage() { return null; }
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: {
+        ui: {
           pluginId: "demo",
           settingsSection: { kind: "component", label: "Demo", component: CustomSection },
           navPage: { label: "Demo Page", component: NavPage },
@@ -112,7 +150,7 @@ describe("applyPluginUiModules", () => {
     const originalError = console.error;
     console.error = (message: string) => { errors.push(message); };
     try {
-      applyPluginUiModules({ "/plugins/legacy_memory/ui/index.tsx": { default: legacyModule } }, registry);
+      applyPluginUiModules({ "/plugins/legacy_memory/ui/index.tsx": { ui: legacyModule } }, registry);
     } finally {
       console.error = originalError;
     }
@@ -128,9 +166,9 @@ describe("applyPluginUiModules", () => {
     const registry = new PluginUiRegistry();
     function CustomSection() { return null; }
     function NavPage() { return null; }
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: {
+        ui: {
           pluginId: "demo",
           settingsSection: { kind: "component", label: "Demo", component: CustomSection },
           navPage: { label: "Demo Page", component: NavPage },
@@ -180,9 +218,9 @@ describe("applyPluginUiModules", () => {
     }
 
     // Every call the plugin makes — from either slot — is confined to
-    // "plugin.demo.*"; the plugin never supplies (and cannot override) that
+    // "demo.*"; the plugin never supplies (and cannot override) that
     // prefix itself.
-    assert.deepEqual(calls, ["plugins.communication.open", "plugin.demo.readSomething", "plugins.communication.open", "plugin.demo.doSomething"]);
+    assert.deepEqual(calls, ["plugins.communication.open", "demo.readSomething", "plugins.communication.open", "demo.doSomething"]);
   });
 
   it("registers a nav.page's optional Sidebar bound with a client, and passes selectBlockedReason through untouched", () => {
@@ -190,9 +228,9 @@ describe("applyPluginUiModules", () => {
     function NavPage() { return null; }
     function Sidebar() { return null; }
     const selectBlockedReason = () => "not now";
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: {
+        ui: {
           pluginId: "demo",
           navPage: { label: "Demo Page", component: NavPage, sidebar: Sidebar, selectBlockedReason },
         },
@@ -221,9 +259,9 @@ describe("applyPluginUiModules", () => {
   it("leaves Sidebar undefined and selectBlockedReason undefined when a nav.page doesn't declare them", () => {
     const registry = new PluginUiRegistry();
     function NavPage() { return null; }
-    const modules: Record<string, { default: PluginUiModule }> = {
+    const modules: Record<string, { ui: PluginUiModule }> = {
       "/plugins/demo/ui/index.tsx": {
-        default: { pluginId: "demo", navPage: { label: "Demo Page", component: NavPage } },
+        ui: { pluginId: "demo", navPage: { label: "Demo Page", component: NavPage } },
       },
     };
 
@@ -236,8 +274,8 @@ describe("applyPluginUiModules", () => {
 
   it("skips a malformed module instead of throwing", () => {
     const registry = new PluginUiRegistry();
-    const modules = { "/plugins/broken/ui/index.tsx": { default: { settingsSection: {} } } } as unknown as Record<
-      string, { default: PluginUiModule }
+    const modules = { "/plugins/broken/ui/index.tsx": { ui: { settingsSection: {} } } } as unknown as Record<
+      string, { ui: PluginUiModule }
     >;
 
     assert.doesNotThrow(() => applyPluginUiModules(modules, registry));

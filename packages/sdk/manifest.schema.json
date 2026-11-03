@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
   "title": "Shiori plugin manifest (api: 4)",
-  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py 和 package_contract.py 为准。只接受 api: 4：其他值安装时被拒绝，已安装的在启动时 BLOCKED（unsupported_api）。sdk 是最低 SDK 约束，不满足时 BLOCKED（incompatible_sdk）。renderer 与 peer_dependencies 在 api: 4 中临时保留，P7 统一 frontend 入口时删除。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、contributes.channels 要求 inject 含 channels、sdk 比较符语法）仍由解析代码判定。",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py 和 package_contract.py 为准。只接受 api: 4：其他值安装时被拒绝，已安装的在启动时 BLOCKED（unsupported_api）。sdk 是最低 SDK 约束，不满足时 BLOCKED（incompatible_sdk）。frontend 是唯一前端入口；编译产物携带 exports、css、peers。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、contributes.channels 要求 inject 含 channels、sdk 比较符语法）仍由解析代码判定。",
   "type": "object",
   "additionalProperties": false,
   "required": ["api", "sdk"],
@@ -75,37 +75,61 @@
       }
     },
     "frontend": {
-      "description": "前端入口文件。宿主在 P7 前仍按目录发现 ui / background / surface。",
+      "description": "唯一前端入口；源码只声明 entry，编译产物还包含 exports、css 和 peers。",
       "type": "object",
       "additionalProperties": false,
-      "required": ["entry"],
+      "required": [
+        "entry"
+      ],
       "properties": {
-        "entry": { "$ref": "#/$defs/nonEmptyString" }
-      }
-    },
-    "renderer": {
-      "description": "外部包的已编译前端入口（renderer_contract.py）。api: 4 中临时保留，激活门与 build-plugin.mjs 仍读取，P7 统一 frontend 入口时删除。",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "ui": { "$ref": "#/$defs/rendererEntry" },
-        "background": { "$ref": "#/$defs/rendererEntry" },
-        "surface": { "$ref": "#/$defs/rendererEntry" }
+        "entry": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "css": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "exports": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "ui",
+              "background",
+              "surface"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "peers": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "react",
+            "react-dom",
+            "@yinfengwindy/shiori-sdk"
+          ],
+          "properties": {
+            "react": {
+              "type": "string"
+            },
+            "react-dom": {
+              "type": "string"
+            },
+            "@yinfengwindy/shiori-sdk": {
+              "type": "string"
+            }
+          }
+        }
       }
     },
     "assets": {
       "description": "外部包随附的静态文件，相对插件目录。",
       "type": "array",
       "items": { "$ref": "#/$defs/nonEmptyString" }
-    },
-    "peer_dependencies": {
-      "description": "声明 renderer 的外部包必须同时给出 react 与 react-dom 的版本范围。",
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "react": { "$ref": "#/$defs/nonEmptyString" },
-        "react-dom": { "$ref": "#/$defs/nonEmptyString" }
-      }
     }
   },
   "allOf": [
@@ -186,21 +210,6 @@
           "description": "拼到用户输入号码前的会话 ID 前缀，不能含首尾空白。",
           "type": "string",
           "pattern": "^\\S([\\s\\S]*\\S)?$"
-        }
-      }
-    },
-    "rendererEntry": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["entry", "css"],
-      "properties": {
-        "entry": {
-          "type": "string",
-          "pattern": "\\.mjs$"
-        },
-        "css": {
-          "type": "array",
-          "items": { "type": "string", "pattern": "\\.css$" }
         }
       }
     }

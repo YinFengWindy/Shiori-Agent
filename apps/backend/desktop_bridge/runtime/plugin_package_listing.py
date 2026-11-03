@@ -24,7 +24,7 @@ def external_source_row(source: ExternalSourceDiagnostic) -> dict[str, Any]:
         "name": manifest.display_name or source.plugin_dir.name,
         "version": manifest.version or "",
         "description": manifest.desc or "",
-        "renderer": {},
+        "frontend": {},
         "content_fingerprint": None,
         "content_hashes": {},
         "can_trust": False,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -8,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .timeutil import parse_iso
+from .skill_resources import parse_skill_frontmatter
 from shiori_sdk.files.json import atomic_save_json, load_json
 
 logger = logging.getLogger(__name__)
@@ -15,45 +15,6 @@ logger = logging.getLogger(__name__)
 
 def _clip(text: str, limit: int) -> str:
     return str(text or "").strip()[:limit]
-
-
-def _parse_skill_frontmatter(content: str) -> dict[str, str | list[str]]:
-    if not content.startswith("---"):
-        return {}
-    match = re.match(r"^---\n(.*?)\n---", content, re.DOTALL)
-    if match is None:
-        return {}
-    metadata: dict[str, str | list[str]] = {}
-    lines = match.group(1).split("\n")
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        if ":" not in line:
-            i += 1
-            continue
-        key, value = line.split(":", 1)
-        key = key.strip()
-        value = value.strip().strip("\"'")
-        if value:
-            metadata[key] = value
-            i += 1
-            continue
-        # value 为空 → 检查后续行是否为 YAML 列表项 (  - item)
-        list_items: list[str] = []
-        j = i + 1
-        while j < len(lines):
-            item_match = re.match(r"^\s+-\s+(.+)", lines[j])
-            if item_match is None:
-                break
-            list_items.append(item_match.group(1).strip().strip("\"'"))
-            j += 1
-        if list_items:
-            metadata[key] = list_items
-            i = j
-        else:
-            metadata[key] = value
-            i += 1
-    return metadata
 
 
 @dataclass
@@ -254,7 +215,7 @@ class DriftStateStore:
         skill_file = skill_dir / "SKILL.md"
         if not skill_file.exists():
             return None
-        metadata = _parse_skill_frontmatter(skill_file.read_text(encoding="utf-8"))
+        metadata = parse_skill_frontmatter(skill_file.read_text(encoding="utf-8"))
         name = str(metadata.get("name") or "").strip()
         description = str(metadata.get("description") or "").strip()
         if not name or not description or name != skill_dir.name:

@@ -13,7 +13,7 @@ from .tool_registry import LocalToolRegistry
 from .drift_state import DriftStateStore
 from .outbound_text import normalize_outbound_text
 from .reply_output import parse_push_reply, reply_properties
-from .session_key import role_id_from_session_key
+from shiori_sdk.session_keys import role_id_from_session_key
 
 if TYPE_CHECKING:
     from collections.abc import Callable

@@ -10,6 +10,8 @@ proactive/tools.py — Tool schemas + execute dispatcher
 
 from __future__ import annotations
 
+from shiori_sdk.session_keys import role_id_from_session_key
+
 import json
 import logging
 from dataclasses import dataclass
@@ -316,7 +318,7 @@ async def _recall_memory(ctx: AgentTickContext, args: dict, *, memory) -> str:
 
 def _memory_scope_from_tick_context(ctx: AgentTickContext) -> MemoryScope:
     session_key = str(ctx.session_key or "").strip()
-    role_id = session_key.split(":", 1)[1] if session_key.startswith("role:") else ""
+    role_id = role_id_from_session_key(session_key)
     if not role_id:
         raise ValueError("role_id required for proactive memory access")
     return MemoryScope(

@@ -1,10 +1,10 @@
 import { createFakeSurfaceHandle } from "@yinfengwindy/shiori-sdk/testing";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
-import { useEffect } from "react";
+import { act, useEffect, useState } from "react";
 import { mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { SurfaceRoot } from "./SurfaceRoot";
-import type { PluginSurfaceComponentProps, SurfaceHandle } from "@yinfengwindy/shiori-sdk";
+import type { BridgeEvent, PluginSurfaceComponentProps, SurfaceHandle } from "@yinfengwindy/shiori-sdk";
 import { PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 import { loadRuntimePluginSurface } from "./runtimePluginSurface";
 
@@ -19,6 +19,37 @@ let errors: unknown[][] = [];
 const realError = console.error;
 beforeEach(() => { errors = []; console.error = (...args: unknown[]) => { errors.push(args); }; });
 afterEach(() => { console.error = realError; });
+
+test("its reload resets a surface failure boundary and local state without remounting on unrelated events", async () => {
+  let broken = true;
+  const listeners = new Set<(event: BridgeEvent) => void>();
+  function Surface() {
+    const [value, setValue] = useState(0);
+    if (broken) throw new Error("failed instance");
+    return <button onClick={() => setValue((previous) => previous + 1)}>surface:{value}</button>;
+  }
+  const view = await mountTestComponent(<SurfaceRoot search="?plugin=demo&surface=main" surface={noopSurface} registry={registryWith(Surface)} />, { windowGlobals: { miraDesktop: {
+    onEvent: (listener: (event: BridgeEvent) => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  } } });
+  const emit = async (method: string, payload: Record<string, unknown>) => act(async () => {
+    for (const listener of [...listeners]) listener({ id: "event", type: "event", method, payload });
+  });
+  try {
+    assert.ok(view.container.querySelector('[role="alert"]'));
+    broken = false;
+    await emit("plugins.reloaded", { plugin_ids: ["other"] });
+    assert.ok(view.container.querySelector('[role="alert"]'));
+    await emit("plugins.reloaded", { plugin_ids: ["demo"] });
+    assert.equal(view.container.textContent, "surface:0");
+    await act(async () => view.container.querySelector("button")!.click());
+    await emit("runtime.applied", { changed: false });
+    await emit("plugins.reloaded", { plugin_ids: ["other"] });
+    assert.equal(view.container.textContent, "surface:1");
+    await emit("plugins.reloaded", { plugin_ids: ["demo"] });
+    assert.equal(view.container.textContent, "surface:0");
+  } finally { await view.cleanup(); }
+  assert.equal(listeners.size, 0);
+});
 
 function registryWith(Component: (props: PluginSurfaceComponentProps) => React.ReactNode) {
   const registry = new PluginSurfaceRegistry();
@@ -42,9 +73,9 @@ test("mounts only the URL's plugin with its surface and scoped client", async ()
 test("an external plugin's runtime-loaded surface mounts through the same registry a built-in module uses", async () => {
   const registry = new PluginSurfaceRegistry();
   await loadRuntimePluginSurface(
-    { pluginId: "external", entry: "entry.mjs", css: [] },
+    { pluginId: "external", entry: "entry.mjs", css: [], exports: ["surface" as const] },
     {
-      importModule: async () => ({ default: { pluginId: "external", surface: { component: () => <div>external surface</div> } } }),
+      importModule: async () => ({ surface: { pluginId: "external", surface: { component: () => <div>external surface</div> } } }),
       loadCss: async () => () => {},
       failed: () => assert.fail("unexpected failure"),
     },
@@ -61,7 +92,7 @@ test("an external plugin's runtime surface load failure renders the same missing
   const registry = new PluginSurfaceRegistry();
   const failures: unknown[] = [];
   await loadRuntimePluginSurface(
-    { pluginId: "external", entry: "entry.mjs", css: [], error: "Plugin package changed; restart the application to load its new code" },
+    { pluginId: "external", entry: "entry.mjs", css: [], exports: ["surface" as const], error: "Plugin package changed; restart the application to load its new code" },
     { importModule: async () => assert.fail("must not import a declared-invalid entry"), loadCss: async () => assert.fail("must not load CSS"), failed: (pluginId, error) => failures.push([pluginId, error]) },
     registry,
   );

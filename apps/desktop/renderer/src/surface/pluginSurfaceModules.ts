@@ -1,4 +1,4 @@
-import modules from "virtual:shiori-builtin-plugins/surface";
+import modules from "virtual:shiori-builtin-plugins";
 import { applyPluginSurfaceModules } from "./pluginSurfaceContract";
 
 // External surface entries are loaded from the admitted package at runtime.

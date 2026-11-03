@@ -40,7 +40,9 @@ def test_service_import_does_not_initialize_the_plugin_kernel(tmp_path: Path) ->
 
 
 class _Rpc:
-    def __init__(self, ledger: AccountDeliveryLedger, plugin_id: str = "chat") -> None:
+    def __init__(
+        self, ledger: AccountDeliveryLedger, plugin_id: str = "channel_probe"
+    ) -> None:
         self.ledger = ledger
         self.plugin_id = plugin_id
         self.calls: list[tuple[str, dict]] = []
@@ -75,7 +77,7 @@ class _Rpc:
         return (self.plugin_id, handle)
 
 
-def _service(tmp_path, plugin_id: str = "chat"):
+def _service(tmp_path, plugin_id: str = "channel_probe"):
     accounts = AccountRegistry(lambda role_id: role_id in {"mira", "other"})
     account = accounts.register(
         plugin_id=plugin_id,
@@ -103,13 +105,13 @@ async def test_natural_target_resolves_without_delivery_and_fences_reconnected_a
 ):
     service, accounts, rpc, ledger, account_id = _service(tmp_path)
     resolved = await service.resolve_target(
-        "chat", "mira", AccountTarget("group", "42", message_thread_id=27)
+        "channel_probe", "mira", AccountTarget("group", "42", message_thread_id=27)
     )
-    assert resolved.route == AccountRoute("chat_bot", "actual:42", "group", 27)
+    assert resolved.route == AccountRoute("channel_probe_bot", "actual:42", "group", 27)
     assert ledger.list_for_role("mira") == []
     assert rpc.calls == [
         (
-            "plugin.chat.account.resolve",
+            "channel_probe.account.resolve",
             {
                 "account_id": account_id,
                 "target_kind": "group",
@@ -121,8 +123,8 @@ async def test_natural_target_resolves_without_delivery_and_fences_reconnected_a
         )
     ]
     accounts.register(
-        plugin_id="chat",
-        platform="chat",
+        plugin_id="channel_probe",
+        platform="channel_probe",
         platform_account_id="bot",
         config_ref="bot",
         token="new-connection",
@@ -131,7 +133,7 @@ async def test_natural_target_resolves_without_delivery_and_fences_reconnected_a
     accounts.report(account_id, "new-connection", connection="online")
     with pytest.raises(PermissionError, match="回复批次"):
         await service.send(
-            "chat",
+            "channel_probe",
             "mira",
             resolved.target,
             "must not be sent",
@@ -144,17 +146,21 @@ async def test_natural_target_resolves_without_delivery_and_fences_reconnected_a
 async def test_known_bound_private_route_uses_no_new_plugin_rpc(tmp_path):
     service, _, rpc, _, _ = _service(tmp_path)
     resolved = await service.resolve_target(
-        "chat",
+        "channel_probe",
         "mira",
         AccountTarget("private", "user-id"),
-        known_private_route=AccountRoute("chat_bot", "actual:42"),
+        known_private_route=AccountRoute("channel_probe_bot", "actual:42"),
     )
     assert resolved.route.chat_id == "actual:42"
     assert rpc.calls == []
     await service.send(
-        "chat", "mira", resolved.target, "hello", expected_access=resolved.access
+        "channel_probe",
+        "mira",
+        resolved.target,
+        "hello",
+        expected_access=resolved.access,
     )
-    assert [name for name, _ in rpc.calls] == ["plugin.chat.account.send"]
+    assert [name for name, _ in rpc.calls] == ["channel_probe.account.send"]
 
 
 async def test_missing_new_resolver_is_explicit_but_old_account_send_still_works(
@@ -168,9 +174,11 @@ async def test_missing_new_resolver_is_explicit_but_old_account_send_still_works
         lambda name: None if name.endswith("account.resolve") else resolve(name),
     )
     with pytest.raises(RuntimeError, match="未提供此能力"):
-        await service.resolve_target("chat", "mira", AccountTarget("group", "42"))
+        await service.resolve_target(
+            "channel_probe", "mira", AccountTarget("group", "42")
+        )
     receipt = await service.send(
-        "chat", "mira", AccountTarget("group", "42"), "original"
+        "channel_probe", "mira", AccountTarget("group", "42"), "original"
     )
     assert receipt.platform_message_id
 
@@ -185,16 +193,16 @@ def test_bound_user_chat_selects_exact_second_binding_and_checks_role(tmp_path):
             record=record,
             user_id=user_id,
             scope="account",
-            chat=IdentityChat(record.id, "chat_bot", chat_id),
+            chat=IdentityChat(record.id, "channel_probe_bot", chat_id),
         )
-    channel, target = service.bound_user_chat("mira", "chat_bot", "dm:second")
-    assert channel == "chat"
+    channel, target = service.bound_user_chat("mira", "channel_probe_bot", "dm:second")
+    assert channel == "channel_probe"
     assert target.target == AccountTarget("private", "second")
     assert target.chat.chat_id == "dm:second"
     for role_id, transport, chat_id in [
-        ("other", "chat_bot", "dm:second"),
-        ("mira", "chat_wrong_instance", "dm:second"),
-        ("mira", "chat_bot", "g:second"),
+        ("other", "channel_probe_bot", "dm:second"),
+        ("mira", "channel_probe_wrong_instance", "dm:second"),
+        ("mira", "channel_probe_bot", "g:second"),
     ]:
         with pytest.raises(LookupError, match="绑定用户的私聊"):
             service.bound_user_chat(role_id, transport, chat_id)
@@ -209,10 +217,13 @@ async def test_each_target_has_durable_receipt_even_if_turn_later_fails(
     with pytest.raises(RuntimeError, match="later model step"):
         with account_delivery_scope(state):
             first = await service.send(
-                "chat", "mira", AccountTarget("private", "42"), "private secret"
+                "channel_probe",
+                "mira",
+                AccountTarget("private", "42"),
+                "private secret",
             )
             second = await service.send(
-                "chat", "mira", AccountTarget("group", "43"), "another secret"
+                "channel_probe", "mira", AccountTarget("group", "43"), "another secret"
             )
             raise RuntimeError("later model step failed")
 
@@ -233,7 +244,7 @@ async def test_each_target_has_durable_receipt_even_if_turn_later_fails(
 
 
 _VIA = {
-    "platform": "chat",
+    "platform": "channel_probe",
     "platform_account_id": "bot",
     "display_name": "Mira Bot",
     "prefix": "Chat 机器人「Mira Bot」",
@@ -246,13 +257,13 @@ async def test_explicit_transport_acceptance_keeps_no_fabricated_platform_id(tmp
     rpc.custom_receipt = {
         "accepted": True,
         "conversation": {
-            "channel": "chat_bot",
+            "channel": "channel_probe_bot",
             "chat_id": "dm:canonical",
             "chat_type": "private",
         },
     }
     receipt = await service.send(
-        "chat", "mira", AccountTarget("private", "peer-id"), "hi"
+        "channel_probe", "mira", AccountTarget("private", "peer-id"), "hi"
     )
     assert receipt.platform_message_id == ""
     assert receipt.conversation is not None
@@ -271,7 +282,9 @@ async def test_missing_message_receipt_requires_exact_explicit_acceptance(
     service, _accounts, rpc, ledger, _account_id = _service(tmp_path)
     rpc.custom_receipt = {"accepted": value}
     with pytest.raises(RuntimeError, match="不确定"):
-        await service.send("chat", "mira", AccountTarget("private", "peer-id"), "hi")
+        await service.send(
+            "channel_probe", "mira", AccountTarget("private", "peer-id"), "hi"
+        )
     [attempt] = ledger.list_for_role("mira")
     assert attempt.status == "pending"
     assert attempt.error == "MissingReceipt"
@@ -287,7 +300,7 @@ async def test_invalid_conversation_cannot_write_other_platform_but_send_stays_c
         "conversation": {"channel": "other", "chat_id": "dm:x", "chat_type": "private"},
     }
     receipt = await service.send(
-        "chat", "mira", AccountTarget("private", "peer-id"), "hi"
+        "channel_probe", "mira", AccountTarget("private", "peer-id"), "hi"
     )
     assert receipt.conversation is None
     assert receipt.platform_message_id == "real-id"
@@ -301,14 +314,18 @@ async def test_every_attempt_is_recorded_even_without_an_account_on_the_channel(
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
     state: dict[str, bool] = {}
     with account_delivery_scope(state):
-        with pytest.raises(LookupError, match="渠道 chat"):
-            await service.send("chat", "other", AccountTarget("private", "42"), "hi")
+        with pytest.raises(LookupError, match="渠道 channel_probe"):
+            await service.send(
+                "channel_probe", "other", AccountTarget("private", "42"), "hi"
+            )
         with pytest.raises(LookupError, match="渠道 telegram"):
             await service.send("telegram", "mira", AccountTarget("private", "42"), "hi")
     rpc.failure = ValueError("platform rejected target")
     with account_delivery_scope(state):
         with pytest.raises(ValueError, match="platform rejected"):
-            await service.send("chat", "mira", AccountTarget("private", "42"), "hi")
+            await service.send(
+                "channel_probe", "mira", AccountTarget("private", "42"), "hi"
+            )
 
     ledger = AccountDeliveryLedger(tmp_path)
     assert [
@@ -316,7 +333,7 @@ async def test_every_attempt_is_recorded_even_without_an_account_on_the_channel(
         for row in ledger.list_for_role("mira")
     ] == [
         ("", "telegram", "failed", "LookupError"),
-        (account_id, "chat", "failed", "ValueError"),
+        (account_id, "channel_probe", "failed", "ValueError"),
     ]
     assert [
         (row.account_id, row.status, row.error) for row in ledger.list_for_role("other")
@@ -330,12 +347,16 @@ async def test_account_removed_before_send_is_named_by_channel_only(
     tmp_path, monkeypatch
 ) -> None:
     service, accounts, rpc, _ledger, account_id = _service(tmp_path)
-    account = service.channel_account("chat", "mira")
+    account = service.channel_account("channel_probe", "mira")
     # Listed at lookup, gone by the time the send is authorized.
     monkeypatch.setattr(accounts, "list", lambda role_id=None: [account])
     accounts.release(account_id, "live")
-    with pytest.raises(LookupError, match="渠道 chat 的账号已不可用") as raised:
-        await service.send("chat", "mira", AccountTarget("private", "42"), "hi")
+    with pytest.raises(
+        LookupError, match="渠道 channel_probe 的账号已不可用"
+    ) as raised:
+        await service.send(
+            "channel_probe", "mira", AccountTarget("private", "42"), "hi"
+        )
     assert account_id not in str(raised.value)
     assert rpc.calls == []
 
@@ -347,10 +368,10 @@ async def test_channel_send_uses_the_roles_account_and_keeps_plugin_snapshot(
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
     rpc.via = _VIA
     target = AccountTarget("group", "room-1", mention_ids=("member-2",))
-    receipt = await service.send("chat", "mira", target, "hello")
+    receipt = await service.send("channel_probe", "mira", target, "hello")
 
     [(name, payload)] = rpc.calls
-    assert name == "plugin.chat.account.send"
+    assert name == "channel_probe.account.send"
     assert payload == {
         "account_id": account_id,
         "message": "hello",
@@ -361,7 +382,7 @@ async def test_channel_send_uses_the_roles_account_and_keeps_plugin_snapshot(
         "group_id": "",
         "mention_ids": ["member-2"],
     }
-    assert (receipt.account_id, receipt.channel) == (account_id, "chat")
+    assert (receipt.account_id, receipt.channel) == (account_id, "channel_probe")
     assert receipt.via_account == _VIA
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert attempt.target_options["mention_ids"] == ["member-2"]
@@ -371,7 +392,7 @@ async def test_channel_send_uses_the_roles_account_and_keeps_plugin_snapshot(
 async def test_images_reach_the_plugin_and_need_no_text(tmp_path) -> None:
     service, _accounts, rpc, _ledger, _account_id = _service(tmp_path)
     receipt = await service.send(
-        "chat",
+        "channel_probe",
         "mira",
         AccountTarget("private", "42"),
         "",
@@ -383,7 +404,7 @@ async def test_images_reach_the_plugin_and_need_no_text(tmp_path) -> None:
     assert receipt.platform_message_id == "receipt-1"
 
     with pytest.raises(ValueError, match="不能都为空"):
-        await service.send("chat", "mira", AccountTarget("private", "42"), " ")
+        await service.send("channel_probe", "mira", AccountTarget("private", "42"), " ")
     assert len(rpc.calls) == 1
 
 
@@ -402,7 +423,7 @@ async def test_invalid_snapshot_after_send_still_returns_the_recorded_receipt(
     rpc.via = via
     with caplog.at_level("ERROR", logger="shiori_sdk.accounts.models"):
         receipt = await service.send(
-            "chat", "mira", AccountTarget("private", "42"), "hi"
+            "channel_probe", "mira", AccountTarget("private", "42"), "hi"
         )
 
     # The platform accepted it: a plugin's bad snapshot only loses the snapshot.
@@ -420,16 +441,16 @@ async def test_invalid_snapshot_after_send_still_returns_the_recorded_receipt(
 async def test_channel_listing_and_targets_never_expose_account_ids(tmp_path) -> None:
     service, _accounts, rpc, _ledger, account_id = _service(tmp_path)
     [listed] = service.list_channels("mira")
-    assert listed["channel"] == "chat"
+    assert listed["channel"] == "channel_probe"
     assert listed["online"] is True
     assert account_id not in repr(listed)
     assert service.list_channels("other") == []
 
-    result = await service.targets("chat", "mira", "known", "", "")
+    result = await service.targets("channel_probe", "mira", "known", "", "")
     assert result["items"] == [{"id": "42"}]
     assert rpc.calls[-1][1]["account_id"] == account_id
-    with pytest.raises(LookupError, match="渠道 chat"):
-        await service.targets("chat", "other", "known", "", "")
+    with pytest.raises(LookupError, match="渠道 channel_probe"):
+        await service.targets("channel_probe", "other", "known", "", "")
 
 
 @pytest.mark.asyncio
@@ -439,7 +460,9 @@ async def test_uncertain_timeout_remains_pending(tmp_path) -> None:
     state: dict[str, bool] = {}
     with account_delivery_scope(state):
         with pytest.raises(TimeoutError):
-            await service.send("chat", "mira", AccountTarget("private", "42"), "hello")
+            await service.send(
+                "channel_probe", "mira", AccountTarget("private", "42"), "hello"
+            )
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert attempt.status == "pending"
     assert attempt.platform_message_id is None
@@ -454,7 +477,9 @@ async def test_missing_platform_receipt_remains_pending(tmp_path) -> None:
     state: dict[str, bool] = {}
     with account_delivery_scope(state):
         with pytest.raises(UncertainDeliveryError):
-            await service.send("chat", "mira", AccountTarget("private", "42"), "hello")
+            await service.send(
+                "channel_probe", "mira", AccountTarget("private", "42"), "hello"
+            )
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert (attempt.status, attempt.error) == ("pending", "UncertainDeliveryError")
     assert state == {"sent": True}
@@ -467,7 +492,9 @@ async def test_empty_plugin_receipt_suppresses_implicit_reply(tmp_path) -> None:
     state: dict[str, bool] = {}
     with account_delivery_scope(state):
         with pytest.raises(RuntimeError, match="结果不确定"):
-            await service.send("chat", "mira", AccountTarget("private", "42"), "hello")
+            await service.send(
+                "channel_probe", "mira", AccountTarget("private", "42"), "hello"
+            )
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert (attempt.status, attempt.error) == ("pending", "MissingReceipt")
     assert state == {"sent": True}
@@ -480,7 +507,9 @@ async def test_cancelled_plugin_call_suppresses_implicit_reply(tmp_path) -> None
     state: dict[str, bool] = {}
     with account_delivery_scope(state):
         with pytest.raises(asyncio.CancelledError):
-            await service.send("chat", "mira", AccountTarget("private", "42"), "hello")
+            await service.send(
+                "channel_probe", "mira", AccountTarget("private", "42"), "hello"
+            )
     [attempt] = AccountDeliveryLedger(tmp_path).list_for_role("mira")
     assert (attempt.status, attempt.error) == ("pending", "CancelledError")
     assert state == {"sent": True}
@@ -506,8 +535,8 @@ def test_user_chat_is_the_remembered_private_chat_of_the_roles_account(
     service, accounts, _rpc, _ledger, account_id = _service(tmp_path)
     store = UserIdentityStore(tmp_path)
     other = accounts.register(
-        plugin_id="chat",
-        platform="chat",
+        plugin_id="channel_probe",
+        platform="channel_probe",
         platform_account_id="other-bot",
         config_ref="other-bot",
         token="live",
@@ -520,10 +549,10 @@ def test_user_chat_is_the_remembered_private_chat_of_the_roles_account(
         accounts.get(account_id).record,
         "user-7",
         "platform",
-        IdentityChat(account_id, "chat_bot", "dm-7"),
+        IdentityChat(account_id, "channel_probe_bot", "dm-7"),
     )
 
-    resolved = service.user_chat("chat", "mira")
+    resolved = service.user_chat("channel_probe", "mira")
 
     assert resolved.target == AccountTarget("private", "user-7")
     assert resolved.chat == identity.chat_for(account_id)
@@ -532,14 +561,14 @@ def test_user_chat_is_the_remembered_private_chat_of_the_roles_account(
 def test_user_chat_refuses_an_unbound_or_unreached_channel(tmp_path) -> None:
     service, accounts, rpc, ledger, _account_id = _service(tmp_path)
     store = UserIdentityStore(tmp_path)
-    with pytest.raises(LookupError, match="没有在渠道 chat 绑定身份"):
-        service.user_chat("chat", "mira")
+    with pytest.raises(LookupError, match="没有在渠道 channel_probe 绑定身份"):
+        service.user_chat("channel_probe", "mira")
 
     # Bound platform-wide through another role's account: the ID is known,
     # but the user never wrote to this role's account, so no chat is known.
     other = accounts.register(
-        plugin_id="chat",
-        platform="chat",
+        plugin_id="channel_probe",
+        platform="channel_probe",
         platform_account_id="other-bot",
         config_ref="other-bot",
         token="live",
@@ -547,6 +576,6 @@ def test_user_chat_refuses_an_unbound_or_unreached_channel(tmp_path) -> None:
     ).record
     _bind(store, other, "user-7", "platform")
     with pytest.raises(LookupError, match="还没有私聊过当前角色"):
-        service.user_chat("chat", "mira")
+        service.user_chat("channel_probe", "mira")
     assert rpc.calls == []
     assert ledger.list_for_role("mira") == []

@@ -18,7 +18,7 @@ from .gates import ProactiveMode, resolve_gate_attempt_index
 from ..contracts import normalize_alert, normalize_content, normalize_context
 from ..gateway import GatewayResult
 from ..time import to_beijing_time
-from ..session_key import role_id_from_session_key
+from shiori_sdk.session_keys import role_id_from_session_key
 
 # 关系向 fallback 对所有角色统一的开口约束，不绑定任何具体角色。
 _RELATIONSHIP_FALLBACK_STYLE_HINT = (

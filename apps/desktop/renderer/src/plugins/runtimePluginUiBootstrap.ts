@@ -15,7 +15,7 @@ export function initializeRuntimePluginUi() {
   registerPluginUiSynchronization(createRuntimePluginUiSynchronization({
     importModule: importRuntimePluginModule,
     loadCss: loadRuntimePluginCss,
-    register: (module) => applyPluginUiModules({ runtime: { default: module } }),
+    register: (module) => applyPluginUiModules({ runtime: { ui: module } }),
     unregister: (pluginId) => {
       pluginUiRegistry.unregisterPlugin(pluginId);
       pluginRoleSettingsRegistry.unregister(pluginId);

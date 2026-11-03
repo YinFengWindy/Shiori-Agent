@@ -9,14 +9,14 @@ export type PluginRpcTestResponder = (name: string, params: Record<string, unkno
 
 /**
  * Test-only desktop bridge: opens plugin communication contexts and routes
- * `plugin.<id>.<name>` calls to `respond`, recording each call.
+ * `<pluginId>.<name>` calls to `respond`, recording each call.
  */
 export function createPluginRpcTestInvoke(respond: PluginRpcTestResponder) {
   const calls: PluginRpcTestCall[] = [];
   const invoke: DesktopInvoke = async (request) => {
     const reply = (payload: Record<string, unknown>) => ({ id: "1", type: "response" as const, method: request.method, error: null, payload });
     if (request.method.startsWith("plugins.communication.")) return reply({ generation: "g1" });
-    const match = /^plugin\.([^.]+)\.(.+)$/.exec(request.method);
+    const match = /^([^.]+)\.(.+)$/.exec(request.method);
     if (!match) throw new Error(`unexpected method: ${request.method}`);
     const [, pluginId, name] = match;
     const params = Object.fromEntries(Object.entries(request.payload).filter(([key]) => key !== "__plugin_context"));

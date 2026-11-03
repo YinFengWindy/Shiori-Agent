@@ -2,10 +2,22 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from shiori_sdk.rpc import PluginRpcError
+
+CommunicationEndReason = Literal[
+    "context_disposed", "plugin_disabled", "plugin_reloading", "runtime_replaced"
+]
+"""Why a server-side renderer owner stopped accepting work."""
+
+_END_MESSAGES = {
+    "context_disposed": "插件通信已处置",
+    "plugin_disabled": "插件已停用",
+    "plugin_reloading": "插件正在重载",
+    "runtime_replaced": "插件运行代际已替换",
+}
 
 
 @dataclass
@@ -57,7 +69,12 @@ class RendererRequests:
         else:
             request.future.set_result({"result": payload.get("result")})
 
-    def cancel(self, owner: str | None = None) -> None:
+    def cancel(
+        self,
+        owner: str | None = None,
+        *,
+        reason: CommunicationEndReason = "context_disposed",
+    ) -> None:
         """Rejects requests for a removed endpoint or a replaced runtime generation."""
         for request_id, request in list(self.pending.items()):
             if owner is not None and owner not in (request.caller, request.provider):
@@ -65,5 +82,13 @@ class RendererRequests:
             self.pending.pop(request_id)
             if not request.future.done():
                 request.future.set_exception(
-                    PluginRpcError("plugin_unavailable", "插件通信已停用或替换")
+                    PluginRpcError(
+                        (
+                            "plugin_reloading"
+                            if reason == "plugin_reloading"
+                            else "plugin_unavailable"
+                        ),
+                        _END_MESSAGES[reason],
+                        details={"reason": reason},
+                    )
                 )

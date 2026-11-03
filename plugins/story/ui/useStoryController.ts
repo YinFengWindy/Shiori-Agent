@@ -96,7 +96,7 @@ export function useStoryController(client: StoryBridgeClient) {
   }, [reloadStories]);
 
   useEffect(() => host.onEvent((event) => {
-    if (!new Set(["plugin.story.beat.committed", "plugin.story.operation.changed", "plugin.story.resource.changed", "plugin.story.failed"]).has(event.method)) return;
+    if (!new Set(["story.beat.committed", "story.operation.changed", "story.resource.changed", "story.failed"]).has(event.method)) return;
     const storyId = typeof event.payload.story_id === "string" ? event.payload.story_id : "";
     if (storyId) refreshStory(storyId);
   }), [host, refreshStory]);

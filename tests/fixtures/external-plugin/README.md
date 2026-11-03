@@ -1,7 +1,7 @@
 # Independent external lifecycle fixture
 
 Copy this folder outside Shiori before building. It requires Node 22+ and pnpm
-10.33.0; esbuild 0.25.12 is its own build dependency. No host source, Vite glob,
+10.33.0; esbuild 0.25.12 and js-yaml 4.3.1 are its build dependencies. No host source, Vite glob,
 private runtime dependency or host rebuild participates in a plugin update.
 
 ```powershell
@@ -16,7 +16,7 @@ pnpm build --version 4.0.0 --variant renderer-failure
 
 Each build produces `artifacts/external_demo-<version>-<variant>/` and a deterministic
 ZIP beside it, with `manifest.yaml` at its root. The build prints the archive's
-SHA-256. React, React DOM and `@yinfengwindy/shiori-sdk` remain host peers. `zip.mjs` uses Node's standard
+SHA-256. One frontend module exports ui/background/surface; its exported names come from the build metadata and its peers come from package.json. React, React DOM and `@yinfengwindy/shiori-sdk` remain host peers. `zip.mjs` uses Node's standard
 library; it stores regular files with stable timestamps and no enclosing folder.
 `src/contract.d.ts` describes only the injected API subset used by this independent
 example; it imports no Shiori types. Host validation is separate from building:

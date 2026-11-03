@@ -769,8 +769,8 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
 ):
     accounts = AccountRegistry(lambda role_id: role_id == "mira")
     account = accounts.register(
-        plugin_id="chat",
-        platform="chat",
+        plugin_id="channel_probe",
+        platform="channel_probe",
         platform_account_id="bot",
         config_ref="bot",
         token="live",
@@ -784,8 +784,8 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
         return {"message_id": "received-first"}
 
     def resolve(method):
-        assert method == "plugin.chat.account.send"
-        return "chat", send
+        assert method == "channel_probe.account.send"
+        return "channel_probe", send
 
     manager = SessionManager(tmp_path)
     manager.get_or_create("role:mira").metadata.update(
@@ -802,7 +802,7 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
                 UserIdentityStore(tmp_path),
             ),
             bound_chat_target=lambda role_id, channel, chat_id: (
-                "chat",
+                "channel_probe",
                 AccountTarget("private", "user42"),
             ),
             role_lookup=_natural_chat_lookup(tmp_path, True),
@@ -821,13 +821,13 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
     async def run():
         with turn_getters(policy=_PRESENT), batches.bind(MessageBus()):
             async with owner.natural_reply_scope(
-                "role:mira", "chat_bot", "canonical-dm", turn_id="private:tick"
+                "role:mira", "channel_probe_bot", "canonical-dm", turn_id="private:tick"
             ):
                 result = await _natural_result(owner, ["已送达前缀", "不要发送尾段"])
                 return await owner.handle_proactive_turn(
                     result=result,
                     session_key="role:mira",
-                    channel="chat_bot",
+                    channel="channel_probe_bot",
                     chat_id="canonical-dm",
                     source="proactive",
                 )
@@ -836,7 +836,7 @@ async def test_bound_private_natural_batch_uses_known_address_without_resolver_r
     await asyncio.wait_for(pause.wait(), 3)
     batches.interrupt_background(
         InboundMessage(
-            "chat_bot",
+            "channel_probe_bot",
             "user42",
             "canonical-dm",
             "补充",

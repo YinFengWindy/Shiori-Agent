@@ -21,4 +21,4 @@ contributes:
           chat_id_hint: 对方的用户 OpenID
           prefix: 'c2c:'
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

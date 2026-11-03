@@ -1,4 +1,5 @@
 import { build } from "esbuild";
+import { load, dump } from "js-yaml";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,16 +27,18 @@ if (variant === "incompatible") {
   if (!apiLine.test(manifest)) throw new Error("Fixture manifest has no api: 4 line to make incompatible");
   manifest = manifest.replace(apiLine, "api: 2");
 }
-await writeFile(resolve(packageRoot, "manifest.yaml"), manifest, "utf8");
+const metadata = load(manifest);
+metadata.frontend.peers = JSON.parse(await readFile(resolve(root, "package.json"), "utf8")).peerDependencies;
 if (variant !== "missing-entry") {
   const source = (await readFile(resolve(root, "src/plugin.py"), "utf8")).replaceAll("__FIXTURE_VERSION__", version);
   await writeFile(resolve(packageRoot, "backend/plugin.py"), source, "utf8");
 }
 await copyFile(resolve(root, "src/label.txt"), resolve(packageRoot, "assets/label.txt"));
 await copyFile(resolve(root, "src/style.css"), resolve(packageRoot, "style.css"));
-await build({
+const compiled = await build({
+  metafile: true,
   absWorkingDir: root,
-  entryPoints: ["src/ui.tsx", "src/background.ts", "src/surface.tsx"],
+  entryPoints: ["src/frontend.ts"],
   outdir: resolve(packageRoot, "renderer"),
   outExtension: { ".js": ".mjs" },
   bundle: true, format: "esm", platform: "browser", target: "es2022",
@@ -43,6 +46,8 @@ await build({
   external: ["react", "react-dom", "react/*", "react-dom/*", "@yinfengwindy/shiori-sdk"],
   define: { __FIXTURE_VERSION__: JSON.stringify(version), __RENDERER_FAILURE__: String(variant === "renderer-failure") },
 });
+metadata.frontend.exports = Object.values(compiled.metafile.outputs).find((entry) => entry.entryPoint).exports;
+await writeFile(resolve(packageRoot, "manifest.yaml"), dump(metadata, {lineWidth: -1, noRefs: true}), "utf8");
 const archive = resolve(output, `${name}.zip`);
 await zipDirectory(packageRoot, archive);
 const sha256 = createHash("sha256").update(await readFile(archive)).digest("hex");

@@ -52,7 +52,7 @@ export async function exercise(app: PackagedApp, version: string) {
 
 /** Prove teardown by absence, persisted tool audit, timer quiescence and a real host event. */
 export async function assertNoResidue(app: PackagedApp, backgroundStarted = true) {
-  const response = await app.bridge("plugin.external_demo.inspect");
+  const response = await app.bridge("external_demo.inspect");
   assert.ok(response.error, "disabled RPC remained callable");
   await eventually(async () => app.page!.getByRole("button", { name: "External lifecycle", exact: true }).count(), (count) => count === 0, "UI removed");
   await eventually(async () => app.app!.windows().filter((page) => page.url().includes("/surface.html")).length, (count) => count === 0, "surface destroyed");
@@ -83,7 +83,7 @@ export async function lifecycle(app: PackagedApp, fixture: string) {
   await app.evidence.add("cancel-install-does-not-execute");
   await app.install(archive("1.0.0"));
   await app.screenshot("01-install-pending");
-  assert.ok((await app.bridge("plugin.external_demo.inspect")).error);
+  assert.ok((await app.bridge("external_demo.inspect")).error);
   await app.restart();
   await activate(app);
   await exercise(app, "1.0.0");
@@ -99,7 +99,7 @@ export async function lifecycle(app: PackagedApp, fixture: string) {
   await exercise(app, "1.0.0");
   await app.settings();
   await app.install(archive("2.0.0"), { update: true });
-  assert.equal((await app.call("plugin.external_demo.inspect")).version, "1.0.0");
+  assert.equal((await app.call("external_demo.inspect")).version, "1.0.0");
   const journal = await pendingPackage(app.paths.workspace);
   await app.evidence.add("update-staged-old-version-still-active", journal.journal);
   await app.screenshot("03-update-pending");
@@ -114,7 +114,7 @@ export async function lifecycle(app: PackagedApp, fixture: string) {
   await activate(app);
   const [row] = await app.roster();
   assert.ok(row.package_operation_error);
-  assert.equal((await app.call("plugin.external_demo.inspect")).version, "2.0.0");
+  assert.equal((await app.call("external_demo.inspect")).version, "2.0.0");
   assert.equal((await backendState(app)).saved, "retained-user-value");
   await app.screenshot("04-failed-update-retains-old");
   await app.evidence.add("corrupt-confirmed-update-rolls-back", row);
@@ -130,12 +130,12 @@ export async function lifecycle(app: PackagedApp, fixture: string) {
   const retained = await readFile(resolve(app.paths.workspace, "plugin-data/external_demo/kv.json"), "utf8");
   await app.install(archive("2.0.0"), { confirm: false });
   assert.equal(await readFile(resolve(app.paths.workspace, "plugin-data/external_demo/kv.json"), "utf8"), retained);
-  assert.ok((await app.bridge("plugin.external_demo.inspect")).error);
+  assert.ok((await app.bridge("external_demo.inspect")).error);
   await app.evidence.add("uninstall-retains-data-cancelled-reinstall-cannot-read-it");
   await app.install(archive("2.0.0"));
   assert.equal(await readFile(resolve(app.paths.workspace, "plugin-data/external_demo/kv.json"), "utf8"), retained);
   await app.restart();
   await activate(app);
-  assert.equal((await app.call("plugin.external_demo.inspect")).saved, "retained-user-value");
+  assert.equal((await app.call("external_demo.inspect")).saved, "retained-user-value");
   await app.evidence.add("explicit-reinstall-confirmation-restores-data-access");
 }

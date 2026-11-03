@@ -78,9 +78,9 @@ it("re-reads after its plugin's heartbeat event for its role", async () => {
   const next: AffectionChatStatus = { ...first, loneliness: 80 };
   const { view, calls, emit } = await mountStatus([first, next]);
   try {
-    await emit("plugin.affection.chat_status.changed", { role_id: "yin" });
+    await emit("affection.chat_status.changed", { role_id: "yin" });
     assert.equal(calls.length, 1);
-    await emit("plugin.affection.chat_status.changed", { role_id: "mira" });
+    await emit("affection.chat_status.changed", { role_id: "mira" });
     assert.equal(calls.length, 2);
     assert.match(view.container.textContent ?? "", /寂寞值80/);
   } finally {

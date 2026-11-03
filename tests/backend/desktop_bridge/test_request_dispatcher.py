@@ -109,7 +109,7 @@ async def test_regeneration_uses_the_bounded_integration_lane() -> None:
 @pytest.mark.asyncio
 async def test_plugin_submission_uses_its_declared_integration_lane() -> None:
     def resolver(method: str) -> MethodPolicy:
-        if method == "plugin.demo.continue":
+        if method == "demo.continue":
             return MethodPolicy(concurrency=Concurrency.INTEGRATION)
         return method_policy(method)
 
@@ -125,7 +125,7 @@ async def test_plugin_submission_uses_its_declared_integration_lane() -> None:
     async def _update_role() -> None:
         role_update_completed.set()
 
-    dispatcher.submit({"method": "plugin.demo.continue"}, _continue_plugin)
+    dispatcher.submit({"method": "demo.continue"}, _continue_plugin)
     try:
         await asyncio.wait_for(run_started.wait(), timeout=0.2)
         dispatcher.submit({"method": "roles.update"}, _update_role)
@@ -178,12 +178,12 @@ async def test_injected_policy_resolver_overrides_the_static_table() -> None:
         active -= 1
 
     for _ in range(4):
-        dispatcher.submit({"method": "plugin.demo.write"}, _read)
+        dispatcher.submit({"method": "demo.write"}, _read)
     await asyncio.sleep(0)
 
     # 静态表会把 plugin.demo.write 当作串行 mutation；注入的 resolver 证明它确实生效
     assert peak == 4
-    assert calls.count("plugin.demo.write") == 4
+    assert calls.count("demo.write") == 4
     release.set()
     await dispatcher.aclose()
 

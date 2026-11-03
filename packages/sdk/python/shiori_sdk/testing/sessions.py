@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass, field
 
+from shiori_sdk.session_keys import role_session_key
+
 
 @dataclass
 class FakeSession:
@@ -24,8 +26,8 @@ class FakeSessions:
         return self.sessions.setdefault(key, FakeSession())
 
     def role_session_key(self, role_id: str) -> str:
-        """Return a stable test session key."""
-        return f"role:{role_id}"
+        """Use the same role key format as the host."""
+        return role_session_key(role_id)
 
     def original_media_path(self, value: str) -> str:
         """Use only fixture-supplied provenance."""

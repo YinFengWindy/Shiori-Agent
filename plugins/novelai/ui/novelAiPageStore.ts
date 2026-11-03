@@ -16,7 +16,7 @@ export type NovelAiPageState = {
   rolesLoaded: boolean;
   /** The generation form; kept here so a prompt survives switching to the tag library and back. */
   form: ImageStudioFormState;
-  /** Token readiness from `plugin.novelai.status`; null until known (treated as usable). */
+  /** Token readiness from `novelai.status`; null until known (treated as usable). */
   readiness: NovelAiReadiness | null;
   submitting: boolean;
   history: ImageHistoryRecord[];

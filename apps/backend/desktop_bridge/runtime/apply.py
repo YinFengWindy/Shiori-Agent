@@ -155,7 +155,7 @@ class DerivedWrite:
 
 
 # (operation_id, generation, reloaded plugin ids) of one applied in-generation reload.
-type PluginsReloadedListener = Callable[[str, int, tuple[str, ...]], None]
+type PluginsReloadedListener = Callable[[str, int, tuple[str, ...]], asyncio.Task[None]]
 
 
 class RuntimeSettingsApplication:
@@ -170,8 +170,8 @@ class RuntimeSettingsApplication:
         on_plugins_reloaded: PluginsReloadedListener | None = None,
     ) -> None:
         self.app = app
-        # Told synchronously, inside the reload's uninterruptible commit, which
-        # plugins an operation reloaded; called once per applied reload.
+        # Told synchronously once the uninterruptible replacement settles,
+        # including rollback; persistence and frontend ownership are separate.
         self._on_plugins_reloaded = on_plugins_reloaded
         self.roles = role_store
         self.transaction = ConfigTransaction(config_path, role_store.workspace)
@@ -420,14 +420,18 @@ class RuntimeSettingsApplication:
         values = config.plugins.get(plugin_id, {})
         raw_values = config.raw_plugin_configs.get(plugin_id, {})
         result: dict[str, Any] = {"generation": self.app.generation, "changed": False}
+        publication: asyncio.Task[None] | None = None
 
         def commit(plugin_ids: tuple[str, ...]) -> None:
             self._commit(text)
             if plugin_ids:
                 result["reloaded_plugins"] = list(plugin_ids)
             self._remember(operation_id, fingerprint, result)
+
+        def on_replaced(plugin_ids: tuple[str, ...]) -> None:
+            nonlocal publication
             if plugin_ids and self._on_plugins_reloaded is not None:
-                self._on_plugins_reloaded(
+                publication = self._on_plugins_reloaded(
                     operation_id, result["generation"], plugin_ids
                 )
 
@@ -438,6 +442,7 @@ class RuntimeSettingsApplication:
                 raw_values=raw_values,
                 drain_timeout=PLUGIN_RELOAD_DRAIN_TIMEOUT_SECONDS,
                 commit=commit,
+                on_replaced=on_replaced,
             )
         except PluginReloadUnsupported as exc:
             if exc.reason == "disabled":
@@ -491,6 +496,12 @@ class RuntimeSettingsApplication:
                 plugin_ids=list(exc.failed),
                 restore_failed=list(exc.restore_failed),
             ) from exc
+        finally:
+            # All callers (including trust with its generated operation id)
+            # observe the settled owners before a success or failure response.
+            # The service still owns delivery and any notification failures.
+            if publication is not None:
+                _ = await asyncio.wait({publication})
         for error in reloaded.cleanup_errors:
             logger.warning("插件重载后的清理失败: %s", error, exc_info=error)
         return result

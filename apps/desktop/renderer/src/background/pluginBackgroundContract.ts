@@ -1,8 +1,9 @@
+import type { PluginFrontendModule } from "@yinfengwindy/shiori-sdk";
 import type { PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { pluginBackgroundRegistry, type PluginBackgroundRegistry } from "./pluginBackgroundRegistry";
 
 /**
- * Narrows an unknown default export down to a well-formed
+ * Narrows an unknown named export down to a well-formed
  * PluginBackgroundContribution. Exported so `runtimePluginBackground.ts` can
  * apply the identical structural check to a runtime-loaded module, not a
  * second hand-rolled copy of it.
@@ -14,7 +15,7 @@ export function isPluginBackgroundModule(value: unknown): value is PluginBackgro
 }
 
 /**
- * Registers every plugin background module found by the build-time glob.
+ * Registers every plugin background module found by the frontend inventory.
  *
  * Pure and DOM-free (it only mutates the registry it is handed) so it is unit
  * testable against a hand-built module record, which is the only way to
@@ -22,13 +23,14 @@ export function isPluginBackgroundModule(value: unknown): value is PluginBackgro
  * `pluginBackgroundModules.ts`.
  */
 export function applyPluginBackgroundModules(
-  modules: Record<string, { default: PluginBackgroundContribution }>,
+  modules: Record<string, PluginFrontendModule>,
   registry: PluginBackgroundRegistry = pluginBackgroundRegistry,
 ): void {
   for (const [path, mod] of Object.entries(modules)) {
-    const backgroundModule = mod.default;
+    const backgroundModule = mod.background;
+    if (mod.background === undefined) continue;
     if (!isPluginBackgroundModule(backgroundModule)) {
-      console.error(`[pluginBackgroundModules] ${path} 的默认导出不是合法的 PluginBackgroundContribution，已跳过`);
+      console.error(`[pluginBackgroundModules] ${path} 的background 导出不是合法的 PluginBackgroundContribution，已跳过`);
       continue;
     }
     registry.register({

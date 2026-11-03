@@ -34,6 +34,10 @@ export type PluginPeer = {
  * The injected `client` every plugin UI, surface and background receives:
  * namespace-bound calls, events, declared peers and background requests.
  * Namespace binding is cooperation, not a sandbox or authentication.
+ * Local names travel as `<pluginId>.<name>`; host management methods are separate.
+ * A replaced owner rejects pending calls: `plugin_reloading` for reload,
+ * otherwise `plugin_unavailable` with `details.reason` identifying disposal,
+ * disable, bridge exit or runtime replacement. A new owner must create a client.
  */
 export type PluginRpcClient = PluginPeer & {
   /** Discovers and invokes explicitly registered public service methods. */

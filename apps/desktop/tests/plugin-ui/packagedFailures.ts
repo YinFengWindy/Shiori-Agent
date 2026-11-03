@@ -16,7 +16,7 @@ export async function invalidArchives(app: PackagedApp, fixture: string) {
     const diagnostic = await alert.innerText();
     assert.match(diagnostic, expected);
     assert.equal((await app.roster()).length, 0);
-    assert.ok((await app.bridge("plugin.external_demo.inspect")).error);
+    assert.ok((await app.bridge("external_demo.inspect")).error);
     await app.screenshot(`invalid-${variant}`);
     await app.evidence.add(`invalid-${variant}-diagnostic`, diagnostic);
   }
@@ -53,7 +53,7 @@ export async function activationFailures(app: PackagedApp, fixture: string) {
   const conflicts = await app.state("CONFLICT");
   assert.equal(conflicts.length, 2);
   assert.ok(conflicts.every((row) => row.error || row.diagnostic));
-  assert.ok((await app.bridge("plugin.external_demo.inspect")).error);
+  assert.ok((await app.bridge("external_demo.inspect")).error);
   assert.equal(await app.page!.getByRole("button", { name: "External lifecycle", exact: true }).count(), 0);
   assert.equal(app.app!.windows().filter((page) => page.url().includes("/surface.html")).length, 0);
   await app.screenshot("05-duplicate-diagnostic");

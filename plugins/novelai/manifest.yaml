@@ -22,4 +22,4 @@ inject:
 optional_inject:
   - scene
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

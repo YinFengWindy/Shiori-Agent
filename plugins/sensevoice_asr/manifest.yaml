@@ -13,4 +13,4 @@ inject:
   - processes
   - background
 frontend:
-  entry: ui/index.tsx
+  entry: frontend.ts

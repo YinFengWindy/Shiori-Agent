@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { extname, isAbsolute, relative, resolve, sep } from "node:path";
-import { pluginUiPeerExports, pluginUiScheme, type PluginRendererKind, type RuntimePluginRendererEntry } from "./uiContract.js";
+import { pluginUiPeerExports, pluginUiScheme, type RuntimePluginFrontend } from "./uiContract.js";
 import { matchesPluginUiCode, snapshotPluginUiCode } from "./uiCodeSnapshot.js";
 
 type Grant = { token: string; requested: string; canonical: string; workspace: string; code: ReadonlyMap<string, string> };
@@ -10,10 +10,6 @@ const mimeTypes: Record<string, string> = {
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
   ".svg": "image/svg+xml", ".gif": "image/gif", ".woff": "font/woff", ".woff2": "font/woff2",
 };
-
-// The three renderer contribution points, admitted under identical trust and
-// resource-authorization rules — see `renderer_contract.py`'s `validate_renderer`.
-const rendererKinds: readonly PluginRendererKind[] = ["ui", "background", "surface"];
 
 function within(root: string, path: string) {
   const child = relative(root, path);
@@ -27,58 +23,33 @@ export class PluginUiResources {
   private readonly packages = new Map<string, { identity: string; grant: Grant }>();
   constructor(private readonly workspacePlugins: string) {}
 
-  /**
-   * Reconciles grants with the current authoritative backend roster, across
-   * all three renderer kinds a plugin may declare (`ui`, `background`,
-   * `surface`). One plugin package gets exactly one `Grant` (one token, one
-   * approved-content snapshot) shared by every kind it declares — the trust
-   * decision is about the *package*, not about which entry point is being
-   * loaded — so a plugin that declares both `ui` and `background` mints URLs
-   * for both from the same snapshot.
-   */
-  async admit(rows: unknown): Promise<RuntimePluginRendererEntry[]> {
+  /** Reconciles one resource grant per admitted frontend package. */
+  async admit(rows: unknown): Promise<RuntimePluginFrontend[]> {
     if (!Array.isArray(rows)) throw new Error("Invalid plugin roster");
     const next = new Map<string, Grant>();
-    const result: RuntimePluginRendererEntry[] = [];
+    const result: RuntimePluginFrontend[] = [];
     for (const row of rows) {
       if (!row || typeof row !== "object" || row.source !== "workspace" || row.state !== "ACTIVE" || !row.enabled) continue;
-      if (rows.filter((item) => item?.id === row.id).length !== 1) continue;
-      const renderer: Record<string, unknown> = row.renderer && typeof row.renderer === "object" ? row.renderer : {};
-      const kinds = rendererKinds.filter((kind) => Boolean(renderer[kind]));
-      if (kinds.length === 0) continue;
-      // Echoed back verbatim in `plugins.activation.report` (#262); shared by
-      // every kind, since it identifies the backend handle, not the entry.
+      if (rows.filter((item) => item?.id === row.id).length !== 1 || !row.frontend || !Object.keys(row.frontend).length) continue;
       const activationToken = typeof row.activation_token === "string" ? row.activation_token : undefined;
-      let grant: Grant;
+      const frontend = row.frontend;
       try {
-        if (typeof row.id !== "string" || typeof row.directory !== "string") throw new Error("Invalid renderer descriptor");
+        if (typeof row.id !== "string" || typeof row.directory !== "string" || typeof frontend.entry !== "string" || !Array.isArray(frontend.exports) || !frontend.exports.length || frontend.exports.some((name: unknown) => typeof name !== "string" || !["ui", "background", "surface"].includes(name)) || new Set(frontend.exports).size !== frontend.exports.length || !Array.isArray(frontend.css) || !frontend.css.every((path: unknown) => typeof path === "string")) throw new Error("Invalid frontend descriptor");
         const workspace = await realpath(this.workspacePlugins);
         const canonical = await realpath(row.directory);
         if (!within(workspace, canonical)) throw new Error("Plugin directory escapes workspace plugins");
-        // The whole declared `renderer` block feeds identity, not just one
-        // kind's entry/css: a change to any declared kind must be treated as
-        // "the package changed" the same way a changed `ui` entry always was.
-        const identity = JSON.stringify([row.directory, canonical, workspace, row.version ?? "", row.content_fingerprint, renderer]);
+        const identity = JSON.stringify([row.directory, canonical, workspace, row.version ?? "", row.content_fingerprint, frontend]);
         const old = this.packages.get(row.id);
         if (old && old.identity !== identity) throw new Error("Plugin package changed; restart the application to load its new code");
-        grant = old?.grant ?? { token: randomUUID(), requested: row.directory, canonical, workspace, code: await snapshotPluginUiCode(canonical, row.content_hashes) };
+        const grant = old?.grant ?? { token: randomUUID(), requested: row.directory, canonical, workspace, code: await snapshotPluginUiCode(canonical, row.content_hashes) };
+        const url = (path: string) => this.mintUrl(grant, path);
+        const entry = url(frontend.entry);
+        const css = frontend.css.map(url);
         this.packages.set(row.id, { identity, grant });
         next.set(row.directory, grant);
+        result.push({ pluginId: row.id, entry, css, exports: frontend.exports, activationToken });
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        for (const kind of kinds) result.push({ pluginId: String(row.id), kind, entry: "", css: [], error: message, activationToken });
-        continue;
-      }
-      for (const kind of kinds) {
-        try {
-          const descriptor = renderer[kind] as { entry?: unknown; css?: unknown } | undefined;
-          if (!descriptor || typeof descriptor.entry !== "string" || !Array.isArray(descriptor.css) || !descriptor.css.every((path: unknown) => typeof path === "string")) throw new Error("Invalid renderer descriptor");
-          const css = descriptor.css as string[];
-          const url = (path: string) => this.mintUrl(grant, path);
-          result.push({ pluginId: row.id, kind, entry: url(descriptor.entry), css: css.map(url), activationToken });
-        } catch (error) {
-          result.push({ pluginId: String(row.id), kind, entry: "", css: [], error: error instanceof Error ? error.message : String(error), activationToken });
-        }
+        result.push({ pluginId: String(row.id), entry: "", css: [], exports: frontend.exports ?? [], error: error instanceof Error ? error.message : String(error), activationToken });
       }
     }
     this.grants = next;

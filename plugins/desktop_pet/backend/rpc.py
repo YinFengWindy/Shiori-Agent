@@ -14,7 +14,7 @@ from shiori_sdk.roles import Roles
 
 
 class DesktopPetRpcHandlers:
-    """Owns request/response shaping for every ``plugin.desktop_pet.*`` method."""
+    """Owns request/response shaping for every ``desktop_pet.*`` method."""
 
     def __init__(self, *, role_store: Roles, workspace: Path) -> None:
         self._workspace = workspace
@@ -23,12 +23,12 @@ class DesktopPetRpcHandlers:
         self._state = RolePetStateStore(role_store)
 
     async def pets_list(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.desktop_pet.pets.list``: one role's pet packages.
+        """``desktop_pet.pets.list``: one role's pet packages.
 
         The same rows ``roles.list`` used to carry on every role payload. They
         move here because the desktop's package manager UI is becoming this
         plugin's (#181-D), and a plugin's UI can only reach its own
-        ``plugin.<id>.*`` namespace — it has no way to ask a core method.
+        ``<pluginId>.*`` namespace — it has no way to ask a core method.
         """
         role = self._require_role(payload)
         return {
@@ -37,7 +37,7 @@ class DesktopPetRpcHandlers:
         }
 
     async def pets_import(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.desktop_pet.pets.import``: validate and install one ZIP."""
+        """``desktop_pet.pets.import``: validate and install one ZIP."""
         role_id = require_role_id(payload)
         source = str(payload.get("source") or "").strip()
         if not source:
@@ -47,14 +47,14 @@ class DesktopPetRpcHandlers:
         return {"package": self._serialize(package), **await self.pets_list(payload)}
 
     async def pets_remove(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.desktop_pet.pets.remove``: delete one package and its files."""
+        """``desktop_pet.pets.remove``: delete one package and its files."""
         self._packages.remove_package(
             require_role_id(payload), _require_package_id(payload)
         )
         return await self.pets_list(payload)
 
     async def pets_select(self, payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.desktop_pet.pets.select``: choose which package renders."""
+        """``desktop_pet.pets.select``: choose which package renders."""
         self._packages.select_package(
             require_role_id(payload), _require_package_id(payload)
         )
@@ -83,7 +83,7 @@ class DesktopPetRpcHandlers:
         }
 
     async def binding_get(self, _payload: dict[str, Any]) -> dict[str, Any]:
-        """``plugin.desktop_pet.binding.get``: the role/package pair to render.
+        """``desktop_pet.binding.get``: the role/package pair to render.
 
         Takes no arguments: the answer is "whichever role has its pet switched
         on", and at most one can — ``pet_state.set_enabled`` clears the others

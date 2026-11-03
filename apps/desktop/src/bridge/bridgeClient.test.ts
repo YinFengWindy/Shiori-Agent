@@ -128,12 +128,12 @@ describe("DesktopBridgeClient", () => {
     assert.equal(client.invokeTimeoutMs("health"), 5_000);
     assert.equal(client.invokeTimeoutMs("roles.list"), 30_000);
     assert.equal(client.invokeTimeoutMs("plugins.communication.services.call"), null);
-    assert.equal(client.invokeTimeoutMs("plugin.sample.slow", 300_000), 5 * 60_000);
+    assert.equal(client.invokeTimeoutMs("sample.slow", 300_000), 5 * 60_000);
     assert.equal(
-      client.invokeTimeoutMs("plugin.sample.other", 300_000),
+      client.invokeTimeoutMs("sample.other", 300_000),
       5 * 60_000,
     );
-    assert.equal(client.invokeTimeoutMs("plugin.sample.default"), 30_000);
+    assert.equal(client.invokeTimeoutMs("sample.default"), 30_000);
   });
 
   it("resolves a response and removes its generation-local pending entry", async () => {

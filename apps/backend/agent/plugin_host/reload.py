@@ -128,6 +128,7 @@ async def reload_closure(
     steps: ReloadSteps,
     drain_timeout: float,
     commit: Callable[[tuple[str, ...]], None] | None = None,
+    on_replaced: Callable[[tuple[str, ...]], None] | None = None,
 ) -> PluginReloadResult:
     """Drains ``closure`` (dependents first, ``target`` last), then replaces it.
 
@@ -150,6 +151,7 @@ async def reload_closure(
             steps=steps,
             drain_timeout=drain_timeout,
             commit=commit,
+            on_replaced=on_replaced,
             reactivating=plugin_ids,
             restoring=plugin_ids,
             strict=True,
@@ -170,6 +172,7 @@ async def toggle_closure(
     steps: ReloadSteps,
     drain_timeout: float,
     commit: Callable[[tuple[str, ...]], None] | None = None,
+    on_replaced: Callable[[tuple[str, ...]], None] | None = None,
 ) -> PluginReloadResult:
     """Loads (``enabled``) or unloads ``closure``, dependents first, ``target`` last.
 
@@ -201,6 +204,7 @@ async def toggle_closure(
             steps=steps,
             drain_timeout=drain_timeout,
             commit=commit,
+            on_replaced=on_replaced,
             # Neither a newly enabled plugin nor one turned off was active
             # right before this setup; a staying or restored one was.
             reactivating=staying,
@@ -257,6 +261,7 @@ async def _replace(
     steps: ReloadSteps,
     drain_timeout: float,
     commit: Callable[[tuple[str, ...]], None] | None,
+    on_replaced: Callable[[tuple[str, ...]], None] | None,
     reactivating: frozenset[str],
     restoring: frozenset[str],
     strict: bool,
@@ -306,6 +311,10 @@ async def _replace(
     finally:
         if retention is not None:
             errors.extend(await retention.release())
+    # Both success and rollback replaced the old owners. Publish the settled
+    # closure even when the saving caller was cancelled after the drain.
+    if on_replaced is not None:
+        on_replaced(plugin_ids)
     if failed:
         raise PluginReloadFailed(
             target,

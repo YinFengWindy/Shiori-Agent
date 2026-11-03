@@ -3,7 +3,21 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.0",
-  "scripts": {"build": "node build.mjs"},
-  "devDependencies": {"esbuild": "0.25.12"},
-  "pnpm": {"onlyBuiltDependencies": ["esbuild"]}
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12",
+    "js-yaml": "4.3.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
+  "peerDependencies": {
+    "react": ">=19.2.0 <20.0.0",
+    "react-dom": ">=19.2.0 <20.0.0",
+    "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0"
+  }
 }

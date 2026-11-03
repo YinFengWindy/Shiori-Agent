@@ -8,6 +8,24 @@ import { PluginUiResources } from "./uiResources";
 
 function hash(content: string) { return createHash("sha256").update(content).digest("hex"); }
 
+test("named exports share one approved resource and are revoked together", async () => {
+  const root = await mkdtemp(join(tmpdir(), "shiori-frontend-"));
+  try {
+    const directory = join(root, "demo");
+    await mkdir(directory);
+    const source = "export const ui = {}; export const background = {}; export const surface = {};";
+    await writeFile(join(directory, "frontend.mjs"), source, "utf8");
+    const row = { id: "demo", source: "workspace", enabled: true, state: "ACTIVE", directory, activation_token: "attempt-1", content_hashes: { "frontend.mjs": hash(source) }, frontend: { entry: "frontend.mjs", css: [], exports: ["ui", "background", "surface"] } };
+    const resources = new PluginUiResources(root);
+    const grants = await resources.admit([row]);
+    assert.equal(new Set(grants.map((grant) => grant.entry)).size, 1);
+    assert.deepEqual(grants[0].exports, ["ui", "background", "surface"]);
+    assert.equal(await (await resources.load(grants[0].entry)).text(), source);
+    await resources.admit([{ ...row, state: "FAILED" }]);
+    for (const grant of grants) assert.equal((await resources.load(grant.entry)).status, 403);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 test("admission retains relative resources, stable URLs and revokes removed or untrusted packages", async () => {
   const root = await mkdtemp(join(tmpdir(), "shiori-ui-"));
   try {
@@ -17,7 +35,7 @@ test("admission retains relative resources, stable URLs and revokes removed or u
     await writeFile(join(directory, "ui", "dist", "chunk.js"), "export const answer = 42", "utf8");
     await writeFile(join(directory, "ui", "dist", "lazy.mjs"), "export const version = 1", "utf8");
     await writeFile(join(directory, "secret.py"), "private", "utf8");
-    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved", content_hashes: { "ui/dist/index.mjs": hash("export default {}"), "ui/dist/chunk.js": hash("export const answer = 42"), "ui/dist/lazy.mjs": hash("export const version = 1") }, renderer: { ui: { entry: "ui/dist/index.mjs", css: [] } } };
+    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved", content_hashes: { "ui/dist/index.mjs": hash("export default {}"), "ui/dist/chunk.js": hash("export const answer = 42"), "ui/dist/lazy.mjs": hash("export const version = 1") }, frontend: { entry: "ui/dist/index.mjs", css: [] , exports: ["ui"] } };
     const resources = new PluginUiResources(join(root, "plugins"));
     const [entry] = await resources.admit([row]);
     assert.equal((await resources.load(entry.entry)).status, 200);
@@ -57,7 +75,7 @@ test("a changed package version or directory requires a new application session"
     await mkdir(directory);
     await mkdir(moved);
     await writeFile(join(directory, "index.mjs"), "export default {}", "utf8");
-    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved", content_hashes: { "index.mjs": hash("export default {}") }, renderer: { ui: { entry: "index.mjs", css: [] } } };
+    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved", content_hashes: { "index.mjs": hash("export default {}") }, frontend: { entry: "index.mjs", css: [] , exports: ["ui"] } };
     const resources = new PluginUiResources(root);
     const [entry] = await resources.admit([row]);
     await resources.admit([{ ...row, enabled: false, state: "DISABLED" }]);
@@ -79,7 +97,7 @@ test("UI modified after backend activation is refused before the first main-proc
   try {
     const directory = join(root, "demo");
     await mkdir(directory);
-    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved-v1", content_hashes: { "index.mjs": hash("export default {version: 1}") }, renderer: { ui: { entry: "index.mjs", css: [] } } };
+    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved-v1", content_hashes: { "index.mjs": hash("export default {version: 1}") }, frontend: { entry: "index.mjs", css: [] , exports: ["ui"] } };
     await writeFile(join(directory, "index.mjs"), "export default {version: 2}", "utf8");
     const [refused] = await new PluginUiResources(root).admit([row]);
     assert.equal(refused.entry, "");
@@ -102,27 +120,16 @@ test("admit() grants ui, background and surface from one shared package snapshot
     };
     for (const [path, content] of Object.entries(files)) await writeFile(join(directory, path), content, "utf8");
     const content_hashes = Object.fromEntries(Object.entries(files).map(([path, content]) => [path, hash(content)]));
-    const renderer = {
-      ui: { entry: "ui/index.mjs", css: ["style.css"] },
-      background: { entry: "background/index.mjs", css: [] },
-      surface: { entry: "surface/index.mjs", css: ["style.css"] },
-    };
-    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved", content_hashes, renderer };
+    const frontend = { entry: "ui/index.mjs", css: ["style.css"], exports: ["ui", "background", "surface"] };
+    const row = { id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE", directory, content_fingerprint: "approved", content_hashes, frontend };
     const resources = new PluginUiResources(join(root, "plugins"));
 
     const entries = await resources.admit([row]);
-    assert.deepEqual(entries.map((entry) => entry.kind).sort(), ["background", "surface", "ui"]);
-    for (const kind of ["ui", "background", "surface"]) {
-      const entry = entries.find((candidate) => candidate.kind === kind);
-      assert.ok(entry, `${kind} must have an entry`);
-      assert.equal(entry.error, undefined, `${kind} must be granted, not refused`);
-      assert.equal((await resources.load(entry.entry)).status, 200);
-    }
-    // The ui and surface grants share the same css asset and the same package token.
-    const ui = entries.find((e) => e.kind === "ui");
-    const surface = entries.find((e) => e.kind === "surface");
-    assert.ok(ui && surface);
-    assert.equal(ui.css[0], surface.css[0]);
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0].exports, ["ui", "background", "surface"]);
+    assert.equal(entries[0].error, undefined);
+    assert.equal((await resources.load(entries[0].entry)).status, 200);
+    assert.equal((await resources.load(entries[0].css[0])).status, 200);
 
     // A row that fails the top-level trust gate (untrusted state) must not
     // leak a grant for any of the three kinds, not just `ui`.
@@ -141,11 +148,11 @@ test("a package-level admission failure reports an error for every declared kind
     const row = {
       id: "demo", version: "1.0.0", source: "workspace", enabled: true, state: "ACTIVE",
       directory: outside, content_fingerprint: "approved", content_hashes: {},
-      renderer: { background: { entry: "index.mjs", css: [] }, surface: { entry: "index.mjs", css: [] } },
+      frontend: { entry: "index.mjs", css: [], exports: ["background", "surface"] },
     };
     const resources = new PluginUiResources(join(root, "plugins"));
     const entries = await resources.admit([row]);
-    assert.deepEqual(entries.map((entry) => entry.kind).sort(), ["background", "surface"]);
+    assert.deepEqual(entries[0].exports, ["background", "surface"]);
     for (const entry of entries) {
       assert.equal(entry.entry, "");
       assert.match(entry.error ?? "", /escapes workspace plugins/);

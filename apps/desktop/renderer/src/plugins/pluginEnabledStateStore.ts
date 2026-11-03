@@ -1,7 +1,7 @@
 import { createPluginBridgeClient, type PluginBridgeClient, type PluginSummary } from "./pluginBridgeClient";
 import { activePluginIds } from "./activePluginIds";
 import { synchronizePluginSettingsAutoRegistration } from "./pluginSettingsAutoRegistration";
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 import { pluginTrustQueue } from "./pluginTrustQueue";
 
 type Listener = () => void;
@@ -21,11 +21,11 @@ let cache: Map<string, boolean> | null = null;
 let roster: PluginSummary[] | null = null;
 let inflight: Promise<void> | null = null;
 const listeners = new Set<Listener>();
-let synchronizeUi: ((entries: RuntimePluginUi[]) => Promise<Map<string, string>>) | undefined;
+let synchronizeUi: ((entries: RuntimePluginFrontend[]) => Promise<Map<string, string>>) | undefined;
 let refreshTail = Promise.resolve();
 
 /** Installs the main-window runtime UI owner before the first roster refresh. */
-export function registerPluginUiSynchronization(synchronize: (entries: RuntimePluginUi[]) => Promise<Map<string, string>>) {
+export function registerPluginUiSynchronization(synchronize: (entries: RuntimePluginFrontend[]) => Promise<Map<string, string>>) {
   synchronizeUi = synchronize;
 }
 
@@ -33,7 +33,7 @@ export function registerPluginUiSynchronization(synchronize: (entries: RuntimePl
 export function refreshPluginEnabledState(client: Pick<PluginBridgeClient, "listPlugins"> = createPluginBridgeClient()) {
   const refresh = refreshTail.then(async () => {
     const plugins = await client.listPlugins();
-    const failures = await synchronizeUi?.(plugins.flatMap((plugin) => plugin.rendererUi ? [plugin.rendererUi] : []));
+    const failures = await synchronizeUi?.(plugins.flatMap((plugin) => plugin.frontend?.exports.includes("ui") ? [plugin.frontend] : []));
     // Runs after synchronizeUi so every hand-written settings.section
     // (build-time glob + runtime plugins) is already registered before a
     // config-schema plugin without one is offered an auto-registered

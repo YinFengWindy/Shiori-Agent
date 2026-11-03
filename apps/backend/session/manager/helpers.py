@@ -13,36 +13,19 @@ from typing import Any
 from core.common.text import truncate_text
 from agent.prompting import build_context_frame_content, build_context_frame_message
 from shiori_sdk.prompting import PromptSectionRender
+from shiori_sdk.session_keys import (
+    ROLE_SESSION_PREFIX as ROLE_SESSION_PREFIX,
+    is_role_session_key as is_role_session_key,
+    role_id_from_session_key as role_id_from_session_key,
+    role_session_key as role_session_key,
+)
 
 logger = logging.getLogger(__name__)
 
 _TOOL_RESULT_CHAR_BUDGET = 10000
 _PROACTIVE_HISTORY_CHAR_BUDGET = 360
 _PROACTIVE_META_HISTORY_CHAR_BUDGET = 1200
-# Every role's shared session key starts with this.
-ROLE_SESSION_PREFIX = "role:"
 _ROLE_SESSION_PREFIX = ROLE_SESSION_PREFIX
-
-
-def role_session_key(role_id: str) -> str:
-    """The key of one role's shared session, which holds all of its threads."""
-    clean_role_id = str(role_id).strip()
-    if not clean_role_id:
-        raise ValueError("role_id 不能为空")
-    return f"{_ROLE_SESSION_PREFIX}{clean_role_id}"
-
-
-def is_role_session_key(key: str) -> bool:
-    """Whether ``key`` names a role's shared session."""
-    return key.startswith(_ROLE_SESSION_PREFIX) and len(key) > len(_ROLE_SESSION_PREFIX)
-
-
-def role_id_from_session_key(key: str) -> str:
-    """The role that owns shared session ``key``; "" when ``key`` is not one."""
-    clean_key = str(key or "").strip()
-    if not clean_key.startswith(_ROLE_SESSION_PREFIX):
-        return ""
-    return clean_key.removeprefix(_ROLE_SESSION_PREFIX).strip()
 
 
 def truncate_tool_result(content: object, limit: int = _TOOL_RESULT_CHAR_BUDGET) -> str:

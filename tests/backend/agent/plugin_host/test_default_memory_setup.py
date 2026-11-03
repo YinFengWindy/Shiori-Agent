@@ -125,7 +125,7 @@ async def test_setup_provides_the_engine_tools_and_documents(tmp_path: Path) -> 
     assert tools.get_tool("forget_memory") is not None
     assert tools.get_tool("recall_memory") is not None
 
-    method = "plugin.default_memory.roles.memory.documents"
+    method = "default_memory.roles.memory.documents"
     assert rpc.policy_for(method).concurrency is Concurrency.READ_ONLY
     resolved = rpc.resolve(method)
     assert resolved is not None

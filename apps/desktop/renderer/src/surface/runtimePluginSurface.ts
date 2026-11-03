@@ -1,14 +1,14 @@
 import { loadRuntimePluginModules } from "../plugins/runtimePluginModuleLoader";
-import type { RuntimePluginUi } from "../../../src/plugins/uiContract";
+import type { RuntimePluginFrontend } from "../../../src/plugins/uiContract";
 import type { PluginSurfaceModule } from "@yinfengwindy/shiori-sdk";
 import { isPluginSurfaceModule } from "./pluginSurfaceContract";
 import { pluginSurfaceRegistry, type PluginSurfaceRegistry } from "./pluginSurfaceRegistry";
 
 /** Loader boundaries a surface window's bootstrap supplies. */
 export type RuntimePluginSurfaceHost = {
-  importModule: (url: string) => Promise<{ default: unknown }>;
+  importModule: (url: string) => Promise<Record<string, unknown>>;
   loadCss: (url: string) => Promise<() => void>;
-  failed: (entry: RuntimePluginUi, error: unknown) => void;
+  failed: (entry: RuntimePluginFrontend, error: unknown) => void;
 };
 
 /** Rejects a malformed contribution, or one whose identity does not match its admitted package. */
@@ -31,11 +31,11 @@ function assertRuntimePluginSurfaceModule(value: unknown, pluginId: string): ass
  * failure card rather than a blank window.
  */
 export async function loadRuntimePluginSurface(
-  entry: RuntimePluginUi,
+  entry: RuntimePluginFrontend,
   host: RuntimePluginSurfaceHost,
   registry: PluginSurfaceRegistry = pluginSurfaceRegistry,
 ): Promise<void> {
-  await loadRuntimePluginModules([entry], {
+  await loadRuntimePluginModules([entry], "surface", {
     importModule: host.importModule,
     loadCss: host.loadCss,
     validate: assertRuntimePluginSurfaceModule,

@@ -1043,7 +1043,7 @@ class PluginKernel:
         diagnostic = PluginDiagnostic(
             code=f"renderer_{kind}_failed",
             stage=kind,
-            field=f"renderer.{kind}.entry",
+            field="frontend.entry",
             reason=reason,
             state="FAILED",
         )
@@ -1140,6 +1140,7 @@ class PluginKernel:
         raw_values: dict[str, Any],
         drain_timeout: float,
         commit: Callable[[tuple[str, ...]], None] | None = None,
+        on_replaced: Callable[[tuple[str, ...]], None] | None = None,
     ) -> PluginReloadResult:
         """Re-runs setup of an ACTIVE plugin with new config, within this generation.
 
@@ -1158,6 +1159,9 @@ class PluginKernel:
         the same uninterruptible replacement as the setup, so caller
         cancellation cannot separate "reloaded" from "persisted"; when it
         raises, the reload is rolled back like a setup failure of the target.
+        ``on_replaced`` receives the full closure once its final instances have
+        settled, including failed restores, inside that same uninterruptible
+        transition. It announces replacement independently of config success.
 
         Raises, with nothing changed: ``LookupError`` for an unknown plugin,
         ``PluginReloadUnsupported`` when no in-generation reload applies, and
@@ -1184,6 +1188,7 @@ class PluginKernel:
                 steps=self._reload_steps(),
                 drain_timeout=drain_timeout,
                 commit=commit,
+                on_replaced=on_replaced,
             )
 
     def _reload_closure(self, record: PluginRecord) -> list[PluginHandle]:
@@ -1224,10 +1229,24 @@ class PluginKernel:
         }
         return [by_id[plugin_id] for plugin_id in plugin_ids]
 
-    def _reload_steps(self) -> ReloadSteps:
+    def _reload_steps(self, *, disabled: frozenset[str] = frozenset()) -> ReloadSteps:
+        async def dispose(handle: PluginHandle) -> list[Exception]:
+            # This runs only after drain succeeds. An abandoned drain keeps
+            # the existing renderer owners usable. Revoke before setup can
+            # register the successor, retaining the transition's exact cause.
+            self._rpc.communication.remove_plugin(
+                handle.plugin_id,
+                reason=(
+                    "plugin_disabled"
+                    if handle.plugin_id in disabled
+                    else "plugin_reloading"
+                ),
+            )
+            return await self._dispose_handle(handle)
+
         return ReloadSteps(
             drain=self._drain_closure,
-            dispose=self._dispose_handle,
+            dispose=dispose,
             activate=self._activate_reloaded,
             retain=self._retain_process_resources,
         )
@@ -1264,6 +1283,7 @@ class PluginKernel:
         raw_values: dict[str, Any],
         drain_timeout: float,
         commit: Callable[[tuple[str, ...]], None] | None = None,
+        on_replaced: Callable[[tuple[str, ...]], None] | None = None,
     ) -> PluginReloadResult:
         """Enables or disables a plugin within this generation, as ``values`` say.
 
@@ -1298,6 +1318,8 @@ class PluginKernel:
         cancellation) when draining the optional consumers did not finish: a
         busy consumer refuses the toggle, disabling included, and ``commit``
         never runs. See ``agent.plugin_host.reload.toggle_closure``.
+        ``on_replaced`` has the same settled-instance semantics as ``reload``;
+        a table-only change does not call it.
         """
         async with self._transition_lock:
             record = self._find_record(name)
@@ -1348,9 +1370,12 @@ class PluginKernel:
                 values=values,
                 raw_values=raw_values,
                 tables=tables,
-                steps=self._reload_steps(),
+                steps=self._reload_steps(
+                    disabled=frozenset(toggled) if not enabled else frozenset()
+                ),
                 drain_timeout=drain_timeout,
                 commit=commit,
+                on_replaced=on_replaced,
             )
             if not enabled:
                 # A later re-enable within this generation is a fresh start.
@@ -1514,7 +1539,9 @@ def _declares_channels(record: PluginRecord) -> bool:
 
 def _required_renderer_kinds(record: PluginRecord) -> frozenset[str]:
     """Returns the manifest's declared renderer kinds that gate ACTIVE display."""
-    renderer = record.manifest.metadata.get("renderer", {})
-    if not isinstance(renderer, dict):
-        return frozenset()
-    return frozenset(kind for kind in _RENDERER_GATED_KINDS if renderer.get(kind))
+    frontend = record.manifest.metadata.get("frontend", {})
+    if isinstance(frontend, dict) and "exports" in frontend:
+        return frozenset(
+            kind for kind in _RENDERER_GATED_KINDS if kind in frontend["exports"]
+        )
+    return frozenset()
