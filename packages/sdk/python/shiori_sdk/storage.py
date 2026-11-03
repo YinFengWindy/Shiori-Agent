@@ -1,4 +1,4 @@
-"""Pure canonical plugin data paths; migration and persistence remain host-owned."""
+"""Pure canonical plugin data paths and opaque key-value storage contracts."""
 
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Protocol

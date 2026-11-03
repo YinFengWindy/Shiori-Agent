@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 from shiori_sdk.kernel import PackageContractError, PluginDiagnostic
 from agent.plugin_host.handle import PluginRecord
-from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
     IncompatibleSdkError,
     ManifestError,
@@ -21,10 +21,12 @@ from agent.plugin_host.manifest import (
 from agent.plugin_host.package_contract import validate_package
 from agent.plugin_host.package_paths import contained_file
 from agent.plugin_host.package_fingerprint import inspect_package_content
-from agent.plugin_host.trust_store import PluginTrustStore
 from agent.plugin_host.execution_identity import PluginExecutionIdentity
 
 logger = logging.getLogger(__name__)
+
+# Checks current activation approval for an exact directory and content identity.
+type TrustCheck = Callable[[Path, str], bool]
 
 # Diagnostic code for a host-root ``distribution: external`` source package with
 # no installed copy. The desktop maps the code to its user-facing text.
@@ -50,8 +52,8 @@ def discover_plugins(
     external_roots: list[Path],
     namespace: str,
     strict: bool,
-    host: HostRuntimeContract | None,
-    trust: PluginTrustStore | None = None,
+    workspace: Path | None = None,
+    is_trusted: TrustCheck | None = None,
 ) -> list[PluginRecord]:
     """Keep every candidate, then reject every participant in an ID or channel conflict.
 
@@ -71,7 +73,7 @@ def discover_plugins(
             if not child.is_dir():
                 continue
             record = _read_candidate(
-                child, root, source, namespace, strict, host, trust
+                child, root, source, namespace, strict, workspace, is_trusted
             )
             if record is None:
                 continue
@@ -251,7 +253,7 @@ def _check_external_dependencies(
 
 
 def refresh_dependency_admission(
-    records: list[PluginRecord], trust: PluginTrustStore
+    records: list[PluginRecord], is_trusted: TrustCheck
 ) -> None:
     """Recheck existing blocked candidates without discovering or approving new code."""
     by_id: dict[str, list[PluginRecord]] = defaultdict(list)
@@ -266,9 +268,7 @@ def refresh_dependency_admission(
         ):
             record.admission = (
                 None
-                if trust.is_trusted(
-                    record.plugin_dir, record.fingerprint, activation=True
-                )
+                if is_trusted(record.plugin_dir, record.fingerprint)
                 else PluginDiagnostic(
                     "trust_required",
                     "trust",
@@ -287,8 +287,8 @@ def _read_candidate(
     source: str,
     namespace: str,
     strict: bool,
-    host: HostRuntimeContract | None,
-    trust: PluginTrustStore | None,
+    workspace: Path | None,
+    is_trusted: TrustCheck | None,
 ) -> PluginRecord | None:
     diagnostic: PluginDiagnostic | None = None
     fingerprint: str | None = None
@@ -365,7 +365,7 @@ def _read_candidate(
         return None
     if diagnostic is None and source == "workspace":
         try:
-            _ = validate_package(child, host=host)
+            _ = validate_package(child)
         except PackageContractError as exc:
             diagnostic = exc.diagnostic
     if diagnostic is None and source == "workspace":
@@ -374,9 +374,9 @@ def _read_candidate(
             fingerprint = content.fingerprint
             trust_directory = content.directory
             content_hashes = content.hashes
-            if trust is not None and not PluginExecutionIdentity(
-                trust.workspace
-            ).matches(manifest.id, child, fingerprint):
+            if workspace is not None and not PluginExecutionIdentity(workspace).matches(
+                manifest.id, child, fingerprint
+            ):
                 diagnostic = PluginDiagnostic(
                     "executed_content_changed",
                     "trust",
@@ -390,10 +390,7 @@ def _read_candidate(
         if (
             diagnostic is None
             and fingerprint is not None
-            and (
-                trust is None
-                or not trust.is_trusted(child, fingerprint, activation=True)
-            )
+            and (is_trusted is None or not is_trusted(child, fingerprint))
         ):
             diagnostic = PluginDiagnostic(
                 "trust_required",

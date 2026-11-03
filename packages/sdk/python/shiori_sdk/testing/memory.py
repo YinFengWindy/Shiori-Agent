@@ -21,7 +21,7 @@ class FakeMemoryRoles:
 
 
 class FakeMemoryStorage:
-    """Resolves test-owned paths, leaving real migration behavior to host tests."""
+    """Resolves test-owned config paths and opens independent test databases."""
 
     def resolve_config(
         self,
@@ -38,11 +38,6 @@ class FakeMemoryStorage:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(default_text, encoding="utf-8")
         return path
-
-    def migrate_data(
-        self, workspace: Path, plugin_id: str, name: str, source: Path
-    ) -> Path:
-        return plugin_data_dir(workspace, plugin_id) / name
 
     def open_database(self, path: Path) -> sqlite3.Connection:
         return sqlite3.connect(path, check_same_thread=False)

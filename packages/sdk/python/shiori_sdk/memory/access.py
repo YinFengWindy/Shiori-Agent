@@ -9,12 +9,11 @@ import sqlite3
 from pathlib import Path
 from typing import Protocol
 
-from shiori_sdk.extensions import PrivateStorage
 from shiori_sdk.runtime import EventsCapability
 
 
-class MemoryStorage(PrivateStorage, Protocol):
-    """Host-owned config migration and database leases used by a memory plugin."""
+class MemoryStorage(Protocol):
+    """Host-owned config paths and database leases used by a memory plugin."""
 
     def resolve_config(
         self,

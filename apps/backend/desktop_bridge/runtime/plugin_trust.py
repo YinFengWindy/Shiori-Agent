@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from agent.plugin_host.handle import PluginRecord
 from agent.plugin_host.kernel import plugin_enabled
-from agent.plugin_host.trust_store import PluginTrustStore
+from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
 from bootstrap.app import AppRuntime
 from core.common.cancellation import finish_started
 from desktop_bridge.plugin_config_text import merge_plugin_table

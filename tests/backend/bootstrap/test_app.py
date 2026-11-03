@@ -274,3 +274,55 @@ async def test_started_runtime_serves_proactive_host_and_conversation(
         assert host.user_at_desktop() is False
     finally:
         await app.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_external_package_approval_is_live_and_bound_to_application_session(
+    tmp_path, monkeypatch, empty_config
+):
+    """Real bootstrap honors old approval and rechecks persisted activation trust."""
+    from bootstrap.app import RuntimeFeatures
+    from agent.plugin_host.package_fingerprint import inspect_package_content
+    from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
+
+    package = tmp_path / "plugins" / "trusted_demo"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 4\nsdk: '>=4.0.0'\nid: trusted_demo\nversion: 1.0.0\n"
+        "entry: backend/plugin.py\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "async def setup(ctx):\n    ctx.expose({'ready': True})\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [package.parent]
+    )
+    monkeypatch.setenv("SHIORI_DESKTOP_APPLICATION_SESSION_ID", "current-session")
+    store = PluginTrustStore(tmp_path)
+    fingerprint = inspect_package_content(package).fingerprint
+    store.approve(package, fingerprint, approved_session="previous-session")
+    app = AppRuntime(
+        empty_config, tmp_path, features=RuntimeFeatures(enable_message_channels=False)
+    )
+    try:
+        await app.start()
+        assert app.core is not None
+        kernel = app.core.plugin_manager
+        assert kernel._dependency_api("trusted_demo") == {"ready": True}
+        assert kernel.states()[0]["state"] == "ACTIVE"
+        # One running generation must observe changes; caching approvals here
+        # could silently reactivate code whose permission was withdrawn.
+        store.revoke(package)
+        [record] = kernel.inspect_candidates()
+        assert record.admission is not None
+        assert record.admission.code == "trust_required"
+        store.approve(package, fingerprint)
+        [record] = kernel.inspect_candidates()
+        assert record.admission is not None
+        assert record.admission.code == "trust_required"
+        store.approve(package, fingerprint, approved_session="previous-session")
+        [record] = kernel.inspect_candidates()
+        assert record.admission is None
+    finally:
+        await app.shutdown()

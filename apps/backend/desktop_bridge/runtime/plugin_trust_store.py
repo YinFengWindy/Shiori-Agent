@@ -1,4 +1,4 @@
-"""Host-owned persisted approvals of exact workspace package contents."""
+"""Bridge-owned persisted approvals of exact workspace package contents."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ class PluginTrustStore:
     """Atomically persists explicit approvals outside plugin-owned directories."""
 
     def __init__(self, workspace: Path) -> None:
-        self.workspace = workspace
         self.path = workspace / "private_runtime" / "plugin-trust.json"
 
     def _read(self) -> dict[str, dict[str, str]]:

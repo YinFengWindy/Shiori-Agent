@@ -78,7 +78,7 @@ name = "内核 shiori_sdk.kernel 只 import 内核自身和标准库"
 type = "kernel_isolation"
 
 [[tool.importlinter.contracts]]
-name = "内核（现 agent.plugin_host）不 import 宿主业务模块和插件"
+name = "宿主装配层 agent.plugin_host 不 import 宿主业务模块和插件"
 type = "forbidden"
 source_modules = ["agent.plugin_host"]
 forbidden_modules = [
@@ -97,6 +97,7 @@ forbidden_modules = [
 allow_indirect_imports = true
 
 [[tool.importlinter.contracts]]
+# This already covers every plugins.* package, including plugins.proactive.
 name = "核心模块不 import 插件"
 type = "forbidden"
 source_modules = [

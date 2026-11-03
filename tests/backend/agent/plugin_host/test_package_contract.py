@@ -161,7 +161,6 @@ def test_install_and_discovery_reject_every_api_but_integer_4(contract_package, 
         external_roots=[installed.parent],
         namespace="t",
         strict=True,
-        host=None,
     )
     assert (record.manifest.id, record.manifest.version) == ("external_demo", "1.2.3")
     assert record.admission is not None
@@ -223,7 +222,6 @@ def test_sdk_constraint_blocks_install_and_an_installed_copy(contract_package):
         external_roots=[contract_package.parent],
         namespace="t",
         strict=True,
-        host=None,
     )
     assert record.admission is not None
     assert record.admission.code == "incompatible_sdk"

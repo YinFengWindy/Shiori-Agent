@@ -35,6 +35,8 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任、准入失�
 - 没有可运行插件认领某个 Key、但有只登记的插件声明了它时，这个 Key 记在 ID 最小的那个只登记插件名下。依赖它的插件因此得到 `dependency_unavailable`（「未启用或加载失败」），而不是 `missing_dependency`（「不存在」，没有任何插件声明这个 Key）。两者的诊断都是 stage `dependency`、field `inject[<序号>]`。
 - 后面某一轮再选中它（`load`、依赖拉起、代内重载或启用、代际替换）时重新规划为可运行并重试。
 
+安装专有的 ZIP 解包和持久化信任记录由 `desktop_bridge/runtime/plugin_package_archive.py`、`plugin_trust_store.py` 管理。宿主发现与加载通过启动装配传入的信任查询读取当前批准；查询不缓存，每次以目录、内容指纹和应用 session 判断。静态目录包校验仍由 `agent.plugin_host` 提供，安装和加载共用。具体边界见 [P8 决策](../decisions/2026-11-03-p8-installer-and-gates.md)。
+
 ## 预执行闸门
 
 外部包的信任与执行身份检查在**规划之前**、由宿主做，不在内核里：本轮要启动的每个工作区包都重新核对内容指纹和执行身份。被拒的包把宿主句柄设成 `UNTRUSTED` 或 `RESTART_REQUIRED`，并按只登记规划，所以它从不被导入，内核不给它记状态、不发 `PluginFailed`，也不排除别人（比如它的重复提供对手照常启动）。setup 导入的正是核对过的那份字节（保存在内存里，不重读）。作为兜底，宿主没准备过的启动（没有 `LOADING` 句柄、已停用、内容未核对）会被拒绝并成为内核的 `setup_failed`。

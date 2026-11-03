@@ -57,6 +57,8 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 - 入口与顶层容器（`main.tsx`、页面根组件）只做状态装配、依赖拼接与视图分发，业务细节下放到独立 hook / module。
 - 一个文件里的职责明显可以分开时就拆，沿天然边界拆（如 `XxxState` / `XxxActions` / `XxxSelectors`）；不要把大文件问题从页面平移到一个「万能 hook」。
 - 路过时发现超过 600 行的业务文件，在答复里提一句「这个文件偏大、可能值得拆」即可，是否拆由用户决定，不自行发起大重构。
+- 插件热重载：`supports_hot_unload` 默认 `true`，只有证实不能安全卸载的原生扩展才声明 `false`；声明 `contributes.channels` 的插件由宿主判定为不可代内重载，TTS/ASR 保持默认可重载。重载闭包含不可重载插件时整体拒绝代内替换，走需重启路径。`RUNTIME.on_drain` 只等待已接受的工作，可重复调用，不拆资源；清理放进 `ctx.effect`。
+- 内核 `shiori_sdk.kernel` 的 700 代码行预算由 CI 强制检查（不计空行、注释和 docstring）；安装器与信任持久化归 bridge，共用静态准入及执行前复检归 `agent.plugin_host`，不得反向 import bridge/infra。边界见 `docs/decisions/2026-11-03-p8-installer-and-gates.md`。
 - 插件系统四层重构期间（`docs/decisions/2026-10-22-plugin-system-four-layer-refactor.md`）冻结扩展面：不新增 capability、phase 或层。
 
 ## React

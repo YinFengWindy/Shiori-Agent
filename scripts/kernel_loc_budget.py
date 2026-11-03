@@ -1,10 +1,7 @@
-"""Report the plugin kernel's code lines against its budget (report only).
+"""Enforce the SDK kernel's 700 code-line budget.
 
-Counts lines holding code: blank lines, comments and docstrings are excluded
-(docs/decisions/2026-10-22-plugin-system-four-layer-refactor.md §8.8). The
-kernel ``shiori_sdk.kernel`` is created in P1; until then it reports 0 and the
-current ``agent/plugin_host`` is printed as the baseline. The exit status is
-always 0: the budget becomes a gate in P8.
+Blank lines, comments and docstrings are excluded (§8.8 of the four-layer
+refactor decision). A missing or empty kernel is a failed gate, not zero LOC.
 """
 
 from __future__ import annotations
@@ -17,7 +14,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BUDGET = 700
 KERNEL = ROOT / "packages/sdk/python/shiori_sdk/kernel"
-BASELINE = ROOT / "apps/backend/agent/plugin_host"
 
 _NON_CODE_TOKENS = frozenset(
     {
@@ -75,19 +71,21 @@ def tree_code_lines(folder: Path) -> tuple[int, int]:
     return total, len(files)
 
 
-def main() -> None:
-    """Print the kernel count and the plugin_host baseline."""
-    if KERNEL.is_dir():
-        kernel, files = tree_code_lines(KERNEL)
-        status = "within budget" if kernel <= BUDGET else "OVER BUDGET"
-        print(
-            f"shiori_sdk.kernel: {kernel} / {BUDGET} code lines ({files} files), {status}"
-        )
-    else:
-        print(f"shiori_sdk.kernel: not created yet, 0 / {BUDGET} code lines")
-    baseline, files = tree_code_lines(BASELINE)
-    print(f"baseline agent/plugin_host: {baseline} code lines ({files} files)")
+def main() -> int:
+    """Report the kernel size and fail when sources are missing or over budget."""
+    if not KERNEL.is_dir():
+        print(f"shiori_sdk.kernel: missing source directory: {KERNEL}")
+        return 1
+    kernel, files = tree_code_lines(KERNEL)
+    if not files:
+        print(f"shiori_sdk.kernel: no Python sources in {KERNEL}")
+        return 1
+    status = "within budget" if kernel <= BUDGET else "OVER BUDGET"
+    print(
+        f"shiori_sdk.kernel: {kernel} / {BUDGET} code lines ({files} files), {status}"
+    )
+    return int(kernel > BUDGET)
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

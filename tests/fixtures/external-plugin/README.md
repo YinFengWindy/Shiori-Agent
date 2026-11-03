@@ -23,7 +23,7 @@ example; it imports no Shiori types. Host validation is separate from building:
 
 ```python
 from pathlib import Path
-from agent.plugin_host.package_archive import validate_package_zip
+from desktop_bridge.runtime.plugin_package_archive import validate_package_zip
 
 package = validate_package_zip(Path("D:/independent-example/artifacts/external_demo-1.0.0-valid.zip"))
 assert package.manifest.id == "external_demo"

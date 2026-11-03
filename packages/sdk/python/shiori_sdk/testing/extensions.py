@@ -9,11 +9,9 @@ from shiori_sdk.core.services import (
     BACKGROUND,
     CONFIG,
     DEPENDENCIES,
-    STORAGE,
     WORKSPACE,
 )
 from .context import FakePluginContext
-from .memory import FakeMemoryStorage
 
 
 class FakeConfig:
@@ -81,9 +79,9 @@ class FakeBackground:
 class FakeExtensionContext(FakePluginContext):
     """Serve only SDK fakes; no host install, config, database or session services.
 
-    ``fake_config``, ``fake_dependencies``, ``fake_background`` and
-    ``fake_storage`` are served under ``CONFIG`` / ``DEPENDENCIES`` /
-    ``BACKGROUND`` / ``STORAGE``. ``workspace`` is served as ``WORKSPACE``;
+    ``fake_config``, ``fake_dependencies`` and ``fake_background`` are served
+    under ``CONFIG`` / ``DEPENDENCIES`` / ``BACKGROUND``.
+    ``workspace`` is served as ``WORKSPACE``;
     left as ``None`` it models a host without one, and ``require(WORKSPACE)``
     fails like the kernel's missing provider. ``kernel``, ``inject``,
     ``optional_inject`` and ``package_dir`` are those of ``FakePluginContext``:
@@ -114,10 +112,8 @@ class FakeExtensionContext(FakePluginContext):
         self.fake_config = FakeConfig(config)
         self.fake_dependencies = dependencies or FakeDependencies()
         self.fake_background = FakeBackground(self)
-        self.fake_storage = FakeMemoryStorage()
         self.serve(CONFIG, self.fake_config)
         self.serve(DEPENDENCIES, self.fake_dependencies)
         self.serve(BACKGROUND, self.fake_background)
-        self.serve(STORAGE, self.fake_storage)
         if workspace is not None:
             self.serve(WORKSPACE, workspace)
