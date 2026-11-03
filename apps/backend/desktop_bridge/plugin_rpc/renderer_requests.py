@@ -2,15 +2,11 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 from uuid import uuid4
 
 from shiori_sdk.rpc import PluginRpcError
-
-CommunicationEndReason = Literal[
-    "context_disposed", "plugin_disabled", "plugin_reloading", "runtime_replaced"
-]
-"""Why a server-side renderer owner stopped accepting work."""
+from agent.plugin_host.renderer_communication import CommunicationEndReason
 
 _END_MESSAGES = {
     "context_disposed": "插件通信已处置",

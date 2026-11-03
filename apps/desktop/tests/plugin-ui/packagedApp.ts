@@ -72,7 +72,16 @@ export class PackagedApp {
   async roster() {
     const result = await this.call("plugins.list");
     assert.ok(Array.isArray(result.plugins));
-    return result.plugins.map(record).filter((item) => item.id === "external_demo");
+    return result.plugins.map(record).filter((item) => item.id === "external_demo").filter((item) => {
+      if (!item.diagnostic || record(item.diagnostic).code !== "external_not_installed") return true;
+      // Development source has an informational row, without execution or resource grants.
+      assert.equal(item.state, "BLOCKED");
+      assert.equal(item.enabled, false);
+      assert.equal(item.can_toggle, false);
+      assert.equal(item.can_trust, false);
+      assert.deepEqual(item.frontend, {});
+      return false;
+    });
   }
   async state(expected: string) {
     return eventually(() => this.roster(), (rows) => rows.length > 0 && rows.every((row) => row.state === expected && (expected !== "ACTIVE" || (Array.isArray(row.pending_renderer_kinds) && !row.pending_renderer_kinds.length))), `fixture ${expected}`);

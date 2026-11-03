@@ -95,10 +95,10 @@ async def setup(ctx):
 """.strip()
 
 
-async def test_optional_inject_gets_the_host_built_kv_and_services(
+async def test_optional_inject_gets_the_kv_and_service_views(
     tmp_path: Path,
 ) -> None:
-    """Built for ``optional_inject`` too, like ``config``; not None."""
+    """Optional injection resolves local values and the scoped service binder."""
     plugin_dir = tmp_path / "plugins" / "optional"
     (plugin_dir / "backend").mkdir(parents=True)
     (plugin_dir / "backend" / "plugin.py").write_text(

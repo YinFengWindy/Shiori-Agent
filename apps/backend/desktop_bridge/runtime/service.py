@@ -32,7 +32,7 @@ from desktop_bridge.runtime.settings_form import settings_form_write
 from desktop_bridge.service import DesktopBridgeService
 
 if TYPE_CHECKING:
-    from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 
 logger = logging.getLogger(__name__)
 

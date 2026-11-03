@@ -1,16 +1,16 @@
 """插件 RPC 命名空间注册表：宿主分发器/路由经此解析 <pluginId>.<method>。
 
-每个 runtime generation 由 bootstrap 创建一份，作为 ``host.bridge`` 核心服务
-提供给内核（#901 P2）。注册表不关心策略的具体类型 ``P``：桌面桥接登记并读取
-自己的 ``MethodPolicy``，内核只负责撤回。
+每个 runtime generation 由 bootstrap 创建一份，供桥接分发、RPC 与 services
+绑定器共用。注册表不关心策略的具体类型 ``P``：桌面桥接登记并读取自己的
+``MethodPolicy``；宿主通过注入的通信协议撤回 renderer 注册。
 """
 
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from agent.plugin_host.communication import PluginCommunication
-from agent.plugin_host.services import PluginServiceRegistry
+from desktop_bridge.plugin_rpc.communication import PluginCommunication
+from desktop_bridge.plugin_rpc.services import PluginServiceRegistry
 from agent.plugin_host.rpc_names import plugin_method_owner
 from typing import Any
 

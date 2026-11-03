@@ -19,15 +19,12 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
-from agent.plugin_host.services import ScopedPluginServices
+from agent.plugin_host.renderer_communication import RendererCommunication
 from agent.plugin_host.config import PluginConfig
 from agent.plugin_host.kv import PluginKVStore, open_plugin_kv
 from agent.plugin_host.core_keys import (
-    HOST_BRIDGE,
-    HOST_CONFIG_REFERENCES,
     CoreModule,
     PluginBinding,
-    required_core_key,
 )
 from agent.plugin_host.config_schema import (
     PluginConfigSchemaRegistry,
@@ -173,6 +170,8 @@ class PluginKernel:
         settings: PluginGenerationSettings,
         core: Sequence[CoreModule],
         core_checks: Callable[[Kernel], None],
+        communication: RendererCommunication,
+        resolve_reference: Callable[[str], str],
         namespace: str = "",
         strict: bool = False,
         external_plugin_dirs: list[Path] | None = None,
@@ -184,7 +183,9 @@ class PluginKernel:
         construction, and with it startup (§8.5), unlike a plugin's setup failure.
         ``core_checks`` installs the core's post-chain checks on the kernel
         (``agent.core.turn_events.install_core_checks``; this layer may not
-        import the core).
+        import the core). ``communication`` only withdraws renderer owners;
+        bootstrap binds its peer resolver after construction. ``resolve_reference``
+        supplies the host configuration expansion without publishing an internal Key.
         """
         self._dirs = plugin_dirs
         self._external_dirs = external_plugin_dirs or []
@@ -214,21 +215,15 @@ class PluginKernel:
         for module in core:
             module(self._kernel.provide)
         core_checks(self._kernel)
-        self._resolve_reference = required_core_key(
-            self._kernel.get, HOST_CONFIG_REFERENCES
-        )
+        self._resolve_reference = resolve_reference
+        self._communication = communication
         # Serializes load/unload/reload/drain/terminate so a reload never
         # interleaves with another transition or the generation's retirement.
         self._transition_lock = asyncio.Lock()
         self._retired = False
-        # 每个 runtime generation 独立一份 RPC 注册表（bootstrap 创建，经
-        # host.bridge 提供）与配置 schema 注册表；内核只绑定 communication 的
-        # 依赖解析，并在插件卸载时撤销它的 renderer communication。
-        self._rpc = required_core_key(self._kernel.get, HOST_BRIDGE)
-        self._rpc.communication.bind_resolver(self._communication_dependencies)
         self.config_schemas = PluginConfigSchemaRegistry()
 
-    def _communication_dependencies(self, plugin_id: str) -> tuple[str, ...] | None:
+    def active_peers(self, plugin_id: str) -> tuple[str, ...] | None:
         """Reads dependency declarations only while the current instance is active."""
         if plugin_id not in self.active_plugin_ids:
             return None
@@ -443,7 +438,7 @@ class PluginKernel:
                 self._record_execution(record, content)
                 scope = self._kernel.scope(manifest.id)
                 scope.subscribe(
-                    lambda: self._rpc.communication.remove_plugin(manifest.id),
+                    lambda: self._communication.remove_plugin(manifest.id),
                     "renderer-communication",
                 )
                 self._import_entry(record, content)
@@ -610,13 +605,6 @@ class PluginKernel:
                 scope.drainers,
                 was_active=instance.reactivated
                 or plugin_id in settings.previously_active_plugins,
-            ),
-            services=(
-                ScopedPluginServices(
-                    self._rpc.services, plugin_id, scope, instance.calls
-                )
-                if "services" in injected
-                else None
             ),
             publish_api=publish_api,
             kernel_context=kernel_context,
@@ -827,7 +815,7 @@ class PluginKernel:
     def _reload_steps(self, *, disabled: frozenset[str] = frozenset()) -> ReloadSteps:
         async def dispose(record: PluginRecord) -> list[Exception]:
             plugin_id = record.manifest.id
-            self._rpc.communication.remove_plugin(
+            self._communication.remove_plugin(
                 plugin_id,
                 reason=(
                     "plugin_disabled" if plugin_id in disabled else "plugin_reloading"

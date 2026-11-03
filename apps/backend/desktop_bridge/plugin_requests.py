@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 from agent.plugin_host.rpc_names import plugin_method_owner
 
 if TYPE_CHECKING:
-    from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
     from desktop_bridge.method_policy import MethodPolicy
 
 

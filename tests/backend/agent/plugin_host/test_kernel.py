@@ -10,7 +10,8 @@ from functools import partial
 import pytest
 from tests.support.plugin_kernel import set_plugin_enabled
 
-from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
+from agent.plugin_host import PluginGenerationSettings
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from shiori_sdk.core.services import LIGHT_PROVIDER
 from agent.plugin_host.manifest import group_listening_channels
 from agent.plugin_host.package_fingerprint import inspect_package_content
@@ -678,7 +679,6 @@ async def setup(ctx):
     )
     assert "未在 manifest inject 中声明 tools" in module.captured["denied"]
     assert module.captured["provide"].diagnostic.code == "undeclared_key"
-    assert kernel.kernel._providers["host.bridge"] == ("", kernel._rpc)
     await kernel.terminate_all(force=True)
 
 
@@ -2248,9 +2248,6 @@ async def test_api2_host_key_does_not_abort_startup(tmp_path: Path):
         [state] = [view.describe() for view in kernel.views()]
         assert state["state"] == "BLOCKED"
         assert state["diagnostic"]["code"] == "unsupported_api"
-        owner, impl = kernel.kernel._providers["host.bridge"]
-        assert owner == ""
-        assert impl is kernel._rpc
     finally:
         await kernel.terminate_all(force=True)
 

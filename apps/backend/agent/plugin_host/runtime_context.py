@@ -19,7 +19,6 @@ from agent.plugin_host.core_keys import (
 from agent.plugin_host.kv import PluginKVStore
 from shiori_sdk.extensions import ConfigValues, Dependencies
 from shiori_sdk.plugin_services import RuntimeLifecycle
-from shiori_sdk.services import PluginServices
 from shiori_sdk.core import services as keys
 
 
@@ -46,7 +45,6 @@ class PluginRuntimeContext:
         dependencies: Dependencies | None = None,
         kv: PluginKVStore | None = None,
         runtime: RuntimeLifecycle | None = None,
-        services: PluginServices | None = None,
     ) -> None:
         self.plugin_id = plugin_id
         self.plugin_dir = plugin_dir
@@ -63,7 +61,6 @@ class PluginRuntimeContext:
             keys.KV.name: kv,
             keys.DEPENDENCIES.name: dependencies,
             keys.RUNTIME.name: runtime,
-            keys.SERVICES.name: services,
         }
 
     def expose(self, api: object) -> None:

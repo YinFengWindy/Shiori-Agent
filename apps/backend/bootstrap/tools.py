@@ -11,10 +11,11 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from agent.plugin_host import PluginKernel
     from agent.plugin_host.handle import PluginRecord
-    from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
     from desktop_bridge.method_policy import MethodPolicy
 
 from agent.config_models import Config, WiringConfig
+from agent.config import resolve_config_reference
 from agent.context import ContextBuilder
 from agent.looping.core import AgentLoop
 from agent.looping.ports import (
@@ -116,7 +117,7 @@ class CoreRuntime:
     group_environment: GroupEnvironment
     # 群聊旁听的开关（#538）：设置旁听的工具与桌面小手机共用这一个实例（#540）。
     group_listening: GroupListeningControl
-    # The generation's plugin RPC registry, shared by the kernel (``host.bridge``),
+    # The generation's plugin RPC registry, shared by bridge callers,
     # account delivery and the desktop bridge's dispatch.
     plugin_rpc: PluginRpcRegistry[MethodPolicy]
     image_sync_service: ExternalPushSyncService | None = None
@@ -588,11 +589,8 @@ def build_core_runtime(
         active_turn_states=loop.active_turn_states,
     )
 
-    from agent.plugin_host import (
-        PluginGenerationSettings,
-        PluginKernel,
-        PluginRpcRegistry,
-    )
+    from agent.plugin_host import PluginGenerationSettings, PluginKernel
+    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
     from agent.core.turn_events import install_core_checks
     from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
     from conversation.background_results import HostBackgroundResults
@@ -662,6 +660,8 @@ def build_core_runtime(
         namespace=uuid4().hex,
         strict=shared is not None,
         core_checks=partial(install_core_checks, workspace=workspace),
+        communication=plugin_rpc.communication,
+        resolve_reference=resolve_config_reference,
         core=plugin_core_modules(
             PluginCoreInputs(
                 plugin_dirs=tuple(plugin_dirs),
@@ -686,6 +686,7 @@ def build_core_runtime(
             )
         ),
     )
+    plugin_rpc.communication.bind_resolver(plugin_manager.active_peers)
     # The loop already holds this getter. Bind it before plugins start so the
     # first turn reads whoever provides MEMORY_ENGINE (D25).
     memory_runtime.current_engine.bind(lambda: plugin_manager.kernel.get(MEMORY_ENGINE))

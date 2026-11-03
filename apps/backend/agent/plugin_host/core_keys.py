@@ -2,9 +2,8 @@
 
 Core modules provide public keys (``shiori_sdk.core``) before any plugin
 starts. A binder is stored as itself; ``PluginRuntimeContext.require`` calls
-``for_plugin`` so the plugin sees its own view. ``host.bridge`` and
-``host.config_references`` are host-internal and are not service keys plugins
-inject: no manifest, whatever its api version, may name a ``host.`` key.
+``for_plugin`` so the plugin sees its own view. Host-only wiring is supplied
+as explicit constructor arguments; no manifest may name a ``host.`` key.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from shiori_sdk.runtime import HostServiceUnavailable
 
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.manifest import PluginManifest
-from agent.plugin_host.rpc import PluginRpcRegistry
 from shiori_sdk.core import services
 
 
@@ -61,28 +59,10 @@ CoreModule = Callable[[CoreProvide], None]
 """Provides one core module's keys; raising aborts startup (§8.5)."""
 
 
-# The policy type (``desktop_bridge.method_policy.MethodPolicy``) is a host
-# module this layer may not import; the kernel only binds and withdraws.
-HOST_BRIDGE: Key[PluginRpcRegistry[Any]] = Key("host.bridge")
-"""The generation's plugin RPC registry, created by bootstrap (``desktop_bridge``).
-
-Not a service plugins inject: the kernel binds renderer communication to it
-and the ``services`` key uses its service registry, so each generation
-requires it when it is constructed.
-"""
-
-HOST_CONFIG_REFERENCES: Key[Callable[[str], str]] = Key("host.config_references")
-"""Expands ``${NAME}`` references for ``config.resolve_reference``.
-
-Not a service plugins inject: the assembly layer itself needs it for every
-plugin's ``config``, so each generation requires it when it is constructed.
-"""
-
-
 class HostBuilt:
     """Marker for a public key the host builds per plugin during setup.
 
-    ``config``, ``kv``, ``dependencies``, ``runtime`` and ``services`` do not
+    ``config``, ``kv``, ``dependencies`` and ``runtime`` do not
     exist until the assembly layer constructs that plugin's context. The kernel
     still needs a provider so planning does not block a plugin that injects one. ``PluginRuntimeContext.require``
     replaces this marker with the plugin's object. It is not a service.
@@ -105,6 +85,7 @@ PER_PLUGIN_PUBLIC_KEYS = frozenset(
         "background",
         "events",
         "rpc",
+        "services",
         "process_resources",
     }
 )
@@ -116,7 +97,6 @@ HOST_BUILT_KEYS: tuple[Key[Any], ...] = (
     services.KV,
     services.DEPENDENCIES,
     services.RUNTIME,
-    services.SERVICES,
 )
 
 

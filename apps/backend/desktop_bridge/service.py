@@ -4,7 +4,7 @@ from core.roles.errors import RoleNotFoundError
 
 from shiori_sdk.errors import public_validation_message, summarize_exception_for_user
 
-from agent.plugin_host.bridge_events import PluginBridgeEvent
+from desktop_bridge.plugin_rpc.bridge_events import PluginBridgeEvent
 from shiori_sdk.rpc import PluginRpcError
 from shiori_sdk.core.memory_optimizer import MemoryOptimizer
 
@@ -21,7 +21,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from agent.looping.core import AgentLoop
-from agent.plugin_host.rpc import PluginRpcRegistry
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from agent.tools.message_push import MessagePushTool
 from agent.turns.turn_pushes import current_turn_pushes
 from bus.event_bus import EventBus

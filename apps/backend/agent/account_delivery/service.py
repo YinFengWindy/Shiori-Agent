@@ -35,7 +35,7 @@ from core.identity import IdentityChat, UserIdentityStore, identities_for_accoun
 if TYPE_CHECKING:
     # The registry is injected; importing its package here initializes the kernel
     # and turn orchestration before AccountDelivery itself has been defined.
-    from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 
 logger = logging.getLogger(__name__)
 

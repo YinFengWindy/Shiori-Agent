@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     # Only for type annotations: keeps the plugin kernel package out of this
     # module's import chain.
-    from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 
 
 from shiori_sdk.rpc import Concurrency

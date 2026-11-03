@@ -16,12 +16,10 @@ from typing import Any, cast
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
 from agent.core.turn_events import install_core_checks
 from agent.lifecycle.types import BeforeTurnCtx
-from agent.plugin_host import (
-    PluginGenerationSettings,
-    PluginKernel,
-    PluginRpcRegistry,
-)
+from agent.plugin_host import PluginGenerationSettings, PluginKernel
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from agent.plugin_host.core_keys import CoreModule, CoreProvide
+from agent.config import resolve_config_reference
 from agent.tools.registry import ToolRegistry
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
@@ -85,15 +83,19 @@ def host_kernel(
         http=http,
         process_resources=generation.process_resources,
     )
-    return PluginKernel(
+    kernel = PluginKernel(
         plugin_dirs,
         settings=generation,
         core=tuple(
             _withholding(module, withheld) for module in plugin_core_modules(inputs)
         ),
         core_checks=partial(install_core_checks, workspace=generation.workspace),
+        communication=inputs.rpc.communication,
+        resolve_reference=resolve_config_reference,
         **options,
     )
+    inputs.rpc.communication.bind_resolver(kernel.active_peers)
+    return kernel
 
 
 def _withholding(module: CoreModule, withheld: frozenset[Key[Any]]) -> CoreModule:

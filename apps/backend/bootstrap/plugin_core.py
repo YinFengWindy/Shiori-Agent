@@ -12,17 +12,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from agent.config import resolve_config_reference
 from infra.process.resources import (
     PluginProcessResourceAttachments,
     ProcessResourceOwner,
 )
-from agent.plugin_host.rpc import PluginRpcRegistry
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from agent.provider import LLMProvider
 from agent.plugin_host.core_keys import (
-    HOST_BRIDGE,
     HOST_BUILT_KEYS,
-    HOST_CONFIG_REFERENCES,
     CoreModule,
     CoreProvide,
     HostBuilt,
@@ -80,6 +77,7 @@ from shiori_sdk.core.services import (
     RESOURCES,
     ROLES,
     RPC,
+    SERVICES,
     SESSION_STORE,
     TOOL_TURN,
     TOOLS,
@@ -186,10 +184,6 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
     def provide_crash_reporting(provide: CoreProvide) -> None:
         """``CRASH_REPORTING``: process hooks plus session and frame attribution."""
         provide(CRASH_REPORTING, HostCrashReporting(roots))
-
-    def provide_config_references(provide: CoreProvide) -> None:
-        """The host's ``${NAME}`` expansion behind ``config.resolve_reference``."""
-        provide(HOST_CONFIG_REFERENCES, resolve_config_reference)
 
     def provide_tools(provide: CoreProvide) -> None:
         """Plugin tools and the current tool turn (``agent.tools``)."""
@@ -333,8 +327,8 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         _publish(provide, BACKGROUND, PluginBackground())
 
     def provide_bridge(provide: CoreProvide) -> None:
-        """The plugin RPC registry and the ``rpc`` capability over it (bridge)."""
-        provide(HOST_BRIDGE, inputs.rpc)
+        """Plugin RPC and service binders over the generation's bridge registry."""
+        _publish(provide, SERVICES, inputs.rpc.services)
         _publish(provide, RPC, PluginRpc(inputs.rpc, inputs.event_bus))
 
     def provide_events(provide: CoreProvide) -> None:
@@ -353,7 +347,6 @@ def plugin_core_modules(inputs: PluginCoreInputs) -> tuple[CoreModule, ...]:
         provide_bridge,
         provide_events,
         provide_crash_reporting,
-        provide_config_references,
         provide_tools,
         provide_channels,
         provide_sessions,
