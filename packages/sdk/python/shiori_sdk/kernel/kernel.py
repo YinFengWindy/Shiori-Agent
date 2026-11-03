@@ -215,12 +215,22 @@ class Kernel:
             return await self._settle(plugin_id, state, failed, error, errors)
         return await self._settle(plugin_id, KernelState.ACTIVE)
 
-    async def deactivate(self, plugin_id: str) -> list[Exception]:
-        """Releases a plugin's scope (stopped or failed) and marks it STOPPED."""
+    async def deactivate(
+        self,
+        plugin_id: str,
+        failure: PluginDiagnostic | None = None,
+        error: BaseException | None = None,
+    ) -> list[Exception]:
+        """Releases a scope and records STOPPED, or FAILED with ``failure``.
+
+        Failed deactivation retains the cause and cleanup errors and emits
+        ``PluginFailed`` instead of ``PluginStopped``. An absent scope is a no-op.
+        """
         if plugin_id not in self._scopes:
             return []
         errors = await self._release(plugin_id)
-        _ = await self._settle(plugin_id, KernelState.STOPPED, cleanup=tuple(errors))
+        state = KernelState.FAILED if failure is not None else KernelState.STOPPED
+        _ = await self._settle(plugin_id, state, failure, error, tuple(errors))
         return errors
 
     async def _release(self, plugin_id: str) -> list[Exception]:

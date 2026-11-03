@@ -1265,19 +1265,33 @@ async def test_failed_enabled_provider_still_conflicts_with_a_newly_enabled_one(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["setup", "renderer"])
 async def test_conflict_replanning_cannot_retry_an_unclean_failed_provider(
-    probe, tmp_path
+    probe, tmp_path, failure_stage
 ):
     _write(
         tmp_path,
         "first",
-        "provides: [shared.engine]\n",
+        "provides: [shared.engine]\n"
+        + (
+            "frontend: {entry: frontend.mjs, exports: [ui], css: []}\n"
+            if failure_stage == "renderer"
+            else ""
+        ),
         "import sys\n\nasync def setup(ctx):\n"
         "    sys.modules['reload_probe'].events.append(('setup', 'first'))\n"
         "    def stuck(): raise RuntimeError('cleanup failed')\n"
         "    ctx.effect('stuck', stuck)\n"
-        "    raise RuntimeError('setup failed')\n",
+        + (
+            "    raise RuntimeError('setup failed')\n"
+            if failure_stage == "setup"
+            else ""
+        ),
     )
+    if failure_stage == "renderer":
+        (tmp_path / "first" / "frontend.mjs").write_text(
+            "export const ui = {};", encoding="utf-8"
+        )
     _write(
         tmp_path,
         "second",
@@ -1293,6 +1307,11 @@ async def test_conflict_replanning_cannot_retry_an_unclean_failed_provider(
         ),
     )
     await kernel.load_all()
+    if failure_stage == "renderer":
+        first = next(row for row in kernel.states() if row["id"] == "first")
+        assert await kernel.fail_renderer_entry(
+            "first", "ui", "renderer failed", first["activation_token"]
+        )
     assert _states(kernel)["first"] == "RESTART_REQUIRED"
     try:
         for enabled in (True, False):

@@ -47,6 +47,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 - setup 抛错：内核先释放它登记的一切（提供的 Key、订阅、任务、effect），状态 `FAILED`（`setup_failed`），发 `PluginFailed`；硬依赖它的插件随后 `BLOCKED`。
 - 若失败回滚还留有清理错误，宿主展示 `RESTART_REQUIRED`；后续冲突规划不得覆盖内核保存的清理错误，冲突解除也不能自动重试这个实例。
 - setup 成功：`ACTIVE`，发 `PluginStarted`，宿主为它铸一个新的 `activation_token`（见[前端契约](plugin-frontend.md#资源授权与加载)）。
+- 渲染入口随后失败：宿主调用 `Kernel.deactivate` 并传入失败诊断和原始错误；释放 scope 后内核记录 `FAILED`（`renderer_<kind>_failed`）并发 `PluginFailed`，清理错误仍触发上述重启屏障。普通停用不传失败诊断，仍记录 `STOPPED` 并发 `PluginStopped`。
 - 启动被取消：还没轮到的插件恢复原来的句柄状态，不会停在 `LOADING`。
 - `Kernel.activate` 拒绝已经持有 scope 的插件（包括 setup 尚未完成的实例），抛 `already_running`，不替换原 scope。
 

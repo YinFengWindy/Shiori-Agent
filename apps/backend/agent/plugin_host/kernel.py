@@ -907,13 +907,15 @@ class PluginKernel:
         return open_plugin_kv(workspace=workspace, plugin_id=plugin_id)
 
     async def _rollback_failed_load(
-        self, handle: PluginHandle, error: BaseException
+        self, handle: PluginHandle, error: RendererActivationError
     ) -> None:
         """Rolls an ACTIVE plugin back to FAILED through the kernel (renderer failure)."""
         logger.warning("插件 %s 加载失败，回滚: %s", handle.record.name, error)
         # A rolled-back instance never admits calls again, even via stale references.
         handle.calls.retire()
-        cleanup_errors = await self._kernel.deactivate(handle.plugin_id)
+        cleanup_errors = await self._kernel.deactivate(
+            handle.plugin_id, failure=error.diagnostic, error=error
+        )
         self._after_rollback(handle, error, cleanup_errors)
 
     def _after_rollback(
