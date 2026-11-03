@@ -260,7 +260,7 @@ async def test_memory_written_fanout_is_watched_as_a_tuple(tmp_path: Path) -> No
 
         kernel_ctx.watch(MemoryWritten, watch)
 
-    await ctx.kernel.start([PluginSpec("observe", setup)])
+    _ = await KernelHarness(kernel=ctx.kernel).start(PluginSpec("observe", setup))
     bus_events: list[object] = []
     ctx.fake_events.on(MemoryWritten, lambda event: bus_events.append(event))
 

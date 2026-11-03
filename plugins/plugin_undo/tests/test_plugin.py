@@ -9,6 +9,7 @@ from shiori_sdk.commands import CommandInput, CommandRegistry
 from shiori_sdk.core.conversation import COMMANDS
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.sessions import SESSIONS, RollbackResult
+from shiori_sdk.testing.kernel import KernelHarness
 from shiori_sdk.kernel import Kernel, PluginSpec
 from shiori_sdk.memory.engine import TurnRollback
 from shiori_sdk.testing.commands import FakeSessions
@@ -244,8 +245,8 @@ async def test_undo_reads_the_engine_again_after_reload():
         engines.append(engine)
         ctx.provide(MEMORY_ENGINE, cast(Any, engine))
 
-    await kernel.start(
-        [PluginSpec("memory", provide_engine, provides=("memory_engine",))]
+    _ = await KernelHarness(kernel=kernel).start(
+        PluginSpec("memory", provide_engine, provides=("memory_engine",))
     )
     manager = FakeSessions(_rolled_back())
     kernel.provide(SESSIONS, manager)
@@ -259,7 +260,7 @@ async def test_undo_reads_the_engine_again_after_reload():
     assert handler is not None
     first = await handler(CommandInput("/undo", "cli:1"))
     generation["n"] = 2
-    await kernel.reload("memory")
+    _ = await KernelHarness(kernel=kernel).reload("memory")
     second = await handler(CommandInput("/undo", "cli:1"))
     assert "失效记忆：1 条" in first
     assert "失效记忆：2 条" in second

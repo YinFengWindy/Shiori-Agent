@@ -6,6 +6,7 @@ from typing import Any, cast
 
 from core.memory.runtime import MemoryRuntime
 from shiori_sdk.core.memory import MEMORY_ENGINE
+from shiori_sdk.testing.kernel import KernelHarness
 from shiori_sdk.kernel import Kernel, PluginSpec
 from shiori_sdk.memory.engine import MemoryQuery
 
@@ -94,14 +95,16 @@ def test_memory_runtime_reads_the_engine_from_the_reloaded_generation() -> None:
                 cast(Any, SimpleNamespace(generation=generation["n"])),
             )
 
-        await kernel.start([PluginSpec("memory", setup, provides=("memory_engine",))])
+        _ = await KernelHarness(kernel=kernel).start(
+            PluginSpec("memory", setup, provides=("memory_engine",))
+        )
         runtime = MemoryRuntime(
             markdown=_MarkdownStub(),  # type: ignore[arg-type]
         )
         runtime.current_engine.bind(lambda: kernel.get(MEMORY_ENGINE))
         assert cast(Any, runtime.current_engine()).generation == 1
         generation["n"] = 2
-        await kernel.reload("memory")
+        _ = await KernelHarness(kernel=kernel).reload("memory")
         assert cast(Any, runtime.current_engine()).generation == 2
 
     asyncio.run(_run())

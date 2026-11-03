@@ -8,7 +8,6 @@ import pytest
 
 from shiori_sdk.kernel import (
     Context,
-    Kernel,
     KernelError,
     KernelState,
     Key,
@@ -25,11 +24,6 @@ SERVICE = Key[object]("service")
 @dataclass(frozen=True)
 class Ping:
     trail: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class Generation:
-    number: int
 
 
 async def _idle(ctx: Context) -> None:
@@ -49,14 +43,13 @@ async def test_setup_failure_blocks_requirers_and_optional_consumers_get_none() 
     async def soft(ctx: Context) -> None:
         seen["soft"] = ctx.get(SERVICE)
 
-    kernel = Kernel()
-    await kernel.start(
-        [
-            PluginSpec("provider", broken, provides=("service",)),
-            PluginSpec("hard", hard, requires=("service",)),
-            PluginSpec("soft", soft, optional=("service",)),
-            PluginSpec("orphan", hard, requires=("nobody",)),
-        ]
+    harness = KernelHarness()
+    kernel = harness.kernel
+    _ = await harness.start(
+        PluginSpec("provider", broken, provides=("service",)),
+        PluginSpec("hard", hard, requires=("service",)),
+        PluginSpec("soft", soft, optional=("service",)),
+        PluginSpec("orphan", hard, requires=("nobody",)),
     )
 
     failed = kernel.status("provider")
@@ -116,9 +109,10 @@ async def test_require_and_provide_must_be_declared_in_the_manifest() -> None:
     async def overreach(ctx: Context) -> None:
         ctx.provide(SERVICE, object())
 
-    kernel = Kernel()
+    harness = KernelHarness()
+    kernel = harness.kernel
     kernel.provide(SERVICE, object())
-    await kernel.start([PluginSpec("sneaky", sneaky), PluginSpec("over", overreach)])
+    _ = await harness.start(PluginSpec("sneaky", sneaky), PluginSpec("over", overreach))
 
     for plugin_id in ("sneaky", "over"):
         status = kernel.status(plugin_id)
@@ -141,24 +135,7 @@ def _chain_member(
     return PluginSpec(name, setup, requires=requires, provides=provides)
 
 
-async def test_reload_keeps_the_cold_start_handler_order() -> None:
-    kernel = Kernel()
-    await kernel.start(
-        [
-            _chain_member("dependent", requires=("base",)),
-            _chain_member("zeta"),
-            _chain_member("provider", provides=("base",)),
-        ]
-    )
-    cold = await kernel.emit(Ping())
-
-    assert await kernel.reload("provider") == ("provider", "dependent")
-
-    assert cold == Ping(("provider", "zeta", "dependent"))
-    assert await kernel.emit(Ping()) == cold
-
-
-async def test_reload_without_on_drain_waits_for_handlers_not_resident_tasks() -> None:
+async def test_drain_without_on_drain_waits_for_handlers_not_resident_tasks() -> None:
     release = asyncio.Event()
     entered = asyncio.Event()
     setups = itertools.count(1)
@@ -180,24 +157,25 @@ async def test_reload_without_on_drain_waits_for_handlers_not_resident_tasks() -
         ctx.on(Ping, on_ping)
         residents.append(ctx.spawn(resident()))
 
-    kernel = Kernel()
-    await kernel.start([PluginSpec("busy", setup)])
+    harness = KernelHarness()
+    kernel = harness.kernel
+    _ = await harness.start(PluginSpec("busy", setup))
     emitting = asyncio.create_task(kernel.emit(Ping()))
     await entered.wait()
-    reloading = asyncio.create_task(kernel.reload("busy"))
+    draining = asyncio.create_task(kernel.drain(["busy"], timeout=1))
     await asyncio.sleep(0.01)
-    assert not reloading.done()
+    assert not draining.done()
 
     release.set()
-    assert await asyncio.wait_for(reloading, 1) == ("busy",)
+    await asyncio.wait_for(draining, 1)
     _ = await emitting
     assert finished == [1]
+    assert not residents[0].done()
+    _ = await harness.stop()
     assert residents[0].cancelled()
-    assert not residents[1].done()
-    _ = await kernel.stop()
 
 
-async def test_reload_waits_for_a_watch_handler_in_flight() -> None:
+async def test_drain_waits_for_a_watch_handler_in_flight() -> None:
     release = asyncio.Event()
     entered = asyncio.Event()
     seen: list[str] = []
@@ -210,43 +188,24 @@ async def test_reload_waits_for_a_watch_handler_in_flight() -> None:
 
         ctx.watch(Ping, record)
 
-    kernel = Kernel()
-    await kernel.start([PluginSpec("observer", setup)])
+    harness = KernelHarness()
+    kernel = harness.kernel
+    _ = await harness.start(PluginSpec("observer", setup))
     _ = await kernel.emit(Ping())
     await entered.wait()
 
-    # The busy watcher holds the drain: the reload times out, nothing changes.
+    # The busy watcher holds the drain: it times out without dropping delivery.
     with pytest.raises(KernelError, match="排空"):
-        _ = await kernel.reload("observer", timeout=0.05)
+        await kernel.drain(["observer"], timeout=0.05)
     assert seen == []
 
     release.set()
-    assert await asyncio.wait_for(kernel.reload("observer"), 1) == ("observer",)
+    await asyncio.wait_for(kernel.drain(["observer"], timeout=1), 1)
     assert seen == ["delivered"]
+    _ = await harness.stop()
 
 
-async def test_reload_runs_on_drain_before_disposing_the_old_instance() -> None:
-    steps: list[str] = []
-    setups = itertools.count(1)
-
-    async def setup(ctx: Context) -> None:
-        number = next(setups)
-        steps.append(f"setup {number}")
-
-        async def drain() -> None:
-            steps.append(f"drain {number}")
-
-        ctx.on_drain(drain)
-        ctx.effect(lambda: steps.append(f"dispose {number}"))
-
-    kernel = Kernel()
-    await kernel.start([PluginSpec("plugin", setup)])
-    _ = await kernel.reload("plugin")
-
-    assert steps == ["setup 1", "drain 1", "dispose 1", "setup 2"]
-
-
-async def test_drain_timeout_abandons_the_reload_and_keeps_the_old_instance() -> None:
+async def test_drain_timeout_keeps_the_old_instance() -> None:
     stuck = asyncio.Event()
     disposed: list[str] = []
 
@@ -259,11 +218,12 @@ async def test_drain_timeout_abandons_the_reload_and_keeps_the_old_instance() ->
         ctx.on_drain(wait)
         ctx.effect(lambda: disposed.append("old"))
 
-    kernel = Kernel()
-    await kernel.start([PluginSpec("slow", setup, provides=("service",))])
+    harness = KernelHarness()
+    kernel = harness.kernel
+    _ = await harness.start(PluginSpec("slow", setup, provides=("service",)))
 
     with pytest.raises(KernelError) as aborted:
-        _ = await kernel.reload("slow", timeout=0.01)
+        await kernel.drain(["slow"], timeout=0.01)
 
     assert aborted.value.diagnostic.code == "drain_timeout"
     assert "保留旧实例" in aborted.value.diagnostic.reason
@@ -275,78 +235,17 @@ async def test_drain_timeout_abandons_the_reload_and_keeps_the_old_instance() ->
     stuck.set()
 
 
-@pytest.mark.parametrize(
-    "fields", [{"channels": True}, {"hot_reload": False}], ids=["channels", "no_hot"]
-)
-async def test_reload_closure_with_a_restart_only_plugin_is_refused_whole(
-    fields: dict[str, bool],
-) -> None:
-    disposed: list[str] = []
-
-    async def provider(ctx: Context) -> None:
-        ctx.provide(SERVICE, object())
-        ctx.effect(lambda: disposed.append("provider"))
-
-    kernel = Kernel()
-    await kernel.start(
-        [
-            PluginSpec("provider", provider, provides=("service",)),
-            PluginSpec("channel", _idle, requires=("service",), **fields),
-        ]
-    )
-
-    with pytest.raises(KernelError) as refused:
-        _ = await kernel.reload("provider")
-
-    assert refused.value.plugin_ids == ("channel",)
-    assert "需重启" in refused.value.diagnostic.reason
-    assert disposed == []
-
-
-async def test_next_get_after_reload_returns_the_new_provider_generation() -> None:
-    generations = itertools.count(1)
-    key = Key[Generation]("generation")
-    seen_by_consumer: list[int] = []
-
-    async def provider(ctx: Context) -> None:
-        ctx.provide(key, Generation(next(generations)))
-
-    async def consumer(ctx: Context) -> None:
-        async def on_ping(event: Ping) -> Ping:
-            current = ctx.get(key)
-            seen_by_consumer.append(current.number if current else 0)
-            return event
-
-        ctx.on(Ping, on_ping)
-
-    kernel = Kernel()
-    await kernel.start(
-        [
-            PluginSpec("provider", provider, provides=("generation",)),
-            PluginSpec("consumer", consumer, optional=("generation",)),
-        ]
-    )
-    _ = await kernel.emit(Ping())
-    # The optional consumer is reset with its provider (§8.2).
-    assert await kernel.reload("provider") == ("provider", "consumer")
-    _ = await kernel.emit(Ping())
-
-    assert seen_by_consumer == [1, 2]
-    assert kernel.get(key) == Generation(2)
-
-
 async def test_start_does_not_activate_a_register_only_plugin() -> None:
     started: list[str] = []
 
     async def setup(ctx: Context) -> None:
         started.append(ctx.plugin_id)
 
-    kernel = Kernel()
-    await kernel.start(
-        [
-            PluginSpec("untrusted", setup, runnable=False),
-            PluginSpec("trusted", setup),
-        ]
+    harness = KernelHarness()
+    kernel = harness.kernel
+    _ = await harness.start(
+        PluginSpec("untrusted", setup, runnable=False),
+        PluginSpec("trusted", setup),
     )
 
     assert started == ["trusted"]
@@ -371,17 +270,15 @@ async def test_register_only_cycle_partner_blocks_as_not_enabled() -> None:
 
     harness = KernelHarness()
     kernel = await harness.start(PluginSpec("observe", observe))
-    await kernel.start(
-        [
-            PluginSpec("enabled", _idle, requires=("b_key",), provides=("a_key",)),
-            PluginSpec(
-                "disabled",
-                _idle,
-                requires=("a_key",),
-                provides=("b_key",),
-                runnable=False,
-            ),
-        ]
+    _ = await harness.start(
+        PluginSpec("enabled", _idle, requires=("b_key",), provides=("a_key",)),
+        PluginSpec(
+            "disabled",
+            _idle,
+            requires=("a_key",),
+            provides=("b_key",),
+            runnable=False,
+        ),
     )
     await harness.idle()
 
@@ -395,14 +292,13 @@ async def test_register_only_cycle_partner_blocks_as_not_enabled() -> None:
 
 
 async def test_closure_takes_optional_consumers_only_for_a_reload() -> None:
-    kernel = Kernel()
-    await kernel.start(
-        [
-            _chain_member("provider", provides=("base",)),
-            _chain_member("hard", requires=("base",)),
-            PluginSpec("soft", _idle, optional=("base",)),
-            _chain_member("other"),
-        ]
+    harness = KernelHarness()
+    kernel = harness.kernel
+    _ = await harness.start(
+        _chain_member("provider", provides=("base",)),
+        _chain_member("hard", requires=("base",)),
+        PluginSpec("soft", _idle, optional=("base",)),
+        _chain_member("other"),
     )
 
     assert set(kernel.closure("provider", optional=False)) == {"provider", "hard"}
