@@ -19,7 +19,7 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 
 ## 工作流程
 
-- 功能开发、缺陷修复与工作流续接使用项目内 [windflow](.agents/skills/windflow/SKILL.md)，按请求选择入口与停止点；局部编辑、仅讨论或仅审查保持对应范围，已有确认继续复用。
+- 功能开发、缺陷修复与工作流续接使用 windflow，按请求选择入口与停止点；局部编辑、仅讨论或仅审查保持对应范围，已有确认继续复用。
 - `main` 上不直接提交。代码改动在功能分支上进行，一个完整、可验证的改动单元完成后 commit。
 - 功能分支默认推送并创建 Draft PR；未经明确要求不推送或合并到 `main`。
 - PR 必须关联 Issue（`YinFengWindy/Shiori-Agent`，见 `docs/agents/issue-tracker.md`），写明变更摘要、实际验证结果和已知阻塞项；测试与构建通过、阻塞项清零后才可转 Ready 或合并。
@@ -109,6 +109,6 @@ Shiori 是一个以角色为基底进行角色扮演的 Agent 助手：Python �
 
 ## Agent skills
 
-- 项目 skills 位于 `.agents/skills/`。Windflow 使用项目内的平级技能集合；各阶段可单独调用，总入口按阶段加载标记为 `collection: windflow` 的项目技能，不依赖全局安装。
+- 仓库不提供项目级 skills。Windflow 还在迭代，使用用户级安装：`npx skills@latest add YinFengWindy/windflow -g`。阶段技能名为 `wf-*`，可单独调用；总入口 `windflow` 按阶段加载它们。
 - Issue tracker：`docs/agents/issue-tracker.md`
 - 分诊标签：`docs/agents/triage-labels.md`
