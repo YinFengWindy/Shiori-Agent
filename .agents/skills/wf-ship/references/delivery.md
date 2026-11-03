@@ -27,9 +27,15 @@ Then wait for an explicit confirmation of that PR and head. Requirement or ticke
 
 Re-read the head and gate status just before merging. A new head needs fresh CI, a review of what changed, and a new confirmation. Merge with the provider's expected-head guard when one exists (GitHub: `gh pr merge --match-head-commit`), using the repository's usual merge method. Never use admin bypass. Do not enable auto-merge that could carry this approval to a later head. Confirm the provider reports `MERGED` before saying so. Close tickets only when their behavior is fully delivered.
 
-## Branch cleanup
+## Branch and worktree cleanup
 
-The merge confirmation also authorizes deleting the PR's source branch once the provider reports `MERGED`. Do not delete a default, protected, or integration branch, or one that another open PR still uses. Delete the remote branch only if its tip still equals the merged head. Delete the local branch only if no worktree has it checked out and it holds no commits beyond what was merged. A squash merge can make an ancestry check fail even when nothing would be lost, so compare against the merged head. Leave other worktrees and uncommitted work alone. If cleanup fails, report "merged; branch cleanup pending" and do not merge again.
+The merge confirmation also authorizes cleaning up after the PR once the provider reports `MERGED`:
+
+- **Remote branch:** delete it if its tip still equals the merged head. Do not delete a default, protected, or integration branch, or one that another open PR still uses.
+- **Task worktree:** if a worktree was created for this task, has the merged source branch checked out, has no uncommitted or untracked changes, and holds no commits beyond the merged head, remove it with `git worktree remove` (without `--force`). Leave the main checkout, the worktree you are running in, and worktrees the host app manages for its sessions; report those instead.
+- **Local branch:** delete it once no worktree has it checked out and it holds no commits beyond what was merged. A squash merge can make an ancestry check fail even when nothing would be lost, so compare against the merged head.
+
+Leave other worktrees and uncommitted work alone. If cleanup fails, report "merged; cleanup pending" and do not merge again.
 
 ## Blockers
 

@@ -15,7 +15,7 @@ Work on a task branch, not the target or default branch, unless the user assigns
 
 - **Assigned by a coordinating agent:** use the worktree and branch it gives you.
 - **Named by the user:** use that workspace.
-- **Otherwise:** if you are already on a task branch for this work, continue there. If not, create an isolated worktree and branch, named by the repository's convention.
+- **Otherwise:** if you are already on a task branch for this work, continue there. If not, create an isolated worktree and branch, named by the repository's convention. wf-ship removes that worktree after the PR merges.
 
 Uncommitted edits that are not yours belong to the user. Leave them alone, and if your change depends on them, say so.
 
