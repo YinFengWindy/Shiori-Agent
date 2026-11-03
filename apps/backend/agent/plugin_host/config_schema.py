@@ -31,8 +31,7 @@ def validate_against(
 ) -> dict[str, Any]:
     """Validates and normalizes values against a config model.
 
-    与 ``PluginConfigSchemaRegistry.validate`` 等价，但直接接收模型类，供需要
-    跨 generation 边界持有模型的调用方使用。
+    直接接收模型类，供需要跨 generation 边界持有模型的调用方使用。
     """
 
     return model_cls.model_validate(values).model_dump(mode="json")
@@ -98,7 +97,7 @@ class PluginConfigSchemaRegistry:
         every other field's default along with it. A field without a default
         (required) is simply absent from the result.
 
-        The values are converted to their JSON form, matching ``validate``:
+        The values are converted to their JSON form, matching ``validate_against``:
         this result is merged with stored values and serialised straight onto
         the bridge, so a default that is an ``Enum`` / ``datetime`` / ``Path``
         / nested model must not reach the transport as a raw Python object.
@@ -121,17 +120,3 @@ class PluginConfigSchemaRegistry:
         与 generation 无关。
         """
         return self._models.get(plugin_id)
-
-    def validate(self, plugin_id: str, values: dict[str, Any]) -> dict[str, Any]:
-        """Validates and normalizes values against the plugin's model.
-
-        Raises ``KeyError`` when the plugin has no registered model, and
-        ``pydantic.ValidationError`` when ``values`` fails validation.
-
-        Thin delegate to ``validate_against`` for callers that only have a
-        plugin id in hand, not the resolved model class; the write path
-        holds the model class itself instead (see ``model_for``), since it
-        must survive across the apply lock even if this registry's entry is
-        unregistered mid-wait.
-        """
-        return validate_against(self._models[plugin_id], values)

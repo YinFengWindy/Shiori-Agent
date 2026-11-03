@@ -21,7 +21,7 @@ from uuid import uuid4
 
 from agent.plugin_host.services import ScopedPluginServices
 from agent.plugin_host.config import PluginConfig
-from agent.plugin_host.kv import PluginKVStore
+from agent.plugin_host.kv import PluginKVStore, open_plugin_kv
 from agent.plugin_host.core_keys import (
     HOST_BRIDGE,
     HOST_CONFIG_REFERENCES,
@@ -50,9 +50,6 @@ from agent.plugin_host.manifest import (
 from agent.plugin_host.package_fingerprint import (
     PackageContent,
     inspect_package_content,
-)
-from agent.plugin_host.plugin_data import (
-    open_plugin_kv,
 )
 from agent.plugin_host.runtime_context import PluginRuntimeContext
 from agent.plugin_host.runtime_lifecycle import PluginRuntimeLifecycle
