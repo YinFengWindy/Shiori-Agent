@@ -1,6 +1,6 @@
 ---
 name: wf-ship
-description: "Publish an implemented change as a PR, drive its CI and any required review, merge only after explicit approval of that PR, then clean up the branch. Use for opening PRs, fixing delivery blockers, or merging finished work."
+description: "Publish an implemented change as a PR, drive its CI and any required review, merge only after explicit approval of that PR, then clean up the branch and task worktree. Use for opening PRs, fixing delivery blockers, or merging finished work."
 metadata:
   collection: windflow
 ---
