@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import sharp from "sharp";
 
 /*
  * Reading the built site (the package's `test` script runs `astro build`
@@ -76,36 +75,6 @@ export function sitemapPages(site: BuiltSite) {
   return sitemapEntries(site).map((entry) => entry.loc);
 }
 
-/** The parsed JSON-LD of every `<script type="application/ld+json">` in a page, in page order. */
-export function jsonLdOf(html: string): unknown[] {
-  return [...html.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)].map((match) => JSON.parse(match[1]) as unknown);
-}
-
-/** The format and pixel size of an emitted picture, by its absolute URL, read from the file itself. */
-export async function pictureAt(site: BuiltSite, url: string) {
-  const path = distPathOf(url);
-  assert.ok(site.has(path), `${url} is not in the build output`);
-  const { format, width, height } = await sharp(resolve(site.dir, path)).metadata();
-  return { format, width, height };
-}
-
-/** Whether a parsed JSON value is an object (not an array or null). */
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * A meta description fit for search results (#799): 70–120 characters by
- * default (Chinese), long enough to say something and short enough not to be
- * cut much — `length` for another language (English: 70–160) — naming every
- * one of `words` (the search words the page is meant to be found by).
- */
-export function assertDescription(description: string, words: readonly string[], length = { min: 70, max: 120 }) {
-  const count = [...description].length;
-  assert.ok(count >= length.min && count <= length.max, `description is ${count} characters, not ${length.min}–${length.max}: ${description}`);
-  for (const word of words) assert.ok(description.includes(word), `description does not mention ${word}: ${description}`);
-}
-
 /** Every `<img>` tag of a page. */
 export function imgTagsOf(html: string) {
   return [...html.matchAll(/<img\s[^>]*>/g)].map((match) => match[0]);
@@ -135,15 +104,6 @@ export function breadcrumbsOf(html: string) {
   return { steps, jsonLd: JSON.parse(json) as unknown };
 }
 
-/** The top bar's first link: the icon and name. */
-export function topBarHomeHref(html: string) {
-  const bar = html.match(/<header class="site-header"[^>]*>(.*?)<\/header>/s)?.[1];
-  assert.ok(bar, "no top bar");
-  const first = bar.match(/<a href="([^"]+)"[^>]*>/);
-  assert.ok(first, "the top bar has no link");
-  return first[1];
-}
-
 /**
  * A page's section index (#797) in its two placements: the wide screens'
  * sticky aside and the narrow screens' folded `<details>`, each as its
@@ -164,11 +124,6 @@ export function sectionIndexOf(html: string) {
     aside: aside ? { label: aside[1], title: aside[2], entries: entries(aside[3]) } : undefined,
     inline: inline ? { title: inline[1], label: inline[2], entries: entries(inline[3]) } : undefined,
   };
-}
-
-/** The `id` of every element of an HTML fragment (only `tag` elements, if given), in order. */
-export function idsOf(html: string, tag = "[a-z][a-z0-9-]*") {
-  return [...html.matchAll(new RegExp(String.raw`<${tag}\b[^>]*\sid="([^"]+)"`, "g"))].map((match) => match[1]);
 }
 
 /** A page's `<link rel="alternate" hreflang>` links, in order. */

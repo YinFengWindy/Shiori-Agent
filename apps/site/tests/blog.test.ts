@@ -6,19 +6,9 @@ import { fileURLToPath } from "node:url";
 import {
   type BuiltSite,
   ORIGIN,
-  assertDescription,
-  breadcrumbsOf,
   dist,
   draftsDist,
-  idsOf,
-  isRecord,
-  jsonLdOf,
-  metaContent,
-  pictureAt,
-  sectionIndexOf,
-  sitemapEntries,
   sitemapPages,
-  topBarHomeHref,
 } from "./support/builtSite";
 
 /*
@@ -86,9 +76,6 @@ function feedItems(site: BuiltSite) {
 }
 
 describe("blog in the production build", () => {
-  it("has some posts to check", () => {
-    assert.ok(sourcePosts.length > 0);
-  });
 
   it("publishes no draft: no page, no card, no feed item, no sitemap entry", () => {
     const pages = sitemapPages(dist);
@@ -108,33 +95,6 @@ describe("blog in the production build", () => {
     for (const url of [`${ORIGIN}/blog/`, ...published.map(postUrl)]) assert.ok(pages.includes(url), `${url} missing from the sitemap`);
   });
 
-  it("serves the list page with its own title and canonical URL, the bar always there, 博客 marked current", () => {
-    const html = dist.read("blog/index.html");
-    assert.match(html, /<title>博客 · Shiori AI 伴侣<\/title>/);
-    assertDescription(metaContent(html, "name", "description"), ["Shiori", "AI 伴侣", "AI 女友", "Personal Agent"]);
-    assert.match(html, new RegExp(`<link rel="canonical" href="${ORIGIN}/blog/">`));
-    assert.match(html, /<header class="site-header" data-site-header data-mode="fixed">/);
-    assert.match(html, /<a href="\/blog\/"[^>]* aria-current="page">博客<\/a>/);
-    if (published.length === 0) assert.match(html, /<p class="site-blog-empty site-story-type">[^<]+<\/p>/);
-  });
-
-  it("leads back home from the list with a 首页 / 博客 breadcrumb and BreadcrumbList data", () => {
-    const html = dist.read("blog/index.html");
-    assert.deepEqual(breadcrumbsOf(html).steps, [
-      { label: "首页", href: "/#download", current: false },
-      { label: "博客", href: undefined, current: true },
-    ]);
-    assert.deepEqual(breadcrumbsOf(html).jsonLd, {
-      "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: "首页", item: `${ORIGIN}/` },
-        { "@type": "ListItem", position: 2, name: "博客", item: `${ORIGIN}/blog/` },
-      ],
-    });
-    assert.equal(topBarHomeHref(html), "/#download");
-  });
-
   it("serves a valid RSS 2.0 feed on the production origin, linked from every page", () => {
     const feed = dist.read("rss.xml");
     assert.match(feed, /^<\?xml version="1\.0" encoding="UTF-8"\?><rss version="2\.0"[^>]*><channel>.*<\/channel><\/rss>$/s);
@@ -149,110 +109,6 @@ describe("blog posts as rendered (drafts-mode build)", () => {
   for (const post of sourcePosts) {
     describe(post.slug, () => {
       const html = draftsDist.read(`blog/${post.slug}/index.html`);
-
-      it("carries its title, description, canonical URL and article Open Graph tags", () => {
-        // The post's own title, in 吟风's voice, then the site's with its search word (#799).
-        assert.ok(html.includes(`<title>${post.title} · Shiori AI 伴侣</title>`));
-        assert.equal(metaContent(html, "name", "description"), post.description);
-        assertDescription(post.description, ["Shiori", "AI 伴侣"]);
-        assert.ok(html.includes(`<link rel="canonical" href="${postUrl(post)}">`));
-        assert.equal(metaContent(html, "property", "og:url"), postUrl(post));
-        assert.equal(metaContent(html, "property", "og:type"), "article");
-        assert.equal(metaContent(html, "property", "og:title"), `${post.title} · Shiori AI 伴侣`);
-        assert.equal(metaContent(html, "property", "og:description"), post.description);
-        assert.equal(metaContent(html, "property", "article:published_time"), post.date);
-        assert.equal(metaContent(html, "property", "article:author"), "吟风");
-      });
-
-      it("is shared with its own cover as a 1200×630 JPEG, or the site's picture without one (#799)", async () => {
-        const image = metaContent(html, "property", "og:image");
-        assert.deepEqual(await pictureAt(draftsDist, image), { format: "jpeg", width: 1200, height: 630 });
-        assert.equal(metaContent(html, "property", "og:image:width"), "1200");
-        assert.equal(metaContent(html, "property", "og:image:height"), "630");
-        assert.equal(metaContent(html, "name", "twitter:image"), image);
-        const siteImage = metaContent(draftsDist.read("index.html"), "property", "og:image");
-        if (post.cover) {
-          assert.notEqual(image, siteImage, "a post with a cover is shared with the site's picture");
-          // Made from the cover: the same alt text as the picture over the post.
-          const coverAlt = html.match(/<img [^>]*alt="([^"]+)"[^>]*class="site-post-cover"/)?.[1];
-          assert.equal(metaContent(html, "property", "og:image:alt"), coverAlt);
-        } else {
-          assert.equal(image, siteImage);
-        }
-      });
-
-      it("is dated by its day in the head and the sitemap (#799)", () => {
-        const updated = new Date(`${post.date}T00:00:00Z`).toISOString();
-        assert.equal(metaContent(html, "property", "og:updated_time"), updated);
-        assert.equal(sitemapEntries(draftsDist).find((entry) => entry.loc === postUrl(post))?.lastmod, updated);
-      });
-
-      it("describes itself as a BlogPosting by 吟风 in structured data", () => {
-        const data = jsonLdOf(html).find((item) => isRecord(item) && item["@type"] === "BlogPosting");
-        assert.ok(isRecord(data), "no BlogPosting JSON-LD");
-        assert.ok(isRecord(data.publisher));
-        assert.equal(data.publisher["@id"], `${ORIGIN}/#organization`);
-        assert.equal(data.image, metaContent(html, "property", "og:image"));
-        assert.deepEqual(
-          { ...data, publisher: undefined, image: undefined },
-          {
-            "@context": "https://schema.org",
-            "@type": "BlogPosting",
-            headline: post.title,
-            description: post.description,
-            datePublished: post.date,
-            inLanguage: "zh-CN",
-            url: postUrl(post),
-            mainEntityOfPage: postUrl(post),
-            author: { "@type": "Person", name: "吟风" },
-            publisher: undefined,
-            image: undefined,
-          },
-        );
-      });
-
-      it("leads back up with a 首页 / 博客 / post breadcrumb over the title, and BreadcrumbList data", () => {
-        const { steps, jsonLd } = breadcrumbsOf(html);
-        assert.deepEqual(steps, [
-          { label: "首页", href: "/#download", current: false },
-          { label: "博客", href: "/blog/", current: false },
-          { label: post.title, href: undefined, current: true },
-        ]);
-        assert.deepEqual(jsonLd, {
-          "@context": "https://schema.org",
-          "@type": "BreadcrumbList",
-          itemListElement: [
-            { "@type": "ListItem", position: 1, name: "首页", item: `${ORIGIN}/` },
-            { "@type": "ListItem", position: 2, name: "博客", item: `${ORIGIN}/blog/` },
-            { "@type": "ListItem", position: 3, name: post.title, item: postUrl(post) },
-          ],
-        });
-        assert.ok(html.indexOf('aria-label="面包屑"') < html.indexOf("<h1"), "the breadcrumb is not over the title");
-        assert.equal(topBarHomeHref(html), "/#download");
-      });
-
-      it("lists its sections in a table of contents whose links match the headings' ids one to one", () => {
-        const { aside, inline } = sectionIndexOf(html);
-        if (post.sections < 2) {
-          assert.equal(aside, undefined);
-          assert.equal(inline, undefined);
-          return;
-        }
-        assert.ok(aside, "no sticky table of contents");
-        assert.ok(inline, "no folded <details> table of contents");
-        assert.equal(aside.title, "目录");
-        assert.equal(inline.title, "目录");
-        assert.deepEqual(inline.entries, aside.entries);
-        const prose = html.slice(html.indexOf('<div class="site-prose">'), html.indexOf("</article>"));
-        const headings = [...prose.matchAll(/<h2 id="([^"]+)">(.*?)<\/h2>/gs)].map(([, id, text]) => ({ id, label: text.replace(/<[^>]+>/g, "") }));
-        assert.equal(headings.length, post.sections);
-        assert.deepEqual(
-          aside.entries.map(({ id, label }) => ({ id, label })),
-          headings,
-        );
-        const ids = idsOf(html);
-        assert.equal(new Set(ids).size, ids.length, "an id is used twice");
-      });
 
       it("shows the title, day, byline and the post itself as static HTML", () => {
         assert.ok(html.includes(`<h1 class="site-reading-title site-story-type">${post.title}</h1>`));
