@@ -30,7 +30,7 @@
 
 React、React DOM 和 SDK 主入口是宿主提供的对等依赖，不打进插件包。预编译时把 `react`、`react/jsx-runtime`、`react-dom`、`react-dom/client`、`@yinfengwindy/shiori-sdk` 设为 external，其它浏览器库自己打包。import map 把这些名字解析到包着**宿主自己实例**的 wrapper，所以 hooks、context 和 `instanceof` 与内置插件完全一致。
 
-- 宿主当前保证 React / React DOM `19.2.0`（`host_contract.REACT_API_VERSION`）；`frontend.peers` 用[指南里的比较语法](plugin-guide.md#sdk-与-frontendpeers-的比较语法)写范围。
+- 宿主当前保证 React / React DOM `19.2.0`（`agent.plugin_host.frontend_contract` 的固定 peer 版本）；`frontend.peers` 用[指南里的比较语法](plugin-guide.md#sdk-与-frontendpeers-的比较语法)写范围。
 - SDK 主入口能导入的运行时名字只有 `pluginUiPeerExports` 里列出的那些；纯类型导出没有运行时存在。给这张表加名字是契约变更。
 - `@yinfengwindy/shiori-sdk/testing` 只用于开发测试，`/contract` 是给主进程和 preload 用的纯类型入口，`/host-internal` 只给宿主；三者都不在 import map 里，插件运行时代码不能导入。
 - 插件不得附带或要求安装私有的 npm / Python 运行时依赖。CSS 由插件自带并限定在自己的类名下；共享类名（`cardClass` 等）是 Tailwind 工具串，已在宿主样式表里。

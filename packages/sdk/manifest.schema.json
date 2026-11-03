@@ -39,7 +39,11 @@
       "enum": ["feature", "channel", "system"]
     },
     "default_enabled": { "type": "boolean", "default": true },
-    "supports_hot_unload": { "type": "boolean", "default": true },
+    "supports_hot_unload": {
+      "type": "boolean",
+      "default": true,
+      "description": "仅证实无法安全卸载的原生扩展声明 false。声明 contributes.channels 的插件由宿主判定为不可代内重载；TTS/ASR 默认可重载。重载闭包含不可重载插件时整体拒绝代内替换，走需重启路径。"
+    },
     "entry": {
       "description": "后端入口，相对插件目录。",
       "type": "string",

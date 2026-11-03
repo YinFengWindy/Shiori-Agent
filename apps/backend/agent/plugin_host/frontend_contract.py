@@ -5,9 +5,11 @@ from pathlib import Path
 
 from shiori_sdk import __version__
 from shiori_sdk.kernel import PackageContractError
-from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.package_artifacts import validate_artifact
 from agent.plugin_host.package_schema import object_field, string_list, compatible_range
+
+# Guaranteed frontend ABI minimum, independent of the developer npm tree.
+REACT_API_VERSION = "19.2.0"
 
 
 @dataclass(frozen=True)
@@ -19,9 +21,7 @@ class FrontendEntry:
     css: tuple[str, ...]
 
 
-def validate_frontend(
-    root: Path, raw: dict[str, object], host: HostRuntimeContract
-) -> FrontendEntry | None:
+def validate_frontend(root: Path, raw: dict[str, object]) -> FrontendEntry | None:
     """Reject missing exports, unsafe artifacts and incompatible host peers."""
     if "frontend" not in raw:
         return None
@@ -44,7 +44,11 @@ def validate_frontend(
         "frontend.peers",
         {"react", "react-dom", "@yinfengwindy/shiori-sdk"},
     )
-    versions = {**host.renderer_peers, "@yinfengwindy/shiori-sdk": __version__}
+    versions = {
+        "react": REACT_API_VERSION,
+        "react-dom": REACT_API_VERSION,
+        "@yinfengwindy/shiori-sdk": __version__,
+    }
     if set(peers) != set(versions):
         raise PackageContractError(
             "missing_dependency",

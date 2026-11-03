@@ -8,7 +8,6 @@ itself.
 
 from pathlib import Path
 
-from agent.plugin_host.storage import PluginStorage
 from agent.plugin_host.local_config import resolve_local_config
 from agent.skills import SkillsLoader
 from core.roles import RoleStore
@@ -18,7 +17,7 @@ from core.roles.policy import is_shared_memory_enabled
 from infra.persistence.sqlite_lifecycle import open_owned_database
 
 
-class HostMemoryStorage(PluginStorage):
+class HostMemoryStorage:
     """Resolves memory data targets and opens databases under the host lease lock."""
 
     def resolve_config(

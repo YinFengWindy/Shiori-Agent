@@ -138,7 +138,7 @@ class PluginCoreInputs:
     event_bus: EventBus
     rpc: PluginRpcRegistry[MethodPolicy]
     # The same directory as ``PluginGenerationSettings.workspace``: there the
-    # kernel's trust store, execution identity and KV root; here the
+    # kernel's execution identity and KV root; here the
     # ``workspace``, ``memory`` and ``sessions`` capabilities.
     workspace: Path | None
     tools: ToolRegistry | None

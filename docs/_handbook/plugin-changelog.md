@@ -4,6 +4,8 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 ## 4.0.0
 
+- **breaking**（P8，#909）：在 4.0 发布前删除无调用者的 `STORAGE` Key、`PrivateStorage.migrate_data` 及宿主/fake 的对应供给。插件私有路径直接使用 `shiori_sdk.storage.plugin_data_dir`，JSON 状态用 `KV`；记忆端口 `MemoryStorage.resolve_config` / `open_database` 保留。0.5.x 的 `plugin-data/<id>/`、kv、配置与启用状态不变，不复制旧数据。
+
 - P7-6（#967）：同代码插件重载会重挂受影响的设置/导航/角色设置/图片动作/surface 子树，并重置 surface 错误边界；组件私有状态重新创建，宿主角色草稿和持久偏好保留。复用已求值模块与 CSS，无变化配置及无关插件重载不重挂旁观实例。真实 Electron 验收保留通用音频能力：使用生成的 WebAudio 输入和 loopback 协议服务，经过实际语音插件、聊天分发、采集/播放、取消和重复启停；不代表物理麦克风、真实模型或冻结包验证。
 - P7-6 回滚恢复：setup 或配置提交失败后，按旧配置重新创建的完整闭包也经 `plugins.reloaded` 更新前端 owner；通知先于原失败响应，调用方在 drain 后取消仍发布恢复结果。部分恢复失败按实际名册停用对应贡献；新配置不保存，drain 拒绝不替换实例。
 

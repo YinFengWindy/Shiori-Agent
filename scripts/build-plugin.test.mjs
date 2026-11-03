@@ -24,7 +24,7 @@ test("one frontend artifact carries named contributions without starting their e
   await writeFile(join(source, "style.css"), ".frontend-demo { display: flex; }", "utf8");
   const built = await buildPlugin({ plugin: source, output: join(root, "output") });
   const python = process.env.SHIORI_TEST_PYTHON ?? join(repository, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  const script = "import json,sys\nfrom pathlib import Path\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\np=validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z: z.extractall(sys.argv[2])\nprint(json.dumps({'exports':p.frontend.exports, 'entry':p.manifest.frontend_entry}))";
+  const script = "import json,sys\nfrom pathlib import Path\nfrom zipfile import ZipFile\nfrom desktop_bridge.runtime.plugin_package_archive import validate_package_zip\np=validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z: z.extractall(sys.argv[2])\nprint(json.dumps({'exports':p.frontend.exports, 'entry':p.manifest.frontend_entry}))";
   const extracted = join(root, "extracted");
   const { stdout } = await promisify(execFile)(python, ["-c", script, built.archive, extracted], { cwd: repository });
   const contract = JSON.parse(stdout);
@@ -67,7 +67,7 @@ test("independent ZIP builds preserve peers and pass the actual host package val
   assert.equal((await buildPlugin({ plugin: source, output })).sha256, built.sha256);
   assert.deepEqual(await readFile(built.archive), first);
   const python = process.env.SHIORI_TEST_PYTHON ?? join(repository, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python");
-  const script = "import json, sys\nfrom zipfile import ZipFile\nfrom agent.plugin_host.package_archive import validate_package_zip\nfrom pathlib import Path\np = validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z:\n print(json.dumps({'id':p.manifest.id,'names':z.namelist(),'ui':z.read('renderer/frontend.mjs').decode()}))\n";
+  const script = "import json, sys\nfrom zipfile import ZipFile\nfrom desktop_bridge.runtime.plugin_package_archive import validate_package_zip\nfrom pathlib import Path\np = validate_package_zip(Path(sys.argv[1]))\nwith ZipFile(sys.argv[1]) as z:\n print(json.dumps({'id':p.manifest.id,'names':z.namelist(),'ui':z.read('renderer/frontend.mjs').decode()}))\n";
   const { stdout } = await promisify(execFile)(python, ["-c", script, built.archive], { cwd: repository });
   const actual = JSON.parse(stdout);
   assert.equal(actual.id, "independent_demo");

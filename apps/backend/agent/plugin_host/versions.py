@@ -1,4 +1,4 @@
-"""Version comparison for the deliberately small Runtime Contract range grammar."""
+"""SemVer comparison for plugin versions, SDK constraints and frontend peers."""
 
 from __future__ import annotations
 

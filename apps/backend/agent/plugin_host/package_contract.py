@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from shiori_sdk.kernel import PackageContractError
-from agent.plugin_host.host_contract import HostRuntimeContract
 from agent.plugin_host.manifest import (
     IncompatibleSdkError,
     ManifestError,
@@ -64,9 +63,7 @@ class ValidatedPackage:
     assets: tuple[str, ...]
 
 
-def validate_package(
-    root: Path, *, host: HostRuntimeContract | None = None
-) -> ValidatedPackage:
+def validate_package(root: Path) -> ValidatedPackage:
     """Validate an ``api: 4`` directory package before any plugin code runs.
 
     Directory and zip callers share this validator. Anything that is not
@@ -101,9 +98,8 @@ def validate_package(
         _ = SemVer.parse(version)
     except ValueError as exc:
         raise PackageContractError("invalid_version", "version", str(exc)) from exc
-    runtime = host or HostRuntimeContract()
     _ = validate_artifact(root, raw.get("entry"), "entry", ".py")
-    frontend = validate_frontend(root, raw, runtime)
+    frontend = validate_frontend(root, raw)
     assets = string_list(raw.get("assets", []), "assets")
     for index, path in enumerate(assets):
         _ = contained_file(root, path, f"assets[{index}]")
