@@ -346,3 +346,98 @@ async def test_private_value_redaction_preserves_binary_tool_content(
     assert result.structured_content == {"secret": "[已隐藏]"}
     assert result.content_blocks == [image]
     await registry.shutdown()
+
+
+async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
+    tmp_path,
+):
+    from .http_peer import HttpPeer
+    from shiori_sdk.mcp import McpToolError
+
+    path = tmp_path / "mcp_servers.json"
+    async with HttpPeer() as peer:
+        registry = McpServerRegistry(
+            path, processes=_Processes(), registration=_Registration()
+        )
+        await registry.load_and_connect_all()
+        registry.save(
+            {
+                "server_id": "http",
+                "config": {"transport": {"kind": "streamable_http", "auth": "bearer"}},
+                "credentials": {
+                    "url": {"op": "replace", "value": peer.url},
+                    "bearer": {"op": "replace", "value": "private-bearer"},
+                    "headers": {
+                        "op": "replace",
+                        "value": {"X-API-Key": "private-header"},
+                    },
+                },
+            }
+        )
+        await registry.wait_operations()
+        assert registry.snapshot()["servers"][0]["status"] == "connected"
+        assert await registry.call("http", "echo", {}, timeout=180) == "hello"
+        with pytest.raises(McpToolError) as error:
+            await registry.call("http", "tool_error", {})
+        for secret in (peer.url, "private-bearer", "private-header", "query-canary"):
+            assert secret not in str(error.value)
+            assert secret not in json.dumps(registry.snapshot())
+            assert secret not in path.read_text(encoding="utf-8")
+        captured = registry._states["http"].wrappers["echo"]
+        registry.save(
+            {
+                "server_id": "http",
+                "expected_revision": 1,
+                "config": {"tools": {"mode": "selected", "names": ["structured"]}},
+            }
+        )
+        with pytest.raises(ValueError):
+            await captured.execute()
+        await registry.shutdown()
+        fresh = McpServerRegistry(
+            path, processes=_Processes(), registration=_Registration()
+        )
+        await fresh.load_and_connect_all()
+        await fresh.wait_operations()
+        try:
+            assert fresh.snapshot()["servers"][0]["transport"] == {
+                "kind": "streamable_http",
+                "auth": "bearer",
+            }
+            assert (await fresh.call("http", "structured", {})).structured_content == {
+                "records": [1, 2]
+            }
+            fresh.set_enabled("http", False, 2)
+            with pytest.raises(ValueError):
+                await fresh.call("http", "structured", {})
+            await fresh.wait_operations()
+        finally:
+            await fresh.shutdown()
+
+
+async def test_http_call_auth_failure_removes_tools_and_retains_configuration(tmp_path):
+    from .http_peer import HttpPeer
+
+    async with HttpPeer() as peer:
+        registry = McpServerRegistry(
+            tmp_path / "servers.json",
+            processes=_Processes(),
+            registration=_Registration(),
+        )
+        await registry.load_and_connect_all()
+        registry.save(
+            {
+                "server_id": "http",
+                "config": {"transport": {"kind": "streamable_http"}},
+                "credentials": {"url": {"op": "replace", "value": peer.url}},
+            }
+        )
+        await registry.wait_operations()
+        peer.status = 403
+        with pytest.raises(ValueError, match="403"):
+            await registry.call("http", "echo", {})
+        row = registry.snapshot()["servers"][0]
+        assert row["enabled"] and row["status"] == "error" and "403" in row["error"]
+        assert registry._states["http"].wrappers == {}
+        assert peer.calls["echo"] == 0
+        await registry.shutdown()

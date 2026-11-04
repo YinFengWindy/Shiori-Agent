@@ -2,6 +2,10 @@
 
 SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破坏性变更。这里只记已经定版的变更，不设 Unreleased 批次。
 
+## 4.1.0
+
+- 新增纯 helper `shiori_sdk.mcp_result.decode_tool_result`，stdio 与插件 HTTP transport 共用文本、图片、对象 structuredContent 和远端错误转换。已有 Key、Protocol 与 `ToolResult` 契约不变。
+
 ## 4.0.0
 
 - 存储位置（2026-11-04）：scene、schedule、mcp 的状态文件与 proactive 的两份诊断日志统一到各自 `plugin-data/<id>/`。bootstrap 冷启动迁入五个固定旧文件；已有新目标优先，旧来源核对后归档，失败阻止启动。此项修订下文 P6s 保留 `schedules.json` 旧路径的约定；文件格式与 SDK 接口不变，详见[存储决策](../decisions/2026-11-04-plugin-storage-paths.md)。

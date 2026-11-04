@@ -1,6 +1,6 @@
-"""Versioned server intent and private stdio launch material."""
+"""Versioned server intent and private connection material."""
 
-from typing import Literal
+from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -28,13 +28,23 @@ class StdioTransport(Record):
     cwd: str | None = None
 
 
+class HttpTransport(Record):
+    """HTTP intent; the complete URL and authentication values stay private."""
+
+    kind: Literal["streamable_http"] = "streamable_http"
+    auth: Literal["none", "bearer", "headers"] = "none"
+
+
+Transport = Annotated[StdioTransport | HttpTransport, Field(discriminator="kind")]
+
+
 class ServerConfig(Record):
     """Saved intent, independent of whether a connection succeeds."""
 
     label: str
     revision: int = Field(default=1, ge=1)
     enabled: bool = True
-    transport: StdioTransport = Field(default_factory=StdioTransport)
+    transport: Transport = Field(default_factory=StdioTransport)
     tools: ToolSelection = Field(default_factory=ToolSelection)
     credential_ref: str
 
@@ -49,9 +59,16 @@ class ServerFile(Record):
 class LaunchCredentials(Record):
     """Private material, including command arguments which may contain secrets."""
 
-    command: list[str] = Field(min_length=1)
+    command: list[str] = Field(default_factory=list)
     env: dict[str, str] = Field(default_factory=dict)
+    url: str | None = None
+    bearer: str | None = None
+    headers: dict[str, str] = Field(default_factory=dict)
 
 
 class McpConfigError(ValueError):
     """A safe validation message, without Pydantic input values."""
+
+
+class McpHttpError(McpConfigError):
+    """Safe HTTP status failure; the connection needs explicit attention."""

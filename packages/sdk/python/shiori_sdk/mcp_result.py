@@ -1,4 +1,4 @@
-"""Translate MCP results without losing images or reporting remote failures as success."""
+"""Pure MCP result conversion shared by host stdio and plugin transports."""
 
 import base64
 import binascii

@@ -11,7 +11,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
-from infra.process.mcp_result import decode_tool_result
+from shiori_sdk.mcp_result import decode_tool_result
 from infra.process.owned_spawn import spawn_owned
 from infra.process.windows_job import WindowsJob
 from shiori_sdk.tools import ToolResult

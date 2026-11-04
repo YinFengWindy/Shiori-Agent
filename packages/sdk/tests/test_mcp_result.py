@@ -2,7 +2,7 @@
 
 import pytest
 
-from infra.process.mcp_result import decode_tool_result
+from shiori_sdk.mcp_result import decode_tool_result
 from shiori_sdk.tools import ToolResult
 
 

@@ -2,9 +2,9 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. This README documents **4.0.0** and manifest **API 4**.
+same plugin contract. This README documents **4.1.0** and manifest **API 4**.
 The installation commands below target SDK 4. Before its registry release,
-use the workspace package or verified 4.0.0 wheel/tarball artifacts instead.
+use the workspace package or verified 4.1.0 wheel/tarball artifacts instead.
 In-repo plugins depend on `shiori-sdk>=4.0.0,<5`.
 
 Start with the [plugin guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-guide.md)
@@ -12,6 +12,13 @@ and the [generated API reference](https://github.com/YinFengWindy/Shiori-Agent/b
 for plugin layout, `inject` service declarations and packaging.
 
 ## Compatibility
+
+### 4.1.0
+
+Adds the pure `shiori_sdk.mcp_result.decode_tool_result` helper for MCP transports.
+It preserves text, image bytes and object structured content, and raises `McpToolError`
+for remote errors. Existing keys, protocols and `ToolResult` retain their 4.0 contracts.
+Plugins using this helper declare `sdk: ">=4.1.0"` and `shiori-sdk>=4.1.0,<5`.
 
 ### 4.0.0
 

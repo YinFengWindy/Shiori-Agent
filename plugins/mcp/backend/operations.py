@@ -6,7 +6,7 @@ import sys
 from typing import TYPE_CHECKING
 from uuid import uuid4
 from shiori_sdk.mcp import McpSession, McpToolInfo
-from .models import McpConfigError
+from .models import HttpTransport, McpConfigError
 
 if TYPE_CHECKING:
     from .registry import McpServerRegistry, ServerState
@@ -99,6 +99,10 @@ async def close_session(registry: "McpServerRegistry", state: ServerState) -> No
 def new_session(registry: "McpServerRegistry", server: str) -> McpSession:
     config = registry.store.servers[server]
     credentials = registry.store.credentials(config)
+    if isinstance(config.transport, HttpTransport):
+        from .http_session import HttpMcpSession
+
+        return HttpMcpSession(server, config.transport, credentials)
     return registry._processes.mcp(
         server,
         list(credentials.command),

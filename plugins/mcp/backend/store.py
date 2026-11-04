@@ -14,6 +14,7 @@ from .models import (
     ServerFile,
     StdioTransport,
 )
+from .configuration import validate_connection
 
 
 class ServerStore:
@@ -38,7 +39,7 @@ class ServerStore:
             else:
                 self.servers = ServerFile.model_validate(data).servers
             for config in self.servers.values():
-                self.credentials(config)
+                validate_connection(config.transport, self.credentials(config))
         except (ValidationError, KeyError, TypeError, ValueError, OSError):
             raise McpConfigError("MCP 配置或私有凭据无效，原文件已保留") from None
 
@@ -53,6 +54,8 @@ class ServerStore:
             )
             for name, cfg in legacy.items()
         }
+        for credentials, transport in prepared.values():
+            validate_connection(transport, credentials)
         migrated = {}
         for name, (credentials, transport) in prepared.items():
             migrated[name] = ServerConfig(
