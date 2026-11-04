@@ -1,5 +1,7 @@
 """Failure proofs for the production plugin lifecycle contract runner."""
 
+import asyncio
+import gc
 from pathlib import Path
 
 import pytest
@@ -169,3 +171,105 @@ def test_rpc_profile_cannot_hide_resource_or_dependency_requirements(tmp_path, f
     (package / "tests/contract.json").write_text('{"profile":"rpc"}', encoding="utf-8")
     with pytest.raises(AssertionError, match="only supports"):
         profile_for(package)
+
+
+async def test_gc_finalizer_does_not_change_browser_setup_task_order(
+    tmp_path, monkeypatch
+):
+    """An unrelated async generator collected in setup is not plugin-authored work."""
+    from agent.tools.plugin_capability import PluginTools
+
+    finalized = asyncio.Event()
+
+    async def previous_generator():
+        try:
+            yield
+        finally:
+            finalized.set()
+
+    original = PluginTools.for_plugin
+    collect_once = True
+
+    def collect_in_setup(self, binding):
+        nonlocal collect_once
+        if binding.plugin_id == "browser_use" and collect_once:
+            collect_once = False
+            gc.collect()
+        return original(self, binding)
+
+    monkeypatch.setattr(PluginTools, "for_plugin", collect_in_setup)
+    automatic_gc = gc.isenabled()
+    gc.disable()
+    generator = previous_generator()
+    await generator.__anext__()
+    cycle: list[object] = [generator]
+    cycle.append(cycle)
+    del generator, cycle
+    try:
+        await verify_contract("browser_use", tmp_path / "workspace")
+        assert finalized.is_set()
+    finally:
+        gc.collect()
+        if automatic_gc:
+            gc.enable()
+
+
+async def test_asyncgen_cleanup_still_fails_for_leaks_and_exceptions():
+    """Excluding ownership must not exclude a finalizer from all-task checks."""
+    from tests.support.plugin_contract_observation import observe_lifecycle
+
+    started, release = asyncio.Event(), asyncio.Event()
+
+    async def previous_generator():
+        try:
+            yield
+        finally:
+            started.set()
+            await release.wait()
+            raise RuntimeError("asyncgen cleanup failed")
+
+    generator = previous_generator()
+    await generator.__anext__()
+    with observe_lifecycle() as observation:
+        try:
+            del generator
+            gc.collect()
+            async with asyncio.timeout(1):
+                await started.wait()
+            with pytest.raises(AssertionError, match="task outlived disposal"):
+                observation.assert_closed()
+            release.set()
+            await asyncio.gather(*observation.tasks, return_exceptions=True)
+            with pytest.raises(AssertionError, match="asyncgen cleanup failed"):
+                observation.assert_closed()
+        finally:
+            release.set()
+            await observation.emergency_cleanup()
+
+
+async def test_extra_plugin_task_on_reload_is_still_rejected(tmp_path):
+    package = _package(
+        tmp_path,
+        "import asyncio\nfrom shiori_sdk.core.services import KV\n"
+        "async def extra_work(): pass\n"
+        "async def setup(ctx):\n"
+        "    if ctx.require(KV).increment('setups') > 1:\n"
+        "        asyncio.create_task(extra_work())\n",
+        "inject: [kv]\n",
+    )
+    with pytest.raises(AssertionError, match="task creation order") as failure:
+        await verify_contract("natural_chat", tmp_path / "workspace", directory=package)
+    assert "extra_work" in str(failure.value)
+
+
+async def test_detached_plugin_task_failure_is_still_rejected(tmp_path):
+    package = _package(
+        tmp_path,
+        "import asyncio\n"
+        "async def failed_work():\n"
+        "    raise RuntimeError('detached plugin failure')\n"
+        "async def setup(ctx):\n"
+        "    asyncio.create_task(failed_work())\n",
+    )
+    with pytest.raises(AssertionError, match="detached plugin failure"):
+        await verify_contract("natural_chat", tmp_path / "workspace", directory=package)

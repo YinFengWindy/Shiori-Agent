@@ -266,13 +266,18 @@ class HttpMcpSession:
         status_token = _HTTP_STATUS.set(status)
         diagnostic_token = _DIAGNOSTICS.set(True)
         try:
-            result = await self._client.session.call_tool(
-                tool_name,
-                arguments,
-                read_timeout_seconds=30.0 if timeout is None else timeout,
-                allow_input_required=False,
-                allow_claimed=False,
-            )
+            deadline = 30.0 if timeout is None else timeout
+            # The SDK's read timer starts after its send queue accepts the
+            # request. Cover that wait too; cancellation removes the queued
+            # call, then awaits the SDK's bounded courtesy-notification cleanup.
+            async with asyncio.timeout(deadline):
+                result = await self._client.session.call_tool(
+                    tool_name,
+                    arguments,
+                    read_timeout_seconds=deadline,
+                    allow_input_required=False,
+                    allow_claimed=False,
+                )
             return decode_tool_result(
                 self.server, tool_name, {"result": _result_payload(result)}
             )

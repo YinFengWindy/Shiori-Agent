@@ -12,6 +12,19 @@ from shiori_sdk.redaction import redact_secrets
 from .models import LaunchCredentials
 
 _HIDDEN = "[已隐藏]"
+# Standard negotiation, cache directives and client identification are metadata,
+# not authentication. Unknown/custom headers remain private credential values.
+_METADATA_HEADERS = frozenset(
+    {
+        "accept-charset",
+        "accept-encoding",
+        "accept-language",
+        "content-language",
+        "cache-control",
+        "pragma",
+        "user-agent",
+    }
+)
 
 
 def _credential_name(name: str) -> bool:
@@ -31,9 +44,14 @@ def _credential_values(launch: LaunchCredentials) -> tuple[str, ...]:
     values = {
         value for name, value in launch.env.items() if _credential_name(name) and value
     }
-    # HTTP fields are explicitly private, independent of custom header names.
+    # All headers stay private in storage/DTOs, but ordinary HTTP metadata must
+    # not rewrite matching schema keys or result text (e.g. language "en").
     # URL filters are not credentials: retain ordinary format/filter values.
-    values.update(launch.headers.values())
+    values.update(
+        value
+        for name, value in launch.headers.items()
+        if name.lower() not in _METADATA_HEADERS
+    )
     values.update(value for value in (launch.url, launch.bearer) if value)
     values.update(
         value
