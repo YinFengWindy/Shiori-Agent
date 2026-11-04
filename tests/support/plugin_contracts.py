@@ -285,6 +285,10 @@ async def verify_contract(
                     result = await manager.reload(
                         plugin_id, values=values, raw_values=raw, drain_timeout=1
                     )
+                    assert not result.cleanup_errors, (
+                        "reload reported cleanup errors",
+                        result.cleanup_errors,
+                    )
                     assert all(view.state == "ACTIVE" for view in manager.views()), [
                         v.describe() for v in manager.views()
                     ]
@@ -366,11 +370,15 @@ async def verify_contract(
                 if not (
                     record.manifest.channels or not record.manifest.supports_hot_unload
                 ):
-                    await manager.set_enabled(
+                    disabled = await manager.set_enabled(
                         plugin_id,
                         values={**values, "enabled": False},
                         raw_values={**raw, "enabled": False},
                         drain_timeout=1,
+                    )
+                    assert not disabled.cleanup_errors, (
+                        "disable reported cleanup errors",
+                        disabled.cleanup_errors,
                     )
                     assert not {plugin_id, "contract_consumer"}.intersection(
                         manager.kernel._scopes
