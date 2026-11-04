@@ -2,11 +2,10 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. The source version is **4.0.0**. It is not published yet.
-The last registry release is **3.1.2** (2026-10-16,
-[release run](https://github.com/YinFengWindy/Shiori-Agent/actions/runs/38855118971)).
-The installation commands below install that published release. In-repo plugins
-depend on `shiori-sdk>=4.0.0,<5` and use the workspace package.
+same plugin contract. This README documents **4.0.0** and manifest **API 4**.
+The installation commands below target SDK 4. Before its registry release,
+use the workspace package or verified 4.0.0 wheel/tarball artifacts instead.
+In-repo plugins depend on `shiori-sdk>=4.0.0,<5`.
 
 Start with the [plugin guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-guide.md)
 and the [generated API reference](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-api.md)
@@ -19,10 +18,10 @@ for plugin layout, `inject` service declarations and packaging.
 Breaking major. Manifests declare `api: 4` and `sdk: ">=4.0.0"`. There is no
 `runtime_api` version. Within 4.x, existing keys do not gain methods. See the
 plugin guide. The unused `STORAGE` key and `PrivateStorage.migrate_data` are
-removed before this major is published. Resolve private paths with
+removed in this major. Resolve private paths with
 `shiori_sdk.storage.plugin_data_dir` and use `KV` for JSON state; the memory
 port retains `resolve_config` and `open_database`. The 3.1.x notes below are
-history for the last published release.
+historical migration notes; they do not describe the API 4 host's admission rules.
 
 ### 3.1.2 migration
 
@@ -43,7 +42,7 @@ published 3.1.1:
   and `secondarySidebarShellClass`. These APIs and their independent testing
   fakes require SDK / Runtime API `>=3.1.2 <4.0.0`.
 
-The host range check still accepts older 3.x ranges, so affected authors must
+The 3.1.x host range check accepted older 3.x ranges, so affected authors had to
 migrate and declare the 3.1.2 minimum themselves. Unchanged APIs retain their
 previous minimum. The selected patch number is the project's release batch
 number, not a backward-compatibility guarantee.
@@ -66,8 +65,8 @@ published 3.1.0:
   snapshot types and `RoleRecord.affection` altogether: the affection plugin
   serves its data through its own RPC.)
 
-The host's range check still accepts `>=3.1.0 <4.0.0`, so it does not protect a
-plugin that uses these removed APIs. Affected authors must migrate, rebuild and
+The 3.1.x host's range check accepted `>=3.1.0 <4.0.0`, so it did not protect a
+plugin that used these removed APIs. Affected authors had to migrate, rebuild and
 declare `>=3.1.1 <4.0.0`. Plugins using any new API in this batch use that same
 minimum in their manifest and Python SDK dependency. Audited plugins using only
 unchanged APIs may retain `>=3.1.0 <4.0.0`.
@@ -87,7 +86,7 @@ reused for different source.
 Install the SDK and its React peers as development dependencies:
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.2" "react@^19.2.5" "react-dom@^19.2.5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0" "react@^19.2.5" "react-dom@^19.2.5"
 ```
 
 Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
@@ -95,16 +94,22 @@ Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
 the host instances at runtime; do not bundle a separate SDK or React instance.
 The npm package requires React and React DOM `^19.2.5` for local development.
 The host renderer ABI guarantees `19.2.0`; declare compatible host peers separately
-in the plugin's `manifest.yaml`:
+in the plugin's `package.json`:
 
-```yaml
-peer_dependencies:
-  react: ">=19.2.0 <20.0.0"
-  react-dom: ">=19.2.0 <20.0.0"
+```json
+{
+  "peerDependencies": {
+    "react": ">=19.2.0 <20.0.0",
+    "react-dom": ">=19.2.0 <20.0.0",
+    "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0"
+  }
+}
 ```
 
-The SDK itself needs no `peer_dependencies` entry; an `api: 4` manifest no longer
-declares a `runtime_api` range (it is rejected).
+The plugin builder writes these ranges to the output manifest's `frontend.peers`.
+An API 4 source manifest declares one `frontend.entry` with named `ui`,
+`background` and/or `surface` exports. Legacy `peer_dependencies`, `renderer`
+and `runtime_api` declarations are rejected.
 
 The main entry exports plugin contracts, components and helpers. `/contract`
 contains React/DOM-free types; `/host-internal` is reserved for host code; `/testing`
@@ -117,7 +122,7 @@ tarball with declarations and external React peers. The host import map provides
 the same main entry to precompiled plugins. Only the main entry belongs in a
 plugin's production peer imports.
 
-Runtime API 3.1.1 adds `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
+The SDK provides `usePrivateAutosave(client, identity, { load, save, debounceMs? })`
 for plugin settings pages that save like the host's: `update` saves the latest draft
 once edits pause (400 ms by default), saves never overlap, `commit` saves at once for
 blur/Enter fields (keep their unvalidated text in component state and commit only a
@@ -129,7 +134,7 @@ while a save is in flight and otherwise drops unsaved edits. Render its `savePha
 out with the host's `SettingsGroup`, `SettingsSectionCard`, `SettingsField`,
 `SettingsToggleField`, `settingsInputClass` and `settingsGroupStackClass`.
 
-Runtime API 3.1.1 adds the host event `chat.cancelled` (`{session_key, turn_id}`)
+The host event `chat.cancelled` (`{session_key, turn_id}`)
 and `chatTerminalEventMethods` / `isChatTerminalEvent`: while the bridge connection
 is open, every accepted chat turn ends with exactly one of `chat.done`, `chat.error`
 and `chat.cancelled`.
@@ -144,13 +149,13 @@ other unavailable services and must not be silently classified as local disposal
 Requires Python **3.12+**. Install in your plugin project:
 
 ```sh
-uv add "shiori-sdk>=3.1.2,<4"
+uv add "shiori-sdk>=4.0.0,<5"
 ```
 
 For independent plugin tests, add the optional testing support and run your suite:
 
 ```sh
-uv add --dev "shiori-sdk[testing]>=3.1.2,<4"
+uv add --dev "shiori-sdk[testing]>=4.0.0,<5"
 uv run pytest tests
 ```
 
@@ -167,7 +172,7 @@ The core plugin surface includes `PluginRuntimeContext`, `EventsCapability`,
 `Dispose` and `EventHandler`; turn and tool events live in
 `shiori_sdk.core.conversation` and `shiori_sdk.core.tools`.
 The host owns turn execution, storage and cleanup.
-`setup(ctx)` is a `PluginRuntimeContext`. Services listed in `inject` are
+`setup(ctx)` receives a `PluginRuntimeContext`. Services listed in `inject` are
 taken with `ctx.require`; a key the manifest does not declare raises the
 kernel's `undeclared_key`. A missing provider blocks the plugin before
 `setup`. `kv` without a workspace fails while the host builds the context,
