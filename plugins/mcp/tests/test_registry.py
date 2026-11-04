@@ -481,6 +481,75 @@ async def test_http_call_auth_failure_removes_tools_and_retains_configuration(tm
         await registry.shutdown()
 
 
+async def test_http_metadata_headers_preserve_discovered_schema_and_call_result(
+    tmp_path,
+):
+    from .http_peer import HttpPeer
+
+    class MetadataPeer(HttpPeer):
+        async def _rpc(self, request):
+            response = await super()._rpc(request)
+            if request["method"] == "tools/list":
+                for tool in response["result"]["tools"]:
+                    tool["inputSchema"] = {
+                        "type": "object",
+                        "properties": {"content": {"type": "string"}},
+                        "required": ["content"],
+                    }
+            elif request["method"] == "tools/call":
+                arguments = request["params"]["arguments"]
+                if "content" not in arguments:
+                    return {"error": {"code": -32602, "message": "content required"}}
+                response["result"] = {
+                    "content": [{"type": "text", "text": json.dumps(arguments)}]
+                }
+            return response
+
+    headers = {"aCcEpT-LaNgUaGe": "en", "User-Agent": "MetadataProbe"}
+    async with MetadataPeer() as peer:
+        registry = McpServerRegistry(
+            tmp_path / "servers.json",
+            processes=_Processes(),
+            registration=_Registration(),
+        )
+        await registry.load_and_connect_all()
+        registry.save(
+            {
+                "server_id": "http",
+                "config": {"transport": {"kind": "streamable_http", "auth": "none"}},
+                "credentials": {
+                    "url": {"op": "replace", "value": peer.url},
+                    "headers": {"op": "replace", "value": headers},
+                },
+            }
+        )
+        await registry.wait_operations()
+        try:
+            wrapper = registry._states["http"].wrappers["echo"]
+            assert wrapper.parameters == {
+                "type": "object",
+                "properties": {"content": {"type": "string"}},
+                "required": ["content"],
+            }
+            arguments = {
+                wrapper.parameters["required"][0]: "English content from MetadataProbe"
+            }
+            result = await registry.call("http", "echo", arguments)
+            assert isinstance(result, str)
+            assert json.loads(result) == arguments
+            assert all(
+                sent["accept-language"] == "en"
+                and sent["user-agent"] == "MetadataProbe"
+                for _, _, sent in peer.requests
+            )
+            row = _only_server(registry.snapshot())
+            assert row["header_names"] == sorted(headers)
+            assert "headers" not in row
+            assert "MetadataProbe" not in json.dumps(row)
+        finally:
+            await registry.shutdown()
+
+
 async def test_manual_reconnect_supersedes_pending_source_retry(tmp_path, monkeypatch):
     retry_entered = asyncio.Event()
     release_retry = asyncio.Event()

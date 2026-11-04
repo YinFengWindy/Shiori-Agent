@@ -130,3 +130,55 @@ async def test_disconnect_closes_cancelled_request_without_waiting_for_remote_wo
         await asyncio.wait_for(client.disconnect(), 2)
         assert client._owner.done()
         assert peer.calls["wait"] == 1
+
+
+async def test_call_deadline_includes_queued_send_and_prevents_late_dispatch():
+    class NotificationDelayPeer(HttpPeer):
+        def __init__(self):
+            super().__init__(sse=True)
+            self.hold_notifications = False
+            self.notification_seen = asyncio.Event()
+            self.notification_release = asyncio.Event()
+
+        async def _reply(self, writer, status, body, *, sse=False):
+            if status == 202 and self.hold_notifications:
+                self.notification_seen.set()
+                await self.notification_release.wait()
+            return await super()._reply(writer, status, body, sse=sse)
+
+    async with NotificationDelayPeer() as peer:
+        client = session(peer)
+        await client.connect()
+        following = None
+        try:
+            peer.hold_notifications = True
+            old = asyncio.create_task(client.call("wait", {}, timeout=180))
+            await asyncio.wait_for(peer.waiting.wait(), 2)
+            old.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await old
+            await asyncio.wait_for(peer.notification_seen.wait(), 2)
+            following = asyncio.create_task(client.call("echo", {}, timeout=0.05))
+            # Let the real deadline expire while the writer is blocked. The
+            # SDK may still be completing its bounded cancellation notification.
+            await asyncio.sleep(0.15)
+            assert not peer.notification_release.is_set()
+            assert peer.calls["echo"] == 0
+            peer.notification_release.set()
+            with pytest.raises(TimeoutError):
+                await asyncio.wait_for(following, 2)
+            peer.release.set()
+            # A completed later request proves the writer advanced past the
+            # cancelled queue item without dispatching its tool after timeout.
+            await client.call("structured", {})
+            assert peer.calls["echo"] == 0
+            assert peer.calls["wait"] == 1
+        finally:
+            peer.notification_release.set()
+            peer.release.set()
+            if following is not None:
+                if not following.done():
+                    following.cancel()
+                await asyncio.gather(following, return_exceptions=True)
+            await asyncio.wait_for(client.disconnect(), 3)
+        assert client._owner.done()
