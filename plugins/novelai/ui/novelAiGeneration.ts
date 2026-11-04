@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { errorMessage, type PluginHostFeedback, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { describeGenerationFailure, type GenerationFailure, type NovelAiReadiness } from "./generationFailure";
 import { commitNovelAiState, getNovelAiState } from "./novelAiPageStore";
@@ -14,7 +15,7 @@ const historyLimit = 24;
  */
 export async function loadHistory(client: PluginRpcClient, report: PluginHostFeedback, roleId: string): Promise<void> {
   try {
-    const payload = await client.call<{ records: ImageHistoryRecord[] }>("history", {
+    const payload = await client.call<{ records: ImageHistoryRecord[] }>(rpcMethods["history"], {
       role_id: roleId,
       limit: historyLimit,
     });
@@ -38,7 +39,7 @@ export async function loadHistory(client: PluginRpcClient, report: PluginHostFee
 export async function refreshReadiness(client: PluginRpcClient): Promise<void> {
   let readiness: NovelAiReadiness | null;
   try {
-    readiness = await client.call<NovelAiReadiness>("status", {});
+    readiness = await client.call<NovelAiReadiness>(rpcMethods["status"], {});
   } catch {
     readiness = null;
   }
@@ -65,7 +66,7 @@ export async function submitGenerate(
   commitNovelAiState({ ...getNovelAiState(), submitting: true, failure: null });
   let result: ImageGenerateResult;
   try {
-    const response = await client.call<{ result: ImageGenerateResult }>("generate", payload, {
+    const response = await client.call<{ result: ImageGenerateResult }>(rpcMethods["generate"], payload, {
       timeoutMs: novelAiGenerationTimeoutMs,
     });
     result = response.result;

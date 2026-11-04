@@ -1,0 +1,9 @@
+{
+  "plugin_id": "status_commands",
+  "dependencies": [
+    "observe"
+  ],
+  "methods": [],
+  "registrations": [],
+  "services": []
+}

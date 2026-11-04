@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { openPetContextMenu } from "./petMenu";
 import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
@@ -140,7 +141,7 @@ export function DesktopPetSurface({ surface, client }: PluginSurfaceComponentPro
       transientState={transientState}
       onTransientFinished={onTransientFinished}
       reply={reply}
-      onDismissBubble={() => { void client.call("bubble.dismiss"); }}
+      onDismissBubble={() => { void client.call(rpcMethods["bubble.dismiss"]); }}
       bubbleLayout={bubbleLayout}
       voice={voice}
       surface={surface}

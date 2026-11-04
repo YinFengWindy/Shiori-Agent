@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { mergeUnchanged, TaskFeed } from "./taskFeed";
@@ -6,7 +7,7 @@ import type { AgentDetailResponse } from "./types";
 /** Polls one agent's state and terminal output while its view is mounted; `refresh` rereads now, e.g. after a send. */
 export function useAgentDetail(client: PluginRpcClient, host: PluginHostServices, paneId: string, pollMs: number) {
   const feed = useMemo(() => new TaskFeed<AgentDetailResponse>({
-    read: (rpc) => rpc.call<AgentDetailResponse>("agents.get", { pane_id: paneId }),
+    read: (rpc) => rpc.call<AgentDetailResponse>(rpcMethods["agents.get"], { pane_id: paneId }),
     merge: mergeUnchanged,
     pollMs,
   }), [paneId, pollMs]);

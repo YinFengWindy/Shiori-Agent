@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import type { AffectionSummary, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 
 /** What the affection plugin's `chat_status` method answers for one role. */
@@ -13,7 +14,7 @@ export type AffectionChatStatus = {
 
 /** Reads the chat sidebar's data for the role; another role's answer is an error. */
 export async function readAffectionChatStatus(client: PluginRpcClient, roleId: string) {
-  const response = await client.call<AffectionChatStatus>("chat_status", { role_id: roleId });
+  const response = await client.call<AffectionChatStatus>(rpcMethods["chat_status"], { role_id: roleId });
   if (response.role_id !== roleId) throw new Error("角色不匹配");
   return response;
 }

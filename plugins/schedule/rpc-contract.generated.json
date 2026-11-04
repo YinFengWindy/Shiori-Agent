@@ -1,0 +1,33 @@
+{
+  "plugin_id": "schedule",
+  "dependencies": [],
+  "methods": [
+    "cancel",
+    "create",
+    "list",
+    "update"
+  ],
+  "registrations": [
+    {
+      "name": "cancel",
+      "path": "plugins/schedule/backend/plugin.py",
+      "line": 192
+    },
+    {
+      "name": "create",
+      "path": "plugins/schedule/backend/plugin.py",
+      "line": 193
+    },
+    {
+      "name": "list",
+      "path": "plugins/schedule/backend/plugin.py",
+      "line": 189
+    },
+    {
+      "name": "update",
+      "path": "plugins/schedule/backend/plugin.py",
+      "line": 194
+    }
+  ],
+  "services": []
+}

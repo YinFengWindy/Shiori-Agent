@@ -1,0 +1,27 @@
+{
+  "plugin_id": "default_memory",
+  "dependencies": [],
+  "methods": [
+    "roles.memory.documents",
+    "roles.memory.semantic.detail",
+    "roles.memory.semantic.list"
+  ],
+  "registrations": [
+    {
+      "name": "roles.memory.documents",
+      "path": "plugins/default_memory/backend/plugin.py",
+      "line": 147
+    },
+    {
+      "name": "roles.memory.semantic.detail",
+      "path": "plugins/default_memory/backend/role_memory.py",
+      "line": 88
+    },
+    {
+      "name": "roles.memory.semantic.list",
+      "path": "plugins/default_memory/backend/role_memory.py",
+      "line": 85
+    }
+  ],
+  "services": []
+}

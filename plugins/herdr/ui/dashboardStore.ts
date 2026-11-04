@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { errorMessage, type PluginHostServices, type PluginRpcClient, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { firstSelection, type Selection } from "./agentSelectors";
@@ -20,7 +21,7 @@ export function mergeTaskList(current: TaskListResponse | null, next: TaskListRe
 }
 
 const listSource: FeedSource<TaskListResponse> = {
-  read: (client) => client.call<TaskListResponse>("tasks.list"),
+  read: (client) => client.call<TaskListResponse>(rpcMethods["tasks.list"]),
   merge: mergeTaskList,
   invalidatedBy: (current, change) => {
     const known = current?.tasks.find((task) => task.id === change.task_id);
@@ -29,7 +30,7 @@ const listSource: FeedSource<TaskListResponse> = {
 };
 
 function agentListSource(pollMs: number): FeedSource<AgentListResponse> {
-  return { read: (client) => client.call<AgentListResponse>("agents.list"), merge: mergeUnchanged, pollMs };
+  return { read: (client) => client.call<AgentListResponse>(rpcMethods["agents.list"]), merge: mergeUnchanged, pollMs };
 }
 
 /** What the sidebar and the page share. */

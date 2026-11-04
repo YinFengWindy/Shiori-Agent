@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useRef, useState } from "react";
 import { compactGhostButtonClass, errorMessage, SettingsField, SettingsGroup, settingsInputClass, type PluginInjectedProps } from "@yinfengwindy/shiori-sdk";
 
@@ -15,7 +16,7 @@ export function TranscriptionTest({ client, host }: PluginInjectedProps) {
     try {
       const [source] = await host.pickFiles({ namespace: "sensevoice_asr-audio", filters: [{ name: "WAV 音频", extensions: ["wav"] }], maxFileBytes: 32 * 1024 * 1024 });
       if (!source || current !== revision.current) return;
-      const result = await client.call<{ text: string }>("transcribe_file", { source }, { timeoutMs: 65_000 });
+      const result = await client.call<{ text: string }>(rpcMethods["transcribe_file"], { source }, { timeoutMs: 65_000 });
       if (current === revision.current) setText(result.text);
     } catch (cause) {
       if (current === revision.current) setError(errorMessage(cause));

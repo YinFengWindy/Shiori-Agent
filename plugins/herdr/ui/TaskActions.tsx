@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useState } from "react";
 import { ArrowSquareOut, Stop } from "@phosphor-icons/react";
 import { compactGhostButtonClass, errorMessage, type PluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
@@ -18,7 +19,7 @@ export function CancelTaskButton({ task, connected, client, host, onApplied }: {
     setPending(true);
     setError("");
     try {
-      onApplied(await client.call<TaskDetailResponse>("tasks.cancel", { task_id: task.id }));
+      onApplied(await client.call<TaskDetailResponse>(rpcMethods["tasks.cancel"], { task_id: task.id }));
       setOpen(false);
     } catch (reason) {
       setError(errorMessage(reason));

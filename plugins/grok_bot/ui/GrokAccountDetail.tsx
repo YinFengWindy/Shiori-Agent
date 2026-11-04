@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useState } from "react";
 import { RoutineConfiguration } from "./RoutineConfiguration";
 import { inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@yinfengwindy/shiori-sdk";
@@ -29,7 +30,7 @@ function ConnectionLoader(props: PluginAccountDetailComponentProps) {
     let active = true;
     async function refresh() {
       try {
-        const value = await client.call<ConnectionDetail>("account.detail", { account_id: accountId });
+        const value = await client.call<ConnectionDetail>(rpcMethods["account.detail"], { account_id: accountId });
         if (active) { setDetail(value); setError(""); }
       } catch {
         if (active) setError("连接信息加载失败");
@@ -57,7 +58,7 @@ function ConnectionForm({ account, roleId, client, host, onChanged, detail }: Pl
 
   async function save() {
     const ok = await run("connect", async () => {
-      const result = await client.call<{ account_id: string }>("account.save", {
+      const result = await client.call<{ account_id: string }>(rpcMethods["account.save"], {
         role_id: roleId, ...(account ? { account_id: account.id } : {}),
         webhook_url: webhook.trim(), max_messages: limit,
         ...(secret.trim() ? { webhook_key: secret.trim() } : {}),
@@ -70,7 +71,7 @@ function ConnectionForm({ account, roleId, client, host, onChanged, detail }: Pl
   async function disconnect() {
     if (!account) return;
     await run("disconnect", async () => {
-      await client.call("account.disconnect", { account_id: account.id, role_id: roleId });
+      await client.call(rpcMethods["account.disconnect"], { account_id: account.id, role_id: roleId });
       return account.id;
     });
   }

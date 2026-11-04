@@ -1,0 +1,69 @@
+{
+  "plugin_id": "telegram",
+  "dependencies": [],
+  "methods": [
+    "account.resolve",
+    "account.send",
+    "account.targets",
+    "bot.disconnect",
+    "bot.save",
+    "identity.get",
+    "known.list",
+    "member.get",
+    "target.send",
+    "token.verify"
+  ],
+  "registrations": [
+    {
+      "name": "account.resolve",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 74
+    },
+    {
+      "name": "account.send",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 79
+    },
+    {
+      "name": "account.targets",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 69
+    },
+    {
+      "name": "bot.disconnect",
+      "path": "plugins/telegram/backend/plugin.py",
+      "line": 24
+    },
+    {
+      "name": "bot.save",
+      "path": "plugins/telegram/backend/plugin.py",
+      "line": 23
+    },
+    {
+      "name": "identity.get",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 57
+    },
+    {
+      "name": "known.list",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 60
+    },
+    {
+      "name": "member.get",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 63
+    },
+    {
+      "name": "target.send",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 66
+    },
+    {
+      "name": "token.verify",
+      "path": "plugins/telegram/backend/account_api.py",
+      "line": 54
+    }
+  ],
+  "services": []
+}

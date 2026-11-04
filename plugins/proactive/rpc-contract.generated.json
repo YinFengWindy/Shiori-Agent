@@ -1,0 +1,15 @@
+{
+  "plugin_id": "proactive",
+  "dependencies": [],
+  "methods": [
+    "settings_set"
+  ],
+  "registrations": [
+    {
+      "name": "settings_set",
+      "path": "plugins/proactive/backend/plugin.py",
+      "line": 77
+    }
+  ],
+  "services": []
+}

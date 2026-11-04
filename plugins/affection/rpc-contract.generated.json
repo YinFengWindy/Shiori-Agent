@@ -1,0 +1,33 @@
+{
+  "plugin_id": "affection",
+  "dependencies": [],
+  "methods": [
+    "chat_status",
+    "history",
+    "stage_prompts_get",
+    "stage_prompts_set"
+  ],
+  "registrations": [
+    {
+      "name": "chat_status",
+      "path": "plugins/affection/backend/plugin.py",
+      "line": 96
+    },
+    {
+      "name": "history",
+      "path": "plugins/affection/backend/plugin.py",
+      "line": 95
+    },
+    {
+      "name": "stage_prompts_get",
+      "path": "plugins/affection/backend/plugin.py",
+      "line": 97
+    },
+    {
+      "name": "stage_prompts_set",
+      "path": "plugins/affection/backend/plugin.py",
+      "line": 100
+    }
+  ],
+  "services": []
+}

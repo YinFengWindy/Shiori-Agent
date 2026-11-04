@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useState } from "react";
 import { inputClass, Select, useAccountAction, type PluginAccountDetailComponentProps } from "@yinfengwindy/shiori-sdk";
 
@@ -23,7 +24,7 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
   useEffect(() => {
     if (!accountRef) return;
     let active = true;
-    void client.call<FeishuProfile>("accounts.profile", { ref: accountRef })
+    void client.call<FeishuProfile>(rpcMethods["accounts.profile"], { ref: accountRef })
       .then((result) => { if (active) setProfile(result); })
       .catch((failure) => { if (active) reportError(failure, "账号信息加载失败"); });
     return () => { active = false; };
@@ -33,7 +34,7 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
   async function save() {
     if (!appId.trim()) return;
     const ok = await run("connect", async () => {
-      const result = await client.call<{ account_id: string }>("accounts.save", {
+      const result = await client.call<{ account_id: string }>(rpcMethods["accounts.save"], {
         role_id: roleId, domain, app_id: appId.trim(), ...(secret.trim() ? { app_secret: secret.trim() } : {}),
       });
       return result.account_id;
@@ -44,7 +45,7 @@ export function FeishuAccountDetail({ account, roleId, onChanged, client, host }
   async function disconnect() {
     if (!account) return;
     await run("disconnect", async () => {
-      await client.call("accounts.disconnect", { account_id: account.id, role_id: roleId });
+      await client.call(rpcMethods["accounts.disconnect"], { account_id: account.id, role_id: roleId });
       return account.id;
     });
   }

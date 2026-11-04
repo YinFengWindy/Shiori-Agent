@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useCallback, useEffect, useState } from "react";
 import { errorMessage, type HostInlineErrorProps, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@yinfengwindy/shiori-sdk";
 import { noPetPackages, readPetPackages, type PetPackages } from "./petPackages";
@@ -30,7 +31,7 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
     let alive = true;
     void (async () => {
       try {
-        const next = parse(await client.call<unknown>("pets.list", { role_id: roleId }));
+        const next = parse(await client.call<unknown>(rpcMethods["pets.list"], { role_id: roleId }));
         if (!alive) return;
         setState(next);
         setError(null);
@@ -61,7 +62,7 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
   }, []);
 
   const mutate = useCallback(async (method: "pets.import" | "pets.remove" | "pets.select", payload: Record<string, unknown>) => {
-    setState(parse(await client.call<unknown>(method, { role_id: roleId, ...payload })));
+    setState(parse(await client.call<unknown>(rpcMethods[method], { role_id: roleId, ...payload })));
     onRoleDataChanged();
     if (method !== "pets.import") await client.background.call("sync");
   }, [client, onRoleDataChanged, parse, roleId]);

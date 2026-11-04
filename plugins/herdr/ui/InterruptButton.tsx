@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useRef, useState } from "react";
 import { StopCircle } from "@phosphor-icons/react";
 import { errorMessage, iconButtonClass, type PluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
@@ -23,7 +24,7 @@ export function InterruptButton({ paneId, disabled, client, host, onSent }: {
     inFlight.current = true;
     setPending(true);
     try {
-      await client.call<AgentCommandResponse>("agents.keys", { pane_id: paneId, keys: ["ctrl+c"] });
+      await client.call<AgentCommandResponse>(rpcMethods["agents.keys"], { pane_id: paneId, keys: ["ctrl+c"] });
     } catch (reason) {
       host.feedback.error("中断未发送", { detail: errorMessage(reason) });
     } finally {

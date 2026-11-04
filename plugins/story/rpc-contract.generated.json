@@ -1,0 +1,59 @@
+{
+  "plugin_id": "story",
+  "dependencies": [
+    "novelai"
+  ],
+  "methods": [
+    "cg.list",
+    "cg.regenerate",
+    "cg.retry",
+    "continue",
+    "create",
+    "get",
+    "input",
+    "list"
+  ],
+  "registrations": [
+    {
+      "name": "cg.list",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "cg.regenerate",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "cg.retry",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "continue",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "create",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "get",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "input",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "list",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 71
+    }
+  ],
+  "services": []
+}

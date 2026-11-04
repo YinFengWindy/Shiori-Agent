@@ -1,3 +1,4 @@
+import { rpcMethods } from "../../rpcMethods.generated";
 import type { OutputResult } from "../replyOutput";
 
 /**
@@ -23,7 +24,7 @@ export const liveReplyShowEvent = "live.reply.show";
 /** Backend event cancelling live replies, optionally of one run. */
 export const liveCancelEvent = "live.cancel";
 /** Backend RPC receiving each live reply's bubble and speech results. */
-export const liveReplyOutcomeMethod = "live.reply.outcome";
+export const liveReplyOutcomeMethod = rpcMethods["live.reply.outcome"];
 
 /** One live reply to present: the same text is shown and spoken. */
 export type LiveReply = { roleId: string; replyId: string; runId: string; text: string };

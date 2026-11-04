@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { compactGhostButtonClass, settingsGroupStackClass, usePrivateAutosave, type PluginSettingsSectionComponentProps } from "@yinfengwindy/shiori-sdk";
 import type { VoicePreferences } from "../background/voice/preferences";
 import { useVoiceEnvironment } from "./useVoiceEnvironment";
@@ -13,8 +14,8 @@ const preferencesIdentity = "voice.preferences";
  */
 export function VoiceSettings({ client, host }: PluginSettingsSectionComponentProps) {
   const preferences = usePrivateAutosave<VoicePreferences>(client, preferencesIdentity, {
-    load: () => client.call<VoicePreferences>("voice.preferences.get"),
-    save: (value) => client.call<VoicePreferences>("voice.preferences.set", value),
+    load: () => client.call<VoicePreferences>(rpcMethods["voice.preferences.get"]),
+    save: (value) => client.call<VoicePreferences>(rpcMethods["voice.preferences.set"], value),
   });
   const environment = useVoiceEnvironment(client);
   const { draft, loadError, saveError, savePhase, update, commit, retry, reload } = preferences;

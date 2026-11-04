@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useMemo, useSyncExternalStore } from "react";
 import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { TaskFeed, type FeedSource } from "./taskFeed";
@@ -11,7 +12,7 @@ export function mergeTaskDetail(current: TaskDetailResponse | null, next: TaskDe
 
 function detailSource(taskId: string): FeedSource<TaskDetailResponse> {
   return {
-    read: (client) => client.call<TaskDetailResponse>("tasks.get", { task_id: taskId }),
+    read: (client) => client.call<TaskDetailResponse>(rpcMethods["tasks.get"], { task_id: taskId }),
     merge: mergeTaskDetail,
     invalidatedBy: (current, change) => change.task_id === taskId && (!current || change.revision > current.task.revision),
   };

@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { BellRinging } from "@phosphor-icons/react";
 import { RoleCapabilityCard, SettingsToggleCard, roleToggleStatus, type PluginRoleSettingsContribution, type PluginRoleSettingsProps, type PluginRoleValues } from "@yinfengwindy/shiori-sdk";
 import { RoleProactiveSettingsPanel } from "./RoleProactiveSettingsPanel";
@@ -23,6 +24,6 @@ export const proactiveRoleSettings = {
   read: readRoleProactiveForm,
   async save(roleId, values, previous, client) {
     const patch = Object.fromEntries(Object.entries(values).filter(([key, value]) => value !== previous[key]));
-    return client.call<PluginRoleValues>("settings_set", { role_id: roleId, values: patch });
+    return client.call<PluginRoleValues>(rpcMethods["settings_set"], { role_id: roleId, values: patch });
   },
 } satisfies PluginRoleSettingsContribution;

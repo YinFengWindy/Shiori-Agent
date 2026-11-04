@@ -1,0 +1,57 @@
+{
+  "plugin_id": "feishu",
+  "dependencies": [],
+  "methods": [
+    "account.resolve",
+    "account.send",
+    "account.targets",
+    "accounts.disconnect",
+    "accounts.profile",
+    "accounts.save",
+    "accounts.send",
+    "accounts.verify"
+  ],
+  "registrations": [
+    {
+      "name": "account.resolve",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 41
+    },
+    {
+      "name": "account.send",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 40
+    },
+    {
+      "name": "account.targets",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 36
+    },
+    {
+      "name": "accounts.disconnect",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 50
+    },
+    {
+      "name": "accounts.profile",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 33
+    },
+    {
+      "name": "accounts.save",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 49
+    },
+    {
+      "name": "accounts.send",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 39
+    },
+    {
+      "name": "accounts.verify",
+      "path": "plugins/feishu/backend/plugin.py",
+      "line": 46
+    }
+  ],
+  "services": []
+}

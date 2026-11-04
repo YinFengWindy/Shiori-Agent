@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { compactGhostButtonClass, Select, SettingsField, SettingsGroup, settingsGroupStackClass, settingsInputClass, usePrivateAutosave, type PluginSettingsSectionComponentProps, type SelectOption } from "@yinfengwindy/shiori-sdk";
 import type { GptSoVitsSettings } from "../shared/contracts";
 import { ServiceStatusGroup } from "./ServiceStatusGroup";
@@ -10,9 +11,9 @@ const externalFields = [["url", "服务地址"], ["gpt_weights", "GPT 权重路�
 export function GptSoVitsSettingsPage({ client, host }: PluginSettingsSectionComponentProps) {
   const health = useServiceHealth(client);
   const state = usePrivateAutosave<GptSoVitsSettings>(client, "settings", {
-    load: () => client.call<GptSoVitsSettings>("settings.get"),
+    load: () => client.call<GptSoVitsSettings>(rpcMethods["settings.get"]),
     // A stored change makes an earlier health result describe the previous service.
-    save: async (value) => { const result = await client.call<GptSoVitsSettings>("settings.set", value); health.clear(); return result; },
+    save: async (value) => { const result = await client.call<GptSoVitsSettings>(rpcMethods["settings.set"], value); health.clear(); return result; },
   });
   const draft = state.draft;
   return <div className={settingsGroupStackClass}>

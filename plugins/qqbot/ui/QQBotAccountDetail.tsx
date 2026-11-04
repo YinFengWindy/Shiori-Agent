@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
 import { useEffect, useState } from "react";
 import { iconButtonClass, inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@yinfengwindy/shiori-sdk";
@@ -19,8 +20,8 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
     if (!accountId) return;
     let active = true;
     void Promise.all([
-      client.call<Detail>("account.detail", { account_id: accountId }),
-      client.call<Targets>("account.targets", { account_id: accountId }),
+      client.call<Detail>(rpcMethods["account.detail"], { account_id: accountId }),
+      client.call<Targets>(rpcMethods["account.targets"], { account_id: accountId }),
     ]).then(([nextDetail, nextTargets]) => {
       if (active) { setDetail(nextDetail); setTargets(nextTargets); setAppId(nextDetail.app_id); }
     }).catch((failure: unknown) => { if (active) reportError(failure, "账号信息加载失败"); });
@@ -28,7 +29,7 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
   }, [accountId, client, reportError]);
 
   const save = () => run("connect", async () => {
-    const result = await client.call<{ account_id: string }>("account.save", {
+    const result = await client.call<{ account_id: string }>(rpcMethods["account.save"], {
       app_id: appId.trim(), client_secret: secret, role_id: roleId,
     });
     setSecret("");
@@ -38,7 +39,7 @@ export function QQBotAccountDetail({ account, roleId, onChanged, client, host }:
 
   const disconnect = () => run("disconnect", async () => {
     if (!account) return undefined;
-    await client.call("account.disconnect", { account_id: account.id });
+    await client.call(rpcMethods["account.disconnect"], { account_id: account.id });
     setDetail((current) => current ? { ...current, connected: false } : current);
     return undefined;
   });

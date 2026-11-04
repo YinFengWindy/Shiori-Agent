@@ -1,0 +1,135 @@
+{
+  "plugin_id": "desktop_pet",
+  "dependencies": [],
+  "methods": [
+    "bilibili.account.logout",
+    "bilibili.account.status",
+    "bilibili.login.poll",
+    "bilibili.login.start",
+    "binding.get",
+    "bubble.dismiss",
+    "live.config.get",
+    "live.config.set",
+    "live.pause",
+    "live.reply.outcome",
+    "live.resume",
+    "live.start",
+    "live.status",
+    "live.stop",
+    "pets.import",
+    "pets.list",
+    "pets.remove",
+    "pets.select",
+    "voice.context.get",
+    "voice.preferences.get",
+    "voice.preferences.set"
+  ],
+  "registrations": [
+    {
+      "name": "bilibili.account.logout",
+      "path": "plugins/desktop_pet/backend/bilibili_login_rpc.py",
+      "line": 34
+    },
+    {
+      "name": "bilibili.account.status",
+      "path": "plugins/desktop_pet/backend/bilibili_login_rpc.py",
+      "line": 33
+    },
+    {
+      "name": "bilibili.login.poll",
+      "path": "plugins/desktop_pet/backend/bilibili_login_rpc.py",
+      "line": 32
+    },
+    {
+      "name": "bilibili.login.start",
+      "path": "plugins/desktop_pet/backend/bilibili_login_rpc.py",
+      "line": 31
+    },
+    {
+      "name": "binding.get",
+      "path": "plugins/desktop_pet/backend/plugin.py",
+      "line": 72
+    },
+    {
+      "name": "bubble.dismiss",
+      "path": "plugins/desktop_pet/backend/bubbles.py",
+      "line": 16
+    },
+    {
+      "name": "live.config.get",
+      "path": "plugins/desktop_pet/backend/live_rpc.py",
+      "line": 55
+    },
+    {
+      "name": "live.config.set",
+      "path": "plugins/desktop_pet/backend/live_rpc.py",
+      "line": 56
+    },
+    {
+      "name": "live.pause",
+      "path": "plugins/desktop_pet/backend/live_rpc.py",
+      "line": 59
+    },
+    {
+      "name": "live.reply.outcome",
+      "path": "plugins/desktop_pet/backend/live_output.py",
+      "line": 77
+    },
+    {
+      "name": "live.resume",
+      "path": "plugins/desktop_pet/backend/live_rpc.py",
+      "line": 60
+    },
+    {
+      "name": "live.start",
+      "path": "plugins/desktop_pet/backend/live_rpc.py",
+      "line": 58
+    },
+    {
+      "name": "live.status",
+      "path": "plugins/desktop_pet/backend/live_rpc.py",
+      "line": 62
+    },
+    {
+      "name": "live.stop",
+      "path": "plugins/desktop_pet/backend/live_rpc.py",
+      "line": 61
+    },
+    {
+      "name": "pets.import",
+      "path": "plugins/desktop_pet/backend/plugin.py",
+      "line": 80
+    },
+    {
+      "name": "pets.list",
+      "path": "plugins/desktop_pet/backend/plugin.py",
+      "line": 75
+    },
+    {
+      "name": "pets.remove",
+      "path": "plugins/desktop_pet/backend/plugin.py",
+      "line": 81
+    },
+    {
+      "name": "pets.select",
+      "path": "plugins/desktop_pet/backend/plugin.py",
+      "line": 82
+    },
+    {
+      "name": "voice.context.get",
+      "path": "plugins/desktop_pet/backend/voice_rpc.py",
+      "line": 45
+    },
+    {
+      "name": "voice.preferences.get",
+      "path": "plugins/desktop_pet/backend/voice_rpc.py",
+      "line": 24
+    },
+    {
+      "name": "voice.preferences.set",
+      "path": "plugins/desktop_pet/backend/voice_rpc.py",
+      "line": 25
+    }
+  ],
+  "services": []
+}

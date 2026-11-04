@@ -1,0 +1,63 @@
+{
+  "plugin_id": "herdr",
+  "dependencies": [],
+  "methods": [
+    "agents.get",
+    "agents.keys",
+    "agents.list",
+    "agents.prompt",
+    "sessions.list",
+    "tasks.cancel",
+    "tasks.continue",
+    "tasks.get",
+    "tasks.list"
+  ],
+  "registrations": [
+    {
+      "name": "agents.get",
+      "path": "plugins/herdr/backend/agents.py",
+      "line": 80
+    },
+    {
+      "name": "agents.keys",
+      "path": "plugins/herdr/backend/agents.py",
+      "line": 86
+    },
+    {
+      "name": "agents.list",
+      "path": "plugins/herdr/backend/agents.py",
+      "line": 77
+    },
+    {
+      "name": "agents.prompt",
+      "path": "plugins/herdr/backend/agents.py",
+      "line": 83
+    },
+    {
+      "name": "sessions.list",
+      "path": "plugins/herdr/backend/sessions.py",
+      "line": 42
+    },
+    {
+      "name": "tasks.cancel",
+      "path": "plugins/herdr/backend/dashboard.py",
+      "line": 31
+    },
+    {
+      "name": "tasks.continue",
+      "path": "plugins/herdr/backend/dashboard.py",
+      "line": 30
+    },
+    {
+      "name": "tasks.get",
+      "path": "plugins/herdr/backend/dashboard.py",
+      "line": 27
+    },
+    {
+      "name": "tasks.list",
+      "path": "plugins/herdr/backend/dashboard.py",
+      "line": 24
+    }
+  ],
+  "services": []
+}

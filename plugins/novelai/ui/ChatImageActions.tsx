@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useRef, useState } from "react";
 import { ArrowClockwise } from "@phosphor-icons/react";
 import { errorMessage, cx, ghostButtonClass, type PluginChatImageActionProps, type SessionMessageUpdatePayload } from "@yinfengwindy/shiori-sdk";
@@ -19,7 +20,7 @@ export function NovelAiChatImageActions({ target, client, onSessionUpdate, onErr
     setBusy(new Set(pending.current));
     onError("");
     try {
-      const update = await client.call<SessionMessageUpdatePayload>("regenerateMessageMedia", {
+      const update = await client.call<SessionMessageUpdatePayload>(rpcMethods["regenerateMessageMedia"], {
         session_key: target.sessionKey, message_id: target.messageId, media_index: target.mediaIndex,
       }, { timeoutMs: novelAiGenerationTimeoutMs });
       if (update.session?.key !== target.sessionKey || !update.message) throw new Error("重新生成返回了不匹配的会话。");

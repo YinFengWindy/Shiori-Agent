@@ -1,3 +1,4 @@
+import { rpcMethods } from "../../rpcMethods.generated";
 import { useEffect, useState } from "react";
 import { errorMessage, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { speechOn, type VoicePreferences } from "../../background/voice/preferences";
@@ -16,7 +17,7 @@ export function useSpeechReady(client: PluginRpcClient, open: boolean) {
     let current = true;
     // An unchanged answer keeps the state object, so reopening re-renders nothing.
     const settle = (ready: boolean | null, error: string) => setState((prev) => prev.ready === ready && prev.error === error ? prev : { ready, error });
-    client.call<VoicePreferences>("voice.preferences.get").then(
+    client.call<VoicePreferences>(rpcMethods["voice.preferences.get"]).then(
       (preferences) => { if (current) settle(speechOn(preferences), ""); },
       (cause: unknown) => { if (current) settle(null, errorMessage(cause)); },
     );

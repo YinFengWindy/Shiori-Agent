@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { EyeIcon, EyeSlashIcon, InfoIcon } from "@phosphor-icons/react";
 import { useEffect, useId, useState } from "react";
 import { iconButtonClass, inputClass, useAccountAction, type PluginAccountDetailComponentProps } from "@yinfengwindy/shiori-sdk";
@@ -17,15 +18,15 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
   const connected = account?.connection === "online" || account?.connection === "connecting";
   useEffect(() => {
     if (!accountRef) return;
-    void client.call<{ chats: KnownChat[] }>("known.list", { ref: accountRef })
+    void client.call<{ chats: KnownChat[] }>(rpcMethods["known.list"], { ref: accountRef })
       .then((result) => setKnown(result.chats)).catch((failure) => reportError(failure, "会话列表加载失败"));
-    void client.call<BotIdentity>("identity.get", { ref: accountRef })
+    void client.call<BotIdentity>(rpcMethods["identity.get"], { ref: accountRef })
       .then(setIdentity).catch((failure) => reportError(failure, "账号身份加载失败"));
   }, [accountRef, client, reportError]);
 
   // An offline saved Bot reconnects with its kept Token unless a new one is typed.
   const save = () => run("connect", async () => {
-    const result = await client.call<{ account_id: string }>("bot.save", {
+    const result = await client.call<{ account_id: string }>(rpcMethods["bot.save"], {
       role_id: roleId, token: token.trim(), ...(account ? { account_id: account.id } : {}),
     });
     setToken("");
@@ -33,7 +34,7 @@ export function TelegramAccountDetail({ account, roleId, onChanged, client, host
   });
   const disconnect = () => run("disconnect", async () => {
     if (!account) return undefined;
-    await client.call("bot.disconnect", { account_id: account.id, role_id: roleId });
+    await client.call(rpcMethods["bot.disconnect"], { account_id: account.id, role_id: roleId });
     return account.id;
   });
 
