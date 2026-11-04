@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import path, { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 import console from 'node:console';
@@ -8,6 +8,12 @@ import { parseArgs } from 'node:util';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const slash = (path) => path.replaceAll('\\', '/');
+
+/** Whether a source belongs to this directory, using the selected platform's paths. */
+export function isWithinDirectory(directory, source, paths = path) {
+  const child = paths.relative(directory, source);
+  return !paths.isAbsolute(child) && child !== '..' && !child.startsWith(`..${paths.sep}`);
+}
 
 /** Finite string values inferred by TypeScript, including template-literal unions. */
 export function finiteStrings(type) {
@@ -96,48 +102,61 @@ export function checkPluginRpc({ root = ROOT, plugin: selectedPlugin } = {}) {
   }
   for (const source of program.getSourceFiles()) {
     if (/\.(test|generated)\./.test(source.fileName) || source.isDeclarationFile) continue;
-    const owner = [...owners].find(([directory]) => {
-      const rel = relative(directory, source.fileName);
-      return !rel.startsWith('..');
-    });
+    const owner = [...owners].find(([directory]) => isWithinDirectory(directory, source.fileName));
     if (owner) {
       visit(source, owner[1]);
     }
   }
-  function targetPlugin(node, fallback) {
-    let expression = node.expression;
-    // A destructured/bound call still belongs to its original client or peer.
-    if (ts.isIdentifier(expression)) {
-      const alias = checker.getSymbolAtLocation(expression)?.valueDeclaration;
-      if (alias && ts.isBindingElement(alias) && ts.isVariableDeclaration(alias.parent.parent)) {
-        expression = alias.parent.parent.initializer;
-      } else if (alias && ts.isVariableDeclaration(alias)) {
-        expression = alias.initializer;
-        if (expression && ts.isPropertyAccessExpression(expression)) expression = expression.expression;
+  function memberName(expression) {
+    if (ts.isPropertyAccessExpression(expression)) return expression.name.text;
+    if (ts.isElementAccessExpression(expression)) {
+      const names = finiteStrings(checker.getTypeAtLocation(expression.argumentExpression));
+      if (names?.length === 1) return names[0];
+    }
+    return null;
+  }
+  function constantInitializer(declaration) {
+    return declaration && ts.isVariableDeclaration(declaration) && declaration.parent.flags & ts.NodeFlags.Const
+      ? declaration.initializer : undefined;
+  }
+  function targetPlugin(node, plugin) {
+    const seen = new Set();
+    // Only follow literal members and local const aliases. An unresolved peer must
+    // not silently inherit the caller's method set.
+    function resolveTarget(expression, isCallee = false) {
+      if (!expression || seen.has(expression)) return null;
+      seen.add(expression);
+      if (ts.isParenthesizedExpression(expression) || ts.isNonNullExpression(expression) || ts.isAwaitExpression(expression)) {
+        return resolveTarget(expression.expression, isCallee);
       }
-    } else if (ts.isPropertyAccessExpression(expression)) expression = expression.expression;
-    if (!expression) return fallback;
-    if (ts.isPropertyAccessExpression(expression) && expression.name.text === 'background') expression = expression.expression;
-    const receiver = expression;
-    const type = checker.getTypeAtLocation(receiver);
-    if (type.getProperty('dependency')) return fallback;
-    // A peer obtained from an explicit dependency() retains its target in its initializer.
-    const declaration = checker.getSymbolAtLocation(receiver)?.valueDeclaration;
-    const initializer = declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer : null;
-    const init = initializer && ts.isAwaitExpression(initializer) ? initializer.expression : initializer;
-    if (init && ts.isCallExpression(init) && lane(checker.getResolvedSignature(init)?.declaration) === 'dependency') {
-      const ids = finiteStrings(checker.getTypeAtLocation(init.arguments[0]));
-      if (ids?.length === 1) return ids[0];
+      if (!isCallee && checker.getTypeAtLocation(expression).getProperty('dependency')) return plugin;
+      if (!isCallee && ts.isCallExpression(expression) && lane(checker.getResolvedSignature(expression)?.declaration) === 'dependency') {
+        const ids = expression.arguments[0] && finiteStrings(checker.getTypeAtLocation(expression.arguments[0]));
+        return ids?.length === 1 ? ids[0] : null;
+      }
+      const member = memberName(expression);
+      if ((isCallee && member === 'call') || (!isCallee && member === 'background')) {
+        return resolveTarget(expression.expression);
+      }
+      if (ts.isIdentifier(expression)) {
+        const declaration = checker.getSymbolAtLocation(expression)?.valueDeclaration;
+        if (declaration && ts.isBindingElement(declaration)) {
+          const member = (declaration.propertyName ?? declaration.name).getText().replace(/^['"]|['"]$/g, '');
+          if ((isCallee && member === 'call') || (!isCallee && member === 'background')) {
+            return resolveTarget(constantInitializer(declaration.parent.parent));
+          }
+        } else return resolveTarget(constantInitializer(declaration), isCallee);
+      }
+      return null;
     }
-    if (checker.getPropertyOfType(type, 'background') && !checker.getPropertyOfType(type, 'dependency')) {
-      located(receiver, 'dependency peer target cannot be resolved to one declared plugin', fallback);
-      return '';
-    }
-    return fallback;
+    const target = resolveTarget(node.expression, true);
+    if (!target) located(node, 'RPC target cannot be resolved to the owning client or one declared dependency', plugin);
+    return target;
   }
   const selectedCalls = calls.filter(({ plugin }) => !selectedId || plugin === selectedId);
   for (const { node, argument, names, kind, plugin } of selectedCalls) {
-    const target = targetPlugin(node, plugin);
+    const target = ['backend', 'background'].includes(kind) ? targetPlugin(node, plugin) : plugin;
+    if (!target) continue;
     let allowed;
     if (kind === 'dependency') {
       // YAML is parsed by the Python generator; use its exact manifest declarations.

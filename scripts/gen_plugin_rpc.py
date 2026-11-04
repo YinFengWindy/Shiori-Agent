@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[1]
 _UNKNOWN = object()
 _RPC = object()
 _SERVICES = object()
+_RPC_REGISTER = object()
+_SERVICE_REGISTER = object()
 
 
 class ContractError(ValueError):
@@ -89,6 +91,12 @@ class Extractor:
     def value(self, node: ast.AST | None, env: dict[str, object]) -> object:
         if isinstance(node, ast.Constant):
             return node.value
+        if isinstance(node, ast.Attribute) and node.attr == "register":
+            owner = self.value(node.value, env)
+            if owner is _RPC:
+                return _RPC_REGISTER
+            if owner is _SERVICES:
+                return _SERVICE_REGISTER
         if isinstance(node, (ast.Name, ast.Attribute)):
             return env.get(ast.unparse(node), _UNKNOWN)
         if isinstance(node, (ast.Tuple, ast.List, ast.Set)):
@@ -192,13 +200,9 @@ class Extractor:
                 if isinstance(child, ast.stmt):
                     continue
                 for call in ast.walk(child):
-                    if (
-                        isinstance(call, ast.Call)
-                        and isinstance(call.func, ast.Attribute)
-                        and call.func.attr == "register"
-                    ):
-                        owner = self.value(call.func.value, env)
-                        if owner is _RPC:
+                    if isinstance(call, ast.Call):
+                        register = self.value(call.func, env)
+                        if register is _RPC_REGISTER:
                             name = (
                                 self.value(call.args[0], env) if call.args else _UNKNOWN
                             )
@@ -219,7 +223,7 @@ class Extractor:
                                     "line": call.lineno,
                                 }
                             )
-                        elif owner is _SERVICES:
+                        elif register is _SERVICE_REGISTER:
                             fields = {
                                 kw.arg: self.value(kw.value, env)
                                 for kw in call.keywords

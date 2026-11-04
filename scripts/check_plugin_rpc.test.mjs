@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
+import process from 'node:process';
 import { test } from 'node:test';
-import { checkPluginRpc } from './check_plugin_rpc.mjs';
+import { checkPluginRpc, isWithinDirectory } from './check_plugin_rpc.mjs';
 
-function fixture(source, extension = 'ts') {
-  const directory = mkdtempSync(join(tmpdir(), 'shiori-rpc-contract-'));
+function fixture(source, extension = 'ts', temporaryRoot = tmpdir()) {
+  const directory = mkdtempSync(join(temporaryRoot, 'shiori-rpc-contract-'));
   writeFileSync(join(directory, 'manifest.yaml'), 'api: 4\nid: contract_probe\nsdk: ">=4.0.0"\n', 'utf8');
   writeFileSync(join(directory, 'rpc-contract.generated.json'), JSON.stringify({ plugin_id: 'contract_probe', dependencies: ['telegram', 'desktop_pet'], methods: ['read', 'write'], services: [{ service_id: 'voice', contract: 'voice.v1', methods: ['speak'] }] }), 'utf8');
   writeFileSync(join(directory, `probe.${extension}`), 'import type { PluginRpcClient } from "@yinfengwindy/shiori-sdk";\n' + source, 'utf8');
@@ -27,6 +28,56 @@ export async function check(client: PluginRpcClient, method: "read" | "write", d
     assert.equal(result.errors.length, 2);
     assert.ok(result.errors.some((error) => error.includes('"typo" has no provider')));
     assert.ok(result.errors.some((error) => error.includes('finite string-literal type')));
+  } finally { f.close(); }
+});
+
+test('indexed and aliased peer calls retain their backend and background provider', () => {
+  const f = fixture(`
+import type { PluginPeer } from "@yinfengwindy/shiori-sdk";
+export async function check(client: PluginRpcClient, unresolved: PluginPeer) {
+  await client["call"]("read");
+  await unresolved["call"]("read");
+  const peer = await client.dependency("telegram");
+  if (peer) {
+    await peer["call"]("bot.save");
+    await peer["call"]("read");
+    const invoke = peer["call"];
+    await invoke("read");
+  }
+  const pet = await client.dependency("desktop_pet");
+  if (pet) {
+    await pet["background"]["call"]("voice.stop");
+    const bg = pet["background"];
+    await bg["call"]("voice.stop");
+    await bg["call"]("read");
+    const { call: invoke } = bg;
+    await invoke("read");
+  }
+}`);
+  try {
+    const result = f.run();
+    assert.equal(result.errors.length, 5, result.errors.join('\n'));
+    assert.equal(result.errors.filter((error) => error.includes('backend method "read" has no provider in telegram')).length, 2);
+    assert.equal(result.errors.filter((error) => error.includes('background method "read" has no provider in desktop_pet')).length, 2);
+    assert.ok(result.errors.some((error) => error.includes('RPC target cannot be resolved')));
+  } finally { f.close(); }
+});
+
+test('Windows source ownership excludes another drive and parent/sibling paths', () => {
+  const plugin = String.raw`C:\external\plugin`;
+  assert.equal(isWithinDirectory(plugin, String.raw`D:\repo\packages\sdk\src\rpc.ts`, win32), false);
+  assert.equal(isWithinDirectory(plugin, String.raw`C:\external\plugin-other\ui.ts`, win32), false);
+  assert.equal(isWithinDirectory(plugin, String.raw`C:\external\ui.ts`, win32), false);
+  assert.equal(isWithinDirectory(plugin, String.raw`C:\external\plugin\..source.ts`, win32), true);
+  assert.equal(isWithinDirectory(plugin, String.raw`C:\external\plugin\ui\index.ts`, win32), true);
+});
+
+test('an external Windows C-drive plugin does not acquire repository SDK calls', { skip: process.platform !== 'win32' || !process.env.LOCALAPPDATA }, () => {
+  const f = fixture('export async function check(client: PluginRpcClient) { await client.call("read"); }', 'ts', join(process.env.LOCALAPPDATA, 'Temp'));
+  try {
+    const result = f.run();
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.checked, 1);
   } finally { f.close(); }
 });
 
