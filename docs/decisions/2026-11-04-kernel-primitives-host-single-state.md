@@ -55,9 +55,11 @@ R2：重载替换或启停过程中的尚未启动成员短暂显示 BLOCKED / `
 
 ## T5 通信归属与装配
 
-RPC 注册表、renderer 通信、请求等待表、services 注册表与桥接事件迁入 `desktop_bridge/plugin_rpc/`。宿主仅依赖 `renderer_communication.py` 的撤销协议；`CommunicationEndReason` 在该协议旁定义一次，由 bridge 共用。`rpc_names.py` 仍属于宿主静态准入，因为 manifest 必须拒绝保留的 RPC 命名空间。
+RPC 注册表、renderer 通信、请求等待表、services 注册表与桥接事件迁入 `desktop_bridge/plugin_rpc/`。宿主仅依赖 `renderer_communication.py` 的撤销协议；`CommunicationEndReason` 在该协议旁定义宿主会发出的三种原因，由 bridge 共用。bridge 的请求终止类型以联合类型扩展自己的 `runtime_replaced`，不把整代退役职责放回宿主协议。`rpc_names.py` 仍属于宿主静态准入，因为 manifest 必须拒绝保留的 RPC 命名空间。
 
 `PluginKernel` 通过必填构造参数接收 `communication` 与 `resolve_reference`，不再注册或读取 `HOST_BRIDGE` / `HOST_CONFIG_REFERENCES`。bootstrap 构造后将 `active_peers` 绑定到通信层的 resolver，读取权威的当前活动实例与依赖声明；协议、授权、代际和请求取消语义不变。
+
+账号投递只依赖本模块的 `AccountRpcResolver.resolve` 协议，返回处理函数复用 SDK 的 `RpcHandler`，不反向引用 bridge 的具体注册表类型。默认 bootstrap 契约通过真实启动后的 renderer open 与跨插件 RPC 请求守住 resolver 装配；漏掉绑定时该通信路径直接失败。
 
 `SERVICES` 仍是同一公开 Key，核心提供现有 services 注册表作为 binder。`PluginRuntimeContext.require/get` 缓存它为当前 `PluginBinding` 创建的 `ScopedPluginServices`，其注册仍使用本实例 scope 和调用闸门；宿主 setup 不再构造或访问 RPC/services 注册表。
 

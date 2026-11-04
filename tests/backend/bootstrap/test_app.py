@@ -287,6 +287,68 @@ async def test_started_runtime_serves_proactive_host_and_conversation(
 
 
 @pytest.mark.asyncio
+async def test_started_runtime_routes_renderer_calls_to_declared_plugin_peers(
+    tmp_path, monkeypatch, empty_config
+):
+    """Real bootstrap must bind peer lookup before a renderer opens communication."""
+    from bootstrap.app import RuntimeFeatures
+    from desktop_bridge.plugin_requests import DesktopPluginRequestHandler
+
+    packages = tmp_path / "host_plugins"
+    for plugin_id, manifest, source in (
+        (
+            "provider",
+            "inject: [rpc]\n",
+            "from shiori_sdk.core.services import RPC\n"
+            "async def accept(payload):\n"
+            "    return {'accepted': payload['text']}\n"
+            "async def setup(ctx):\n"
+            "    ctx.require(RPC).register('accept', accept)\n",
+        ),
+        (
+            "consumer",
+            "dependencies: [provider]\n",
+            "async def setup(ctx): pass\n",
+        ),
+    ):
+        package = packages / plugin_id
+        (package / "backend").mkdir(parents=True)
+        (package / "manifest.yaml").write_text(
+            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n{manifest}", encoding="utf-8"
+        )
+        (package / "backend/plugin.py").write_text(source, encoding="utf-8")
+    monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [packages])
+    app = AppRuntime(
+        empty_config,
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False),
+    )
+    try:
+        await app.start()
+        assert app.core is not None
+        handler = DesktopPluginRequestHandler(app.core.plugin_rpc)
+        opened = await handler.handle(
+            "plugins.communication.open",
+            {"plugin_id": "consumer", "owner": "document", "renderer": "main"},
+        )
+        assert opened is not None
+        result = await handler.handle(
+            "provider.accept",
+            {
+                "text": "delivered through bootstrap",
+                "__plugin_context": {
+                    "plugin_id": "consumer",
+                    "owner": "document",
+                    **opened,
+                },
+            },
+        )
+        assert result == {"accepted": "delivered through bootstrap"}
+    finally:
+        await app.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_external_package_approval_is_live_and_bound_to_application_session(
     tmp_path, monkeypatch, empty_config
 ):
