@@ -1,4 +1,6 @@
-"""Persistent storage exposed by the plugin kv capability."""
+"""Persistent plugin KV storage: package directories hold code, user data belongs
+to the workspace and must never be written into the installed package.
+"""
 
 from __future__ import annotations
 

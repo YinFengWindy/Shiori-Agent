@@ -16,11 +16,10 @@ from typing import cast
 
 from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarFetch
-
-from agent.plugin_host import PluginKernel
 from shiori_sdk.kernel import Scope
 from shiori_sdk.core.services import CHANNELS
 
+from agent.plugin_host import PluginKernel
 from agent.plugin_host.core_keys import (
     PluginBinding,
     required_core_key,

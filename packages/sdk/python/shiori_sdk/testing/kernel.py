@@ -27,14 +27,6 @@ class KernelHarness:
         kernel: Kernel | None = None,
     ) -> None:
         self.kernel = kernel or Kernel()
-        # A later plan can exclude a still-running plugin from order(). Remember
-        # running ids so stop also releases those missing from the current plan.
-        self._started = dict.fromkeys(
-            plugin_id
-            for plugin_id in self.kernel.order()
-            if (status := self.kernel.status(plugin_id)) is not None
-            and status.state is KernelState.ACTIVE
-        )
         for key, service in (services or {}).items():
             self.kernel.provide(key, service)
 
@@ -50,9 +42,7 @@ class KernelHarness:
             if plugin_id in selected and (
                 status is None or status.state is not KernelState.ACTIVE
             ):
-                activated = await self.kernel.activate(plugin_id)
-                if activated.state is KernelState.ACTIVE:
-                    self._started[plugin_id] = None
+                _ = await self.kernel.activate(plugin_id)
         return self.kernel
 
     async def reload(
@@ -73,12 +63,9 @@ class KernelHarness:
         await self.kernel.drain(members, timeout)
         for member in members:
             _ = await self.kernel.deactivate(member)
-            _ = self._started.pop(member, None)
         order = tuple(reversed(members))
         for member in order:
-            activated = await self.kernel.activate(member)
-            if activated.state is KernelState.ACTIVE:
-                self._started[member] = None
+            _ = await self.kernel.activate(member)
         return order
 
     async def idle(self) -> None:
@@ -94,10 +81,10 @@ class KernelHarness:
     async def stop(self) -> list[Exception]:
         """Stops every running plugin; returns the cleanup errors."""
         errors: list[Exception] = []
-        # Current dependency order wins over activation history: an optional
-        # consumer may have started before its provider. Excluded ids follow.
-        order = dict.fromkeys((*reversed(self.kernel.order()), *self._started))
-        for plugin_id in order:
+        rank = {plugin_id: index for index, plugin_id in enumerate(self.kernel.order())}
+        # Scopes are authoritative even when a later plan excluded a running
+        # plugin, or this harness was recreated around the same kernel.
+        scopes = self.kernel._scopes  # pyright: ignore[reportPrivateUsage]
+        for plugin_id in sorted(scopes, key=lambda plugin_id: -rank.get(plugin_id, -1)):
             errors.extend(await self.kernel.deactivate(plugin_id))
-            _ = self._started.pop(plugin_id, None)
         return errors
