@@ -1,6 +1,6 @@
 # 插件开发
 
-Shiori 只有一套显式 v2 插件运行时。插件提供 `manifest.yaml` 和异步 `setup(ctx)`，宿主按 manifest 的 `inject` 提供服务（`ctx.require(KEY)`），并用作用域回收事件订阅、工具和后台任务。
+Shiori 使用 manifest API 4 的单一插件运行时。插件提供 `manifest.yaml` 和异步 `setup(ctx)`，宿主按 manifest 的 `inject` 提供服务（`ctx.require(KEY)`），并用作用域回收事件订阅、工具和后台任务。
 
 ## 包布局与发现
 
@@ -10,6 +10,7 @@ plugins/example/
   backend/
     plugin.py
     config.py
+  frontend.ts          # 可选，具名导出 ui/background/surface
   ui/index.tsx         # 可选，主窗口贡献
   background/index.ts # 可选，app.background
   surface/index.tsx   # 可选，桌面 surface
@@ -21,7 +22,7 @@ plugins/example/
 
 后端扫描 `bootstrap.paths.plugin_roots()` 返回的内置插件根目录，以及工作区的 `plugins/`。开发态和桌面 bundle 的内置包位于安装资源的顶层 `plugins/`；wheel 安装态使用已安装插件包。插件声明 `api: 4`，把要用的服务写进 `inject`，代码里用 `ctx.require(KEY)` 取得。默认入口仍为 `backend/plugin.py`，入口作为包导入，内部可使用相对 import。不是 `api: 4` 的包无法安装；已经装上的在启动时标为 BLOCKED，文件和配置保留，提示向作者获取新版本。
 
-工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过[manifest 与包](plugin-guide.md#manifest)的静态检查；合法包显示为 `UNTRUSTED`，在用户于设置 › 插件中经「信任…」（或 ZIP 安装/更新时的「信任并安装」「信任并更新」）确认并重启应用之前，不导入它的后端或 renderer；内容一变授信即失效（流程见[信任与外部包](plugin-lifecycle.md#信任与外部包)）。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
+工作区 `plugins/<目录>/manifest.yaml` 声明的外部包必须通过[manifest 与包](plugin-guide.md#manifest)的静态检查；合法包显示为 `UNTRUSTED`，用户确认前不导入后端或 renderer。首次信任已启用的候选后，在当前应用里经正常加载或安全代际替换激活；只信任已停用的插件不会改变启用偏好。ZIP 安装/更新在下次启动生效；已执行的包内容变化同样要求重启，桥接重连不能绕过。内容一变授信即失效（流程见[信任与外部包](plugin-lifecycle.md#信任与外部包)）。配置 `enabled = true` 不代表信任。无效 manifest、入口和依赖显示为 `BLOCKED`；只有旧 `kv.json`、没有 manifest 的目录被忽略，数据不会因此删除。
 
 按 manifest ID 检测全部候选：同 ID 的所有包均为 `CONFLICT`，不选择内置或工作区优先者；同目录名但不同 ID 的包分别显示。插件管理保留各候选的版本、来源、实际目录和结构化诊断，拒绝切换未通过准入的候选。目录级代码新增、替换、删除后重启应用；配置保存或启停插件产生的新运行代沿用本次应用启动的候选、manifest 和准入快照，应用重启后才重新扫描。各运行代的导入命名空间、句柄和 effect 仍独立。
 
@@ -208,41 +209,42 @@ async def setup(ctx):
 
 依赖其它插件时在 manifest 声明插件依赖。例如 story 的 `dependencies: [novelai]` 保证 novelai 先活动；提供方缺失、停用或失败时 story 为 `BLOCKED`，不会显示活动但缺少依赖。卸载提供方会级联其强依赖消费者。依赖也决定 `on` 链里的先后：被依赖的插件排在前面。
 
-需要调用另一个插件的 API 时，提供方用 `ctx.expose(api)`，消费者在 manifest 写 `dependencies: [provider]` 和 `inject: [dependencies]`，再调用 `ctx.require(DEPENDENCIES).require("provider")`。只需要加载顺序时不必注入。可选提供方用 `optional_dependencies` 和 `ctx.require(DEPENDENCIES).get_optional("provider")`：它不会强制启动提供方，提供方不可用时返回 `None`，也不会触发消费者级联卸载。
+需要调用另一个插件的 API 时，提供方用 `ctx.expose(api)`，消费者在 manifest 写 `dependencies: [provider]` 和 `inject: [dependencies]`，再调用 `ctx.require(DEPENDENCIES).require("provider")`。只需要加载顺序时不必注入。可选提供方用 `optional_dependencies` 和 `ctx.require(DEPENDENCIES).get_optional("provider")`：读取不会强制启动提供方，不可用时返回 `None`。提供方代内重载或启停时，活动的可选消费者及其强依赖方先排空再重新 setup，以读取新的提供状态；消费者的启用偏好不被关闭。
 
 ## 热卸载与进程退出
 
 `supports_hot_unload` 是严格布尔值，省略时为 `true`。不能可靠在进程内卸载的插件必须显式写 `false`。
 
-- 正常卸载先检查目标和全部强依赖消费者；任一活动插件不支持热卸载，整次操作拒绝，所有实例保持活动。
+- 正常启停或重载先检查整个受影响闭包，包括活动的强依赖和可选消费者；闭包含渠道或不可代内卸载的插件时整体拒绝代内替换，保留原实例并转交既有需重启路径。
 - 普通或原始配置保存采用整代准备/发布。如果当前代存在这类活动插件，这些保存均返回 `plugin_restart_required`，包含 `plugin_ids`，不启动候选、不写配置或角色数据、不切换 generation。完全相同配置与只改角色模型绑定的事务仍可执行。
-- 插件配置保存只在当前代内重载目标及其强依赖消费者（#857）；插件启停只在当前代内加载或卸载目标及其强依赖消费者（#858）。只有这个范围内含不支持热卸载的插件（或渠道插件）时才退回整代切换，并按上一条返回 `plugin_restart_required`。
+- 插件配置保存通常在当前代重载目标及其活动强依赖、可选消费者（#857、#949）。插件启停还会重建活动的可选消费者，并处理替换/冲突导致的提供关系变化。闭包含渠道或不支持热卸载的插件、或当前状态只能整代重试时，回到整代准备/发布；整代若有不可卸载的活动插件，则返回 `plugin_restart_required`。
 - 用户应退出应用后修改配置，再重新启动；本轮没有“已保存、待重启”的第二份配置。
 - 真正退出宿主、未发布候选失败/取消/丢弃，以及初始化回滚都强制回收已登记资源。声明不会豁免 effect 清理。
 
-内核的 `unload`、`terminate_all` 及宿主 `CoreRuntime.stop` 正常入口遵守声明；`force` 仅供最终资源回收路径。普通退出仍按引用排空，不因强制清理而提前取消已接受的工作。
+宿主的 `PluginKernel.set_enabled`、`reload`、`terminate_all` 与 `CoreRuntime.stop` 按各自转换路径遵守声明；SDK 内核只提供激活、排空和释放原语，不提供 `unload`。`force` 仅供最终资源回收路径；普通退出仍按引用排空，不因强制清理而提前取消已接受的工作。
 
 ## 桌面 RPC、事件与 UI
 
 Python 后端 `ctx.require(RPC).register("label.get", handler)` 注册 `example.label.get`。前端插件组件得到已绑定自身命名空间的 `client.call("label.get")`，不自行拼宿主 IPC。`await ctx.require(RPC).emit("updated", payload)` 通过 `PluginBridgeEvent` 与所属 generation 的服务下发 `example.updated`，旧代事件不会冒充新代。
 
-主窗口在构建时发现 `plugins/*/ui/index.tsx`，默认导出 `PluginUiModule`：
+仓库插件使用 `pnpm rpc:generate` 从上述后端注册生成常量，然后写 `client.call(rpcMethods["label.get"])`，导入路径为插件根目录的 `rpcMethods.generated.ts`。`pnpm rpc:check` 会拒绝不在后端清单内的名称和无法证明有限取值的动态字符串。
+
+宿主只加载 manifest 的 `frontend.entry`，入口具名导出需要的 `ui`、`background`、`surface`。例如 manifest 声明 `frontend: {entry: frontend.ts}` 后，`frontend.ts` 可以直接导出贡献，也可以从子目录 re-export：
 
 ```tsx
 import type { PluginUiModule } from "@yinfengwindy/shiori-sdk";
 
-const exampleUi: PluginUiModule = {
+export const ui: PluginUiModule = {
   pluginId: "example",
   settingsSection: { kind: "schema", label: "Example" },
 };
-export default exampleUi;
 ```
 
 `settings.section` 不再是设置侧栏的顶层条目：它注册为内建「插件」区块下的一个子页面。设置 › 插件的列表按 manifest 的 `category` 分成功能、渠道、系统组件三组，有设置页的插件在所在行显示「设置」按钮，点开进入它的设置页（页头带返回），不再作为「已安装」旁的子标签；侧栏始终只有模型/外观/高级/我的身份/插件/关于六项（「记忆」已随默认记忆插件迁出，#902；「频道」已随渠道插件化移除，#363；「语音」已随语音业务迁入插件移除，#677）。深链 `openSettingsWorkspace("plugins", { subsectionId: pluginId })` 直接打开该插件的设置页。manifest 声明了 `config_model` 的插件无需手写 `ui/index.tsx` 就能自动获得一个 schema 表单设置页，页标题取自后端 `plugins.list` 的回退链：manifest 的 `display_name` → 插件记录名（未声明 `display_name` 时即插件目录名）→ `id`，所以请在 manifest 里写出 `display_name`。账号插件的凭据与响应规则在角色页编辑，保存在插件自己的账号存储，不放在自动配置表单里。只有需要自定义表单组件、或额外贡献 `navPage`/`roleAssets` 等插槽时才需要手写（如 novelai——它的手写 `settingsSection` 会优先于自动注册，不会重复出现两个子标签）。已使用的插槽还包括 `nav.page`（story、novelai）、`role.assets`（desktop_pet）、`account.detail`（四个渠道插件的账号详情）。角色设置（`roleSettings`，并入宿主角色保存）与聊天图片动作（`chatImageActions`）也有独立贡献契约；插件私有的角色设置放在 `roleSettings` 卡片（`storage: "plugin"`）的 ⚙ 对话框里自动保存，如 gpt_sovits_tts。自管角色面板 `roleUi` 已移除，仍声明它的 UI 模块会在加载校验时被拒绝。插件 UI 只通过注入的服务和 RPC 协作，启停状态决定其可见性。
 
 绑定的组件（`navPage` 及其侧栏、自定义 `settingsSection`、`roleAssets`、`accountDetail`）除了 `client` 还会收到 `host`（即宿主服务，内置插件也可以继续用 `usePluginHostServices()`）。其中三项是宿主的呈现：`host.feedback.error("加载失败", { detail, persona: true })` 把提示放进宿主唯一的提示队列；`<host.ui.InlineError persona message={error} actions={…} />` 是宿主的页面内报错块（`layout` 可选 `row` / `strip` / `card`）；`<host.ui.ConfirmDialog persona="destructive" … />` 是宿主的确认弹窗（参数与宿主自己的一致）。`persona` 默认 `false`；传 `true`（或 `"generic"`）让看板娘吟风用该处的通用台词出面（报错 / 警告带一句，成功 / 普通提示只露脸），传场景键（`not_configured` / `unauthorized` / `quota` / `network` / `upstream` / `destructive` / `discard` / `confirm`）用宿主为该场景写好的台词。台词永远由宿主写，插件只能选场景；用户在 设置 › 外观 关掉「看板娘」后，一律回到不带她的样式。`host` 还提供 `config`、`assets`、`pickFiles` / `pickFilePaths` / `pickDirectory`、设置页角标 `host.ui.SettingsSavedStatus`以及账号详情用的 `AccountStatusCard`、`AccountDetailActions`、`Reveal`。细节见[前端契约](plugin-frontend.md#host-服务)，NovelAI 生图的失败卡片和报错提示就是这样接的。
 
-`app.background` 在隐藏的 plugin-host renderer 运行，入口是 `background/index.ts` 的 `{ pluginId, setup(ctx) }`。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`hostEvents`、`rpc`、`surfaces`、`tray`、`store`、`assets` 管理资源，用 `reportFailure` 把已处理但需要人看到的失败写进桌面诊断日志（2.11）；3.1.1 起还有作用域内的原生资源 `native`（录音、播放、全局快捷键）与 `chat`（为角色发起、取消回合）。使用 `surface/` 入口渲染独立桌面窗口。
+`frontend.entry` 的 `background` 导出在隐藏的 plugin-host renderer 运行，贡献对象为 `{ pluginId, setup(ctx) }`；它可以从 `background/index.ts` re-export。桌宠已通过它拥有控制器、surface、托盘项与订阅。它的 `BackgroundCtx` 不是 Python 上下文：通过自己的 `effect`、`events`、`hostEvents`、`rpc`、`surfaces`、`tray`、`store`、`assets` 管理资源，用 `reportFailure` 把已处理但需要人看到的失败写进桌面诊断日志（2.11）；3.1.1 起还有作用域内的原生资源 `native`（录音、播放、全局快捷键）与 `chat`（为角色发起、取消回合）。独立桌面窗口使用同一 frontend 入口的 `surface` 导出，组件可以放在 `surface/` 子目录。
 
 宿主为 UI、surface 和后台注入同一套通信接口（见[前端契约](plugin-frontend.md#注入的-client)）。它们沿用 manifest 的 `dependencies` / `optional_dependencies`；不会建立另一套依赖注册表，也不会隐式启用提供方。
 
@@ -264,7 +266,7 @@ renderer 后台（TypeScript 的 `BackgroundCtx`）通过 `await ctx.rpc.handle(
 
 renderer 后台 `await ctx.events.on("action", handler)` 只订阅自身插件事件；其它插件事件必须通过 `await ctx.rpc.dependency(id)` 取得 peer。宿主事件使用独立的 `ctx.hostEvents.on("chat.done", handler)`，该入口拒绝 `plugin.*` 名称。Python 后端继续通过 `ctx.require(DEPENDENCIES).require/get_optional` 访问插件经 `ctx.expose` 导出的 API；声明、停用与卸载规则不变。
 
-注入 client 由挂载的 UI/surface 或后台作用域持有。React 订阅 effect 把 `client` 放入依赖数组，并返回 `events.on` 给出的 disposer；异步订阅完成前若组件已经卸载，立即调用该 disposer。宿主会在卸载、挂载失败、后台 setup 失败、窗口退出、主文档刷新/导航以及运行代际替换时统一回收订阅、方法注册和待返回请求。同页导航与子 frame 导航不会回收主文档的通信。真实配置发布或 bridge 重连会替换注入 client，并重建后台作用域；`runtime.applied.changed` 只表示实际发布新代，同代幂等重试、无变化保存与仅改角色模型绑定的事件为 `changed: false`，不会打断现有请求；返回旧代结果的重试不再发布事件。RPC 响应仍保留原操作的结果。保存插件配置时，宿主只在当前代内重载该插件及其强依赖消费者，并发出 `plugins.reloaded`（`plugin_ids`）：只有这些插件的注入 client、后台作用域和原生会话被替换，它们的渲染入口按新的激活令牌重新上报；其他插件与角色列表不刷新。渲染入口就绪或失败通过 `plugins.changed` 刷新名单：仍处于 ACTIVE 的插件保留通信 client 和后台作用域，失败插件仍回收自己的 UI、后台和 surface。后台已有业务工作若跨卸载仍在执行，仍应由插件的 effect 取消或等待，旧 handler 不得回复到新代。
+注入 client 由挂载的 UI/surface 或后台作用域持有。React 订阅 effect 把 `client` 放入依赖数组，并返回 `events.on` 给出的 disposer；异步订阅完成前若组件已经卸载，立即调用该 disposer。宿主会在卸载、挂载失败、后台 setup 失败、窗口退出、主文档刷新/导航以及运行代际替换时统一回收订阅、方法注册和待返回请求。同页导航与子 frame 导航不会回收主文档的通信。真实配置发布或 bridge 重连会替换注入 client，并重建后台作用域；`runtime.applied.changed` 只表示实际发布新代，同代幂等重试、无变化保存与仅改角色模型绑定的事件为 `changed: false`，不会打断现有请求；返回旧代结果的重试不再发布事件。RPC 响应仍保留原操作的结果。保存插件配置且满足代内重载条件时，宿主重载该插件及其活动强依赖、可选消费者，并发出 `plugins.reloaded`（`plugin_ids`）：只有这些插件的注入 client、后台作用域和原生会话被替换，它们的渲染入口按新的激活令牌重新上报；其他插件与角色列表不刷新。渲染入口就绪或失败通过 `plugins.changed` 刷新名单：仍处于 ACTIVE 的插件保留通信 client 和后台作用域，失败插件仍回收自己的 UI、后台和 surface。后台已有业务工作若跨卸载仍在执行，仍应由插件的 effect 取消或等待，旧 handler 不得回复到新代。
 
 Python 端 `RPC` 的 `emit` 返回是否已经交给连接的桌面传输，不能解释成每个 renderer 都已消费。桌宠工具据此保留 `desktop_bridge_unavailable`，未投递的动作不占用冷却或本轮次数。桌宠动作、隐藏、包切换已走通用通道，宿主不再有桌宠动作事件或 `desktop:pet-sync`。回复气泡属于桌宠；屏幕感知插件独立。宿主不再有语音业务（#677）：识别与合成由 `sensevoice_asr`、`gpt_sovits_tts` 以 `services` 发布 `shiori.asr.v1` / `shiori.tts.v1`，桌宠拥有语音偏好、输入手势与播放编排，宿主只提供通用原生录音、播放与按键资源。
 

@@ -47,6 +47,21 @@ jobs:
       - name: Enforce kernel LOC budget
         run: .venv/bin/python -m scripts.kernel_loc_budget
 
+      - name: Check generated plugin RPC names
+        run: .venv/bin/python -m scripts.gen_plugin_rpc --check
+
+      - name: Verify every manifest through the real host lifecycle
+        timeout-minutes: 5
+        run: .venv/bin/python -m scripts.verify_plugin_contracts --output "${{ runner.temp }}/plugin-contracts.json"
+
+      - name: Upload manifest lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-contracts
+          path: ${{ runner.temp }}/plugin-contracts.json
+          if-no-files-found: error
+
       - name: Run pyright
         run: |
           .venv/bin/pyright --level error
@@ -116,6 +131,14 @@ jobs:
 
       - name: Build external plugin ZIP and validate it with the real host
         run: node --test scripts/build-plugin.test.mjs
+
+      - name: Check plugin RPC consumers and checker failure cases
+        run: |
+          node scripts/check_plugin_rpc.mjs
+          node --test scripts/check_plugin_rpc.test.mjs
+
+      - name: Verify generated backend and UI plugins
+        run: node --test scripts/new-plugin.test.mjs
 
       - name: Verify frozen runtime SDK imports for external plugins
         timeout-minutes: 5

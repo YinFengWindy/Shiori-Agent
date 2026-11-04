@@ -108,8 +108,8 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 静态拒绝抛 `PackageContractError`，诊断是 `PluginDiagnostic`：
 
 ```json
-{"code": "missing_file", "stage": "validation", "field": "renderer.surface.entry",
- "reason": "原始的文件系统错误或契约拒绝原因", "path": "renderer/surface.mjs", "state": "BLOCKED"}
+{"code": "missing_file", "stage": "validation", "field": "frontend.entry",
+ "reason": "原始的文件系统错误或契约拒绝原因", "path": "renderer/frontend.mjs", "state": "BLOCKED"}
 ```
 
 `code` 给机器读；`field` 指出哪条声明，`reason` 保留原因，`path` 在涉及文件时给出。`stage` 是 `validation`、`discovery`、`trust`、`dependency`、`setup`、`reload` 或某个 renderer 入口类型。名册（`plugins.list`）保留校验诊断，包括格式错误的外部 manifest。运行时失败保留原始错误，不复用静态 `BLOCKED` 诊断。校验通过不等于已信任、已激活或能在每个 renderer 里运行。

@@ -126,7 +126,7 @@ class DemoChatChannel:
 ```
 
 - **启停归宿主**。ChannelHost 负责 `start`/`stop` 和换代，不要用 `BACKGROUND` 服务自己起连接。
-- **`configuration_key`**：保存任何设置都会准备新运行代。key 与上一代相同的渠道直接复用旧连接（不断线），宿主会对新构造但没用上的实例调用一次 `stop()`，所以**构造函数不能产生流量**，连接只在 `start` 里建立。key 应覆盖所有会影响连接的设置；不提供 key 的渠道每次换代都会重建。
+- **`configuration_key`**：设置事务需要发布新运行代时，key 与上一代相同的渠道直接复用旧连接（不断线），宿主会对新构造但没用上的实例调用一次 `stop()`，所以**构造函数不能产生流量**，连接只在 `start` 里建立。key 应覆盖所有会影响连接的设置；不提供 key 的渠道每次换代都会重建。
 - **`start` / `stop` 要可重复调用**：`stop` 对从未启动的实例也要安全；换代失败回滚时，宿主会对已停止的旧实例再次调用 `start`。`start` 里订阅和注册要用标志位防止重复（参考飞书的 `_events_bound`、`_outbound_bound`）。
 - **入站闸门**：换代期间宿主先 `pause_intake()`，新连接以 `ctx.intake_paused=True` 启动，发布后再 `resume_intake()`。在 `start(ctx)` 中调用 `ctx.intake_factory(accept, send)` 获取 `shiori_sdk.channels.services.ChannelIntake`：它在暂停时缓冲入站消息，溢出或关闭时回复「渠道配置正在切换」提示，`stop` 时调用 `close()` 排空。
 - **`stop` 的顺序**：先切断新工作的来源（暂停入站、退订事件、断开连接），再取消或等待在途任务，最后注销出站与推送注册。
@@ -238,7 +238,7 @@ async def stop(self):
 - 渠道代码默认跑在宿主事件循环上。SDK 自带线程或事件循环时（飞书的 lark-oapi 长连接），把连接放到独立线程，回调里只做去重并用 `loop.call_soon_threadsafe` 交回宿主循环，网络与路由都在宿主循环上完成；`stop` 必须有超时，不能让宿主挂起。
 - QQ 由 `plugins/qq/backend/accounts_runtime.py` 的 `QQAccountsRuntime` 管理账号生命周期，每个账号用 `backend/onebot.py` 的 `OneBotSocket` 连接自己的 NapCat 进程；连接设置和事件分发隔离到账号，停止时关闭该账号的 socket 和托管进程。
 - 第三方依赖写进插件 `pyproject.toml` 的 `dependencies`；桌面安装包由宿主的 `apps/backend/requirements/production.txt` 统一打包，新依赖要同时加到那里。
-- 渠道插件应保持 `supports_hot_unload: true`（默认值），否则任何设置保存都会要求重启应用。
+- 渠道插件应保持 `supports_hot_unload: true`（默认值）；渠道声明本身已经禁止代内重载，配置变化走代际交接。只有证实无法安全卸载的原生扩展才写 `false`：它处于活动状态时会阻止需要替换该实例或整代发布的设置事务，但不阻止无变化保存、仅角色模型绑定或无关插件的代内操作。
 
 ## 9. 测试
 

@@ -7,6 +7,14 @@
 
 版本记录见 [插件变更](plugin-changelog.md)。手把手的写法见 [插件开发](plugins-tutorial.md)。这些文档与源码冲突时以源码为准。
 
+## 创建插件
+
+在仓库根目录运行 `pnpm new-plugin example`，带界面时运行 `pnpm new-plugin example --ui`。ID 使用小写 Python 标识符；工具拒绝宿主保留名和已有目录，不覆盖文件。生成包位于 `plugins/example/`，默认 `distribution: external`，包含 API 4 manifest、Python 包与 SDK-only 测试；`--ui` 额外生成前端入口、设置页和错误恢复测试。
+
+后端 RPC 注册有变化后运行 `pnpm rpc:generate`，提交 `rpcMethods.generated.ts` 和 `rpc-contract.generated.json`，再运行 `pnpm rpc:check`。前端用生成常量调用；不维护另一份人工方法列表。`tests/contract.json` 为初始示例选择受限的 RPC 生命周期契约；增加服务、资源或 provider 后，需要补对应宿主 fixture。运行 `pnpm plugins:contract` 验证实际 setup、重载与关闭，具体见[插件测试](../agents/plugin-testing.md)。
+
+通过 `node scripts/build-plugin.mjs --plugin plugins/example --output artifacts/plugins` 构建 ZIP，然后从应用插件设置中安装并确认信任。源码插件的前端不会因创建目录而自动成为宿主内置入口。
+
 ## manifest
 
 ### 字段

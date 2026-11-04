@@ -11,6 +11,10 @@
     ]
   },
   "scripts": {
+    "new-plugin": "node scripts/new-plugin.mjs",
+    "rpc:generate": "uv run python -m scripts.gen_plugin_rpc",
+    "rpc:check": "uv run python -m scripts.gen_plugin_rpc --check && node scripts/check_plugin_rpc.mjs",
+    "plugins:contract": "uv run python -m scripts.verify_plugin_contracts",
     "start": "pnpm run desktop:start",
     "build": "pnpm run build:desktop",
     "build:desktop": "pnpm --filter shiori-desktop run build",

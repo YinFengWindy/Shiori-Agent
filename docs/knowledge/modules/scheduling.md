@@ -36,7 +36,7 @@ related:
 
 角色删除后清理：插件订阅 `RoleDeleted`，取消该角色的所有计划（先持久化移除，再取消等待或运行中的任务）；核心不再有删除前钩子。进程若在删除与清理之间退出，下次启动时 `load_and_recover` 经 `ROLES` 删除不存在角色的任务（包括禁用任务），保留正常角色的禁用任务；读取或写盘失败直接报错，不发布部分恢复状态。任务完成时检查自身是否仍在调度器中，已取消任务不能恢复周期排程，软任务即使在下游吞掉取消后返回内容也不会继续推送。
 
-桌面「任务」面板（`apps/desktop/renderer/src/chat/RoleTasksPanel.tsx`）的外壳留在核心，`roles.tasks.list` / `cancel` 只列出 subagent 后台任务与记忆整理任务（`desktop_bridge/role_task_service.py`）。计划任务由插件前端经 `roleTasks` 插槽挂入整块（`plugins/schedule/ui/`：列表、详情、新建、编辑），数据走插件 RPC `plugin.schedule.{list,create,update,cancel}`；桌面新建的任务投递到该角色的桌面会话。任务变化、开始或结束运行后插件发 `plugin.schedule.tasks.changed`（`{role_id}`），只由当前发布代发出。`list`、`cancel` 在重载暂停准入时仍可用（`admission_exempt`），它们读写的是进程里唯一的调度器，哪一代应答都一样。
+桌面「任务」面板（`apps/desktop/renderer/src/chat/RoleTasksPanel.tsx`）的外壳留在核心，`roles.tasks.list` / `cancel` 只列出 subagent 后台任务与记忆整理任务（`desktop_bridge/role_task_service.py`）。计划任务由插件前端经 `roleTasks` 插槽挂入整块（`plugins/schedule/ui/`：列表、详情、新建、编辑），数据走插件 RPC `schedule.{list,create,update,cancel}`；桌面新建的任务投递到该角色的桌面会话。任务变化、开始或结束运行后插件发 `schedule.tasks.changed`（`{role_id}`），只由当前发布代发出。`list`、`cancel` 在重载暂停准入时仍可用（`admission_exempt`），它们读写的是进程里唯一的调度器，哪一代应答都一样。
 
 ## 修改影响
 

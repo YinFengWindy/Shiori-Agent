@@ -52,7 +52,13 @@ uv 会缓存 `--find-links` 中同名同版本的 wheel，重新构建后不加 
 
 不要使用 editable 安装、设置指向原仓库的 `PYTHONPATH` 或复制宿主 conftest。私有 wheel 缺失时补齐产物，不改为从原仓库导入。
 
-## 仓库外验收
+## 真实宿主生命周期契约
+
+`uv run python -m scripts.verify_plugin_contracts` 枚举所有 manifest，在有效配置和受控外部 I/O 下运行真实宿主的 setup、重载和最终关闭。它检查声明的 provide、注册顺序以及关闭前的资源残留；渠道等不可热卸载插件验证拒绝代内替换并保持原实例，再验证最终关闭。新插件必须有明确 fixture 或脚手架声明的受限 `rpc` profile，缺失不能 skip。SDK-only wheel 隔离仍由下节的独立 runner 负责，这份宿主契约不会取代它。
+
+`pnpm rpc:generate` 从后端实际注册处生成 RPC 名称和来源清单；`pnpm rpc:check` 验证产物未过期并检查前端有限调用名。生命周期观测会与生成集合交叉核对。后台方法按实际 handle 核对；静态 service 引用核对指定提供者与服务，运行时选择的引用只核对已声明的方法名，目标匹配仍由运行时验证。它们不与后端 RPC 混比；这些检查不证明所有 payload 的业务语义。
+
+## 仓库外插件隔离验收
 
 ```sh
 uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-repository/plugin-isolation
