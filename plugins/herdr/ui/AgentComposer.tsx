@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import type { ReactNode } from "react";
 import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { Composer, type ComposerAction } from "./Composer";
@@ -26,7 +27,7 @@ export function directControls(client: PluginRpcClient, host: PluginHostServices
       disabled: !enabled,
       run: async (text) => {
         try {
-          await client.call<AgentCommandResponse>("agents.prompt", { pane_id: paneId, text });
+          await client.call<AgentCommandResponse>(rpcMethods["agents.prompt"], { pane_id: paneId, text });
         } finally {
           onSent();
         }

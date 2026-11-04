@@ -1,3 +1,4 @@
+import { rpcMethods } from "../../rpcMethods.generated";
 import type { AsrResult, BackgroundCtx, BridgeEvent, NativeAudio } from "@yinfengwindy/shiori-sdk";
 import { speechOn, type VoicePreferences } from "./preferences";
 import type { VoiceStatePayload } from "./types";
@@ -82,7 +83,7 @@ export class PetVoiceController {
     const result = await this.ctx.rpc.services.call<AsrResult>(provider, "transcribe", { audio_base64: audio.audio_base64, format: "wav" });
     if (!current()) return;
     if (!result.text.trim()) { this.publish({ status: "idle" }); return; }
-    const context = await this.ctx.rpc.call<Omit<Turn, "turn_id">>("voice.context.get", { role_id: roleId });
+    const context = await this.ctx.rpc.call<Omit<Turn, "turn_id">>(rpcMethods["voice.context.get"], { role_id: roleId });
     if (!current()) return;
     if (context.role_id !== roleId || !context.session_key) throw new Error("桌宠角色上下文已变化");
     const turn = { ...context, turn_id: crypto.randomUUID() };

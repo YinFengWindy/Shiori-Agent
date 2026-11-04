@@ -1,0 +1,45 @@
+{
+  "plugin_id": "qqbot",
+  "dependencies": [],
+  "methods": [
+    "account.detail",
+    "account.disconnect",
+    "account.resolve",
+    "account.save",
+    "account.send",
+    "account.targets"
+  ],
+  "registrations": [
+    {
+      "name": "account.detail",
+      "path": "plugins/qqbot/backend/plugin.py",
+      "line": 46
+    },
+    {
+      "name": "account.disconnect",
+      "path": "plugins/qqbot/backend/plugin.py",
+      "line": 53
+    },
+    {
+      "name": "account.resolve",
+      "path": "plugins/qqbot/backend/plugin.py",
+      "line": 55
+    },
+    {
+      "name": "account.save",
+      "path": "plugins/qqbot/backend/plugin.py",
+      "line": 52
+    },
+    {
+      "name": "account.send",
+      "path": "plugins/qqbot/backend/plugin.py",
+      "line": 54
+    },
+    {
+      "name": "account.targets",
+      "path": "plugins/qqbot/backend/plugin.py",
+      "line": 49
+    }
+  ],
+  "services": []
+}

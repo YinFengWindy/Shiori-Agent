@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 
@@ -39,7 +40,7 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
     setSavedRef("");
     setLoading(true);
     const payload = accountId ? { account_id: accountId } : undefined;
-    void client.call<{ account?: ConnectionSettings; managed_available: boolean }>("accounts.settings", payload)
+    void client.call<{ account?: ConnectionSettings; managed_available: boolean }>(rpcMethods["accounts.settings"], payload)
       .then(({ account, managed_available }) => {
         if (!current) return;
         setManagedAvailable(managed_available);
@@ -63,18 +64,18 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
 
   /** Starts the saved instance, or begins a temporary login when adding. */
   const start = (refresh?: RefreshStatus) => run("connect", async () => {
-    const managedRef = ref || (await client.call<{ ref: string }>("accounts.begin", {
+    const managedRef = ref || (await client.call<{ ref: string }>(rpcMethods["accounts.begin"], {
       role_id: roleId,
     })).ref;
     if (!active.current) {
-      try { await client.call("accounts.cancel", { ref: managedRef, role_id: roleId }); }
+      try { await client.call(rpcMethods["accounts.cancel"], { ref: managedRef, role_id: roleId }); }
       catch (failure) { onCleanupError(failure); }
       return;
     }
     setSavedRef(managedRef);
-    const result = await client.call<{ account_id: string }>("accounts.start", { ref: managedRef, role_id: roleId });
+    const result = await client.call<{ account_id: string }>(rpcMethods["accounts.start"], { ref: managedRef, role_id: roleId });
     if (!active.current) {
-      try { await client.call("accounts.cancel", { ref: managedRef, role_id: roleId }); }
+      try { await client.call(rpcMethods["accounts.cancel"], { ref: managedRef, role_id: roleId }); }
       catch (failure) { onCleanupError(failure); }
       return;
     }
@@ -87,8 +88,8 @@ export function useQQAccountForm({ accountId, roleId, client, onChanged, onClean
    * stops a still-unverified temporary login by its ref.
    */
   const disconnect = (verifiedAccountId: string, refresh?: RefreshStatus) => run("disconnect", async () => {
-    if (verifiedAccountId) await client.call("accounts.disconnect", { account_id: verifiedAccountId });
-    else if (ref) await client.call("accounts.stop", { ref, role_id: roleId });
+    if (verifiedAccountId) await client.call(rpcMethods["accounts.disconnect"], { account_id: verifiedAccountId });
+    else if (ref) await client.call(rpcMethods["accounts.stop"], { ref, role_id: roleId });
     else return;
     onChanged();
     await refresh?.();

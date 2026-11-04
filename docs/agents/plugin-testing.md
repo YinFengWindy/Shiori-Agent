@@ -36,7 +36,7 @@ uv run pytest plugins/example/tests
 - `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
 - 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
 
-公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`；SDK 与 Runtime API 当前版本均为 3.1.2（npm 与 PyPI 均已发布），注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
+公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`。仓库源码已是 SDK 4.0.0 / manifest API 4；旧 `runtime_api` 已删除。4.0.0 尚未正式发布，验证必须使用当前源码构建的私有 wheel/tarball，不能用已发布的 3.1.2 代替。注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
 
 ## 插件副本运行
 
@@ -52,7 +52,13 @@ uv 会缓存 `--find-links` 中同名同版本的 wheel，重新构建后不加 
 
 不要使用 editable 安装、设置指向原仓库的 `PYTHONPATH` 或复制宿主 conftest。私有 wheel 缺失时补齐产物，不改为从原仓库导入。
 
-## 仓库外验收
+## 真实宿主生命周期契约
+
+`uv run python -m scripts.verify_plugin_contracts` 枚举所有 manifest，在有效配置和受控外部 I/O 下运行真实宿主的 setup、重载和最终关闭。它检查声明的 provide、注册顺序以及关闭前的资源残留；渠道等不可热卸载插件验证拒绝代内替换并保持原实例，再验证最终关闭。新插件必须有明确 fixture 或脚手架声明的受限 `rpc` profile，缺失不能 skip。SDK-only wheel 隔离仍由下节的独立 runner 负责，这份宿主契约不会取代它。
+
+`pnpm rpc:generate` 从后端实际注册处生成 RPC 名称和来源清单；`pnpm rpc:check` 验证产物未过期并检查前端有限调用名。生命周期观测会与生成集合交叉核对。后台方法按实际 handle 核对；静态 service 引用核对指定提供者与服务，运行时选择的引用只核对已声明的方法名，目标匹配仍由运行时验证。它们不与后端 RPC 混比；这些检查不证明所有 payload 的业务语义。
+
+## 仓库外插件隔离验收
 
 ```sh
 uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-repository/plugin-isolation
@@ -62,7 +68,7 @@ uv run python -m scripts.verify_plugin_tests --output /absolute/path/outside-rep
 
 脚本在仓库外暂存插件并构建普通 wheel，每个目标使用独立 venv，只安装目标 `[test]`、SDK/testing 与显式依赖。所有 `shiori-*` 包（SDK、目标与兄弟插件）以 `--no-index --no-deps` 从本地 wheelhouse 的 wheel 文件安装，闭包中缺少本地 wheel 即失败，不会回退到公网同名包；这一步同时加 `--no-cache --reinstall`，uv 缓存或环境中同名同版本的旧构建不能顶替刚构建的 wheel；其余第三方依赖单独从索引解析，最后以 `uv pip check` 校验整体依赖，来源探针还要求每个 `shiori-*` 分发记录的来源是 wheelhouse 内的 wheel 文件，且已安装文件与该 wheel 内容逐字节一致、不含 wheel 之外的包文件。`verify_sdk`、`verify_host_distribution` 使用同一安装方式。闭包合并运行时和目标 test extra，传递兄弟依赖只启用依赖边显式请求的 extra，marker 按执行解释器求值。不会默认加入 default_memory 或宿主；任何选中的宿主依赖直接失败。静态守护还检查所有未选中的 optional extra。
 
-每套 pytest 的开始与结束均审计实际宿主顶层包不可导入、已安装分发来自本环境、没有 editable 或仓库路径注入、插件闭包精确、目标代码与副本相同、SDK 版本与 Runtime API 一致。执行探针在初始 conftest 加载前启用，覆盖全部已暂存目标及兄弟依赖的 backend/testing，并拒绝执行仓库内 SDK/宿主源码；临时模块别名即使随后从 sys.modules 删除也不能绕过。已安装入口的来源与哈希覆盖当前目标声明的完整插件依赖闭包，测试本身仍从副本 tests 运行。独立 suite/probe basetemp 避免并行清理彼此证据。全部单测以 `-W error` 真实执行；另开解释器运行故意在 await 后失败的异步用例，要求退出码 1 和执行标记。
+每套 pytest 的开始与结束均审计实际宿主顶层包不可导入、已安装分发来自本环境、没有 editable 或仓库路径注入、插件闭包精确、目标代码与副本相同，以及 SDK 版本与当前源码构建一致。执行探针在初始 conftest 加载前启用，覆盖全部已暂存目标及兄弟依赖的 backend/testing，并拒绝执行仓库内 SDK/宿主源码；临时模块别名即使随后从 sys.modules 删除也不能绕过。已安装入口的来源与哈希覆盖当前目标声明的完整插件依赖闭包，测试本身仍从副本 tests 运行。独立 suite/probe basetemp 避免并行清理彼此证据。全部单测以 `-W error` 真实执行；另开解释器运行故意在 await 后失败的异步用例，要求退出码 1 和执行标记。
 
 `results.json`、各包 `pytest.log`、`provenance.json`、`async-failure.log` 记录实际结果、包版本/来源和无宿主证明。异步探针预期失败不算插件失败。单插件失败会保留日志并继续其余目标，最终以非零退出；结果每完成一包原子写入。构建失败立即停止。
 

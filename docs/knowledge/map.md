@@ -23,7 +23,7 @@ related:
 
 | 领域 | Owning module | 主要下游 |
 | --- | --- | --- |
-| 应用启动与装配 | `apps/backend/main.py`、`apps/backend/bootstrap/app.py`（`AppRuntime`）、`apps/backend/bootstrap/tools.py`（`build_core_runtime` / `CoreRuntime`）、`apps/backend/bootstrap/wiring.py`（memory/context/toolset 注册表） | 渠道、Agent、角色运行时、主动循环、桌面桥接 |
+| 应用启动与装配 | `apps/backend/main.py`、`apps/backend/bootstrap/app.py`（`AppRuntime`）、`apps/backend/bootstrap/tools.py`（`build_core_runtime` / `CoreRuntime`）、`apps/backend/bootstrap/wiring.py`（memory toolset/context/toolset 工厂与回合进度接线） | 渠道、Agent、角色运行时、主动循环、桌面桥接 |
 | 运行时换代与热重载 | `apps/backend/bootstrap/runtime/`（`GenerationManager`、`RuntimeLease`、`RuntimeDispatcher`、`RuntimeBackground`、prepare/publish、关闭顺序） | 设置保存后的配置发布、渠道交接、后台任务交接 |
 | 角色聚合 | `apps/backend/core/roles/store.py`、`apps/backend/core/roles/services.py`、`apps/backend/core/roles/role_runtime.py` | 会话绑定、关系、记忆、主动行为、桌面 UI |
 | 关系与场景 | `plugins/affection/`（关系、好感、寂寞、场景追问状态）、`plugins/scene/`（场景观察）、`apps/backend/core/roles/affection_host.py`、`apps/backend/core/scene/host.py` | 心情/寂寞、主动触发、场景追问、自动 CG |

@@ -1,0 +1,93 @@
+{
+  "plugin_id": "qq",
+  "dependencies": [],
+  "methods": [
+    "account.resolve",
+    "account.send",
+    "account.targets",
+    "accounts.begin",
+    "accounts.cancel",
+    "accounts.disconnect",
+    "accounts.discover",
+    "accounts.logout",
+    "accounts.managed_status",
+    "accounts.refresh_qrcode",
+    "accounts.send",
+    "accounts.settings",
+    "accounts.start",
+    "accounts.stop"
+  ],
+  "registrations": [
+    {
+      "name": "account.resolve",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 108
+    },
+    {
+      "name": "account.send",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 113
+    },
+    {
+      "name": "account.targets",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 103
+    },
+    {
+      "name": "accounts.begin",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 71
+    },
+    {
+      "name": "accounts.cancel",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 82
+    },
+    {
+      "name": "accounts.disconnect",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 75
+    },
+    {
+      "name": "accounts.discover",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 97
+    },
+    {
+      "name": "accounts.logout",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 85
+    },
+    {
+      "name": "accounts.managed_status",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 88
+    },
+    {
+      "name": "accounts.refresh_qrcode",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 93
+    },
+    {
+      "name": "accounts.send",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 102
+    },
+    {
+      "name": "accounts.settings",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 66
+    },
+    {
+      "name": "accounts.start",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 72
+    },
+    {
+      "name": "accounts.stop",
+      "path": "plugins/qq/backend/plugin.py",
+      "line": 78
+    }
+  ],
+  "services": []
+}

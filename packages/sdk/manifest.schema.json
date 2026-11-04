@@ -55,6 +55,16 @@
     },
     "dependencies": { "$ref": "#/$defs/pluginIds" },
     "optional_dependencies": { "$ref": "#/$defs/pluginIds" },
+    "replaces": {
+      "description": "启用时替换这些插件 ID；被替换的插件整体不激活。仅在可运行候选之间判定。",
+      "type": "array",
+      "items": { "$ref": "#/$defs/portableName" }
+    },
+    "conflicts": {
+      "description": "启用时与这些插件 ID 冲突，双方 BLOCKED。仅在可运行候选之间判定。",
+      "type": "array",
+      "items": { "$ref": "#/$defs/portableName" }
+    },
     "inject": {
       "description": "setup 里经 ctx.require 取用的服务 Key 名称；缺少提供方时插件 BLOCKED。",
       "$ref": "#/$defs/keyNames"

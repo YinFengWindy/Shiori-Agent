@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import type { PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 
 /** One stage's guidance as the affection plugin reports it. */
@@ -25,10 +26,10 @@ function checkedRole(response: AffectionStagePrompts, roleId: string) {
 
 /** Reads the role's stage guidance. */
 export async function readAffectionStagePrompts(client: PluginRpcClient, roleId: string) {
-  return checkedRole(await client.call<AffectionStagePrompts>("stage_prompts_get", { role_id: roleId }), roleId);
+  return checkedRole(await client.call<AffectionStagePrompts>(rpcMethods["stage_prompts_get"], { role_id: roleId }), roleId);
 }
 
 /** Writes the named stages and answers with every stage as stored. */
 export async function writeAffectionStagePrompts(client: PluginRpcClient, roleId: string, prompts: AffectionStagePromptChanges) {
-  return checkedRole(await client.call<AffectionStagePrompts>("stage_prompts_set", { role_id: roleId, prompts }), roleId);
+  return checkedRole(await client.call<AffectionStagePrompts>(rpcMethods["stage_prompts_set"], { role_id: roleId, prompts }), roleId);
 }

@@ -54,7 +54,7 @@ export function useManagedRuntime(client: PluginRpcClient) {
     void refresh();
     return () => { revision.current += 1; clearTimeout(timer); };
   }, [client]);
-  const call = useCallback(async (method: string, params: Record<string, string> = {}) => {
+  const call = useCallback(async (method: `runtime.${ManagedRuntimeAction | "relocate"}`, params: Record<string, string> = {}) => {
     const current = revision.current;
     setPending(true); setActionError("");
     try {

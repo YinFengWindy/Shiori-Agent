@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useState } from "react";
 import { errorMessage, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { HerdrSession, SessionListResponse } from "./types";
@@ -13,7 +14,7 @@ export function useHerdrSessions(client: PluginRpcClient) {
 
   useEffect(() => {
     let active = true;
-    client.call<SessionListResponse>("sessions.list").then(
+    client.call<SessionListResponse>(rpcMethods["sessions.list"]).then(
       (response) => { if (active) setState({ sessions: response.sessions, error: null }); },
       (error: unknown) => { if (active) setState({ sessions: null, error: errorMessage(error) }); },
     );

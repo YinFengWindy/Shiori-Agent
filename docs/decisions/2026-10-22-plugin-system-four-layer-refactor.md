@@ -3,6 +3,8 @@
 > 基线：YinFengWindy/Shiori-Agent `main` @ `976f920`。
 > 本文只做规划，不含实现代码。2026-10-22 更新：已记入 27 项决策（D1–D27，见「决策记录」；含 PR #897 两轮审查回应），相关盘点、阶段和 LOC 估算同步调整。审查原文见 [`2026-10-22-plugin-system-review-report.md`](2026-10-22-plugin-system-review-report.md)。LOC 统计用 `wc -l`（含注释和空行，不含测试），数字是量级参考。
 
+> 2026-11-04 收尾说明：本文保留重构前盘点与当时的阶段估算，不作为当前源码布局说明。P0–P8b 已合并；§5 的开发工具与统一契约缺口按[收尾决策](2026-11-04-plugin-refactor-closeout.md)补齐。当前内核只有 plan/activate/deactivate/drain 等原语，start/stop/reload 编排属于宿主与测试 harness，见 [P8b](2026-11-04-kernel-primitives-host-single-state.md)。D12 的机械搬迁方案已由 P7 的音频边界修订取代：宿主持有通用音频原语，插件持有语音策略。后文旧目录、旧方法名与数量仅描述原方案，不构成继续删除现有模块的要求。当前运行边界见[后端架构](../knowledge/architecture/current-backend.md)与[插件生命周期](../_handbook/plugin-lifecycle.md)。
+
 ## 0. 四层规则
 
 | 层 | 定义 | 可禁用 | 依赖方向 |

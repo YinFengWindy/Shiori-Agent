@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { GptSoVitsHealth } from "../shared/contracts";
@@ -13,8 +14,8 @@ export function useServiceHealth(client: PluginRpcClient) {
     const current = ++revision.current;
     setBusy(true); setError("");
     try {
-      if (restarted) await client.call("reconnect", { service_restarted: true });
-      const value = await client.call<GptSoVitsHealth>("health");
+      if (restarted) await client.call(rpcMethods["reconnect"], { service_restarted: true });
+      const value = await client.call<GptSoVitsHealth>(rpcMethods["health"]);
       if (current === revision.current) setHealth(value);
     } catch (cause) { if (current === revision.current) setError(errorMessage(cause)); }
     finally { if (current === revision.current) setBusy(false); }

@@ -25,7 +25,7 @@
 - **重复提供**：两个可运行插件 `provides` 同一个 Key、又没有 `replaces` / `conflicts` 关系时，双方都 `BLOCKED`（`duplicate_provider`），谁也不赢。
 - **与核心撞名**：可运行插件 `provides` 了宿主已经提供的核心 Key，`plan` 直接抛 `KernelError`，整代启动失败。只登记的插件声明核心 Key 不会让规划失败。
 - **成环**：只有 `inject`（硬依赖）能成环，而且只有当环上每个成员都可运行时才拒绝，成员都 `BLOCKED`（`dependency_cycle`）。`optional_inject` 可以互相引用，只用于排序。
-- **`replaces` / `conflicts`**：内核 spec 的字段，只在可运行的 spec 之间判定；manifest 目前没有对应字段。
+- **`replaces` / `conflicts`**：manifest 的插件 ID 列表，原样交给内核规划。只在准入通过且启用的候选之间判定；`replaces: [a]` 让 a 整个插件不激活，`conflicts: [a]` 让双方 BLOCKED。被替换插件自身的 conflicts 不生效。未知 ID 不会自动安装或启动任何插件；列表不接受自身或宿主保留命名空间。因 replaced、conflict 或 duplicate_provider 而 BLOCKED、且准入通过的插件仍可切换开关，以关闭一方解除排除；缺少依赖或包准入失败的 BLOCKED 行不因此获准。
 
 ## 只登记的插件
 
@@ -78,6 +78,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 
 - **停用**：释放目标和正在运行、硬依赖它的插件，**不排空**：`on_drain` 不跑，后台任务（包括 `spawn_runtime`）取消，调用以 `plugin_unavailable` 拒绝，进程资源关闭。目标变 `DISABLED`，依赖方变 `BLOCKED`。目标原本是 `FAILED` 或因依赖 `BLOCKED` 时只变成 `DISABLED`。
 - **启用**：setup 目标和只因它而 `BLOCKED` 的插件，`was_active` 为 `False`。setup 失败的插件留在 `FAILED`，开关照样保存。
+- **替换与冲突**：启用前用同一内核规划器计算关系排除变化，将当前运行的对手及旧、新提供关系下的消费者一起纳入转换。先排空并释放旧实例，再执行新计划，避免旧 Key 与新提供者同时存活；停用替代者或冲突一方后，解除排除的提供者与消费者按计划重新 setup。闭包包含渠道或不可热卸载插件时仍整体拒绝；取消排空保留旧实例，写配置失败恢复旧配置及实例。
 - **可选消费方**：停用和启用都会带上正在运行、用 `optional_inject`（或 `optional_dependencies`）依赖目标的插件及其硬依赖方。它们保持启用，像代内重载一样先排空：排空超时（消费方忙）时这次启停被拒，停用提供方也一样，报 `plugin_reload_busy`，配置不保存，什么都没变。排空完成后，停用时在目标释放后、启用时在目标 setup 之后重新 setup，`was_active` 与 `is_reload` 为 `True`，`get` 拿到的是切换后的提供方（停用时为 `None`）。重新 setup 失败的留在 `FAILED`，开关照样保存。
 - 结果里的 `reloaded_plugins` 与 `plugins.reloaded` 事件同上；renderer 刷新名册，停用插件的 surface 随名册消失而关闭。写配置失败时恢复原状态，报 `runtime_commit_failed`。
 - 与重载相同的只能重启的情况（渠道、`supports_hot_unload: false`），以及启用时依赖了只有重新加载才能重试的插件（比如 `FAILED`），改走代际替换。
@@ -107,8 +108,8 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 静态拒绝抛 `PackageContractError`，诊断是 `PluginDiagnostic`：
 
 ```json
-{"code": "missing_file", "stage": "validation", "field": "renderer.surface.entry",
- "reason": "原始的文件系统错误或契约拒绝原因", "path": "renderer/surface.mjs", "state": "BLOCKED"}
+{"code": "missing_file", "stage": "validation", "field": "frontend.entry",
+ "reason": "原始的文件系统错误或契约拒绝原因", "path": "renderer/frontend.mjs", "state": "BLOCKED"}
 ```
 
 `code` 给机器读；`field` 指出哪条声明，`reason` 保留原因，`path` 在涉及文件时给出。`stage` 是 `validation`、`discovery`、`trust`、`dependency`、`setup`、`reload` 或某个 renderer 入口类型。名册（`plugins.list`）保留校验诊断，包括格式错误的外部 manifest。运行时失败保留原始错误，不复用静态 `BLOCKED` 诊断。校验通过不等于已信任、已激活或能在每个 renderer 里运行。

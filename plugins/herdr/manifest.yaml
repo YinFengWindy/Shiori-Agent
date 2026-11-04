@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0"
 id: herdr
 display_name: Herdr
-version: '0.1.1'
+version: 0.1.2
 desc: 本机 Coding Agent 任务
 default_enabled: false
 config_model: config:HerdrConfig

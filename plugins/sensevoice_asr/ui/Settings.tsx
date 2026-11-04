@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { compactGhostButtonClass, cx, ManagedRuntimePanel, Select, SettingsField, SettingsGroup, settingsGroupStackClass, settingsInputClass, usePrivateAutosave, type PluginSettingsSectionComponentProps, type SelectOption } from "@yinfengwindy/shiori-sdk";
 import type { SenseVoiceSettings } from "./contract";
 import { TranscriptionTest } from "./TranscriptionTest";
@@ -9,8 +10,8 @@ const valueClass = "text-body-sm text-ink-secondary";
 /** Autosaves SenseVoice connection edits and reports actual service readiness. */
 export function SenseVoiceSettingsPage({ client, host }: PluginSettingsSectionComponentProps) {
   const state = usePrivateAutosave<SenseVoiceSettings>(client, "settings", {
-    load: () => client.call<SenseVoiceSettings>("settings.get"),
-    save: (value) => client.call<SenseVoiceSettings>("settings.set", value),
+    load: () => client.call<SenseVoiceSettings>(rpcMethods["settings.get"]),
+    save: (value) => client.call<SenseVoiceSettings>(rpcMethods["settings.set"], value),
   });
   // Health describes the stored endpoint and resets whenever a save lands.
   const connection = useServiceHealth(client, state.saved);

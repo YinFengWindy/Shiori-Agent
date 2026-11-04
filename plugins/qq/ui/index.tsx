@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import React, { useEffect } from "react";
 import { ChatCircleIcon } from "@phosphor-icons/react";
 import { errorMessage, type PluginAccountDetailComponentProps, type PluginUiModule } from "@yinfengwindy/shiori-sdk";
@@ -15,7 +16,7 @@ function QQAccountEditor({ account, roleId, onChanged, client, host }: PluginAcc
   useEffect(() => {
     if (accountId || !form.ref) return;
     const ref = form.ref;
-    return () => { void client.call("accounts.cancel", { ref, role_id: roleId }).catch((failure: unknown) => {
+    return () => { void client.call(rpcMethods["accounts.cancel"], { ref, role_id: roleId }).catch((failure: unknown) => {
       host.feedback.error("QQ 临时连接清理失败", { detail: errorMessage(failure, { includeDetail: true }) });
     }); };
   }, [accountId, form.ref, client, roleId, host.feedback]);

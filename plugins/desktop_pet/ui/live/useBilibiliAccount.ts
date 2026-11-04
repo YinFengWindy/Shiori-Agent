@@ -1,3 +1,4 @@
+import { rpcMethods } from "../../rpcMethods.generated";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, useLatestRef, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { BilibiliAccountStatus, BilibiliLoginPoll, BilibiliLoginStart, BilibiliScanState } from "./liveContracts";
@@ -36,7 +37,7 @@ export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open
     const since = accountChanges.current;
     setError("");
     try {
-      const next = await client.call<BilibiliAccountStatus>("bilibili.account.status", { role_id: roleId });
+      const next = await client.call<BilibiliAccountStatus>(rpcMethods["bilibili.account.status"], { role_id: roleId });
       if (since === accountChanges.current) setAccount(next);
     } catch (cause) {
       setError(errorMessage(cause));
@@ -60,7 +61,7 @@ export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open
   const poll = async () => {
     const asked = shownQr.current;
     try {
-      const result = await client.call<BilibiliLoginPoll>("bilibili.login.poll", { role_id: roleId });
+      const result = await client.call<BilibiliLoginPoll>(rpcMethods["bilibili.login.poll"], { role_id: roleId });
       if (result.state === "success") {
         changeAccount({ state: "logged_in", account: result.account });
         setQr((current) => current?.qrcode === asked ? null : current);
@@ -84,7 +85,7 @@ export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open
     reload: () => { void loadAccount(); },
     /** Shows a fresh QR, replacing any earlier one. */
     startLogin: () => run(async () => {
-      const ticket = await client.call<BilibiliLoginStart>("bilibili.login.start", { role_id: roleId });
+      const ticket = await client.call<BilibiliLoginStart>(rpcMethods["bilibili.login.start"], { role_id: roleId });
       setQr({ qrcode: ticket.qrcode, scan: ticket.state });
     }),
     /** Hides the QR; nothing is sent, the backend key simply expires. A poll already in flight may still log in. */
@@ -92,7 +93,7 @@ export function useBilibiliAccount(client: PluginRpcClient, roleId: string, open
     logout: () => run(async () => {
       setQr(null);
       // The backend drops the credentials and any pending QR and answers `{ state: "logged_out" }`.
-      changeAccount(await client.call<BilibiliAccountStatus>("bilibili.account.logout", { role_id: roleId }));
+      changeAccount(await client.call<BilibiliAccountStatus>(rpcMethods["bilibili.account.logout"], { role_id: roleId }));
     }),
   };
 }

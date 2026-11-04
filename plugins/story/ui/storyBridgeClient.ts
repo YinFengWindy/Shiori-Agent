@@ -1,3 +1,4 @@
+import { rpcMethods, type RpcMethod } from "../rpcMethods.generated";
 import { PluginBridgeError, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { StoryCgGallery, StoryCreationInput, StoryDetails, StoryResource, StorySummary } from "./types";
 import { StoryBridgeError } from "./types";
@@ -25,9 +26,9 @@ type StoryCgGalleryPayload = {
   items: StoryResourcePayload[];
 };
 
-async function invokePayload<T>(client: PluginRpcClient, method: string, payload: Record<string, unknown>): Promise<T> {
+async function invokePayload<T>(client: PluginRpcClient, method: RpcMethod, payload: Record<string, unknown>): Promise<T> {
   try {
-    return await client.call<T>(method.replace(/^stories\./, ""), payload);
+    return await client.call<T>(method, payload);
   } catch (error) {
     if (error instanceof PluginBridgeError) throw new StoryBridgeError(error.message, error.code, error.details);
     throw error;
@@ -65,7 +66,7 @@ export function createStoryBridgeClient(client: PluginRpcClient): StoryBridgeCli
   const latestStories = new Map<string, StoryDetails>();
 
   async function getStory(storyId: string): Promise<StoryDetails> {
-    const story = (await invokePayload<{ story: StoryPayload }>(client, "stories.get", { story_id: storyId })).story;
+    const story = (await invokePayload<{ story: StoryPayload }>(client, rpcMethods["get"], { story_id: storyId })).story;
     return rememberStory(story);
   }
 
@@ -81,7 +82,7 @@ export function createStoryBridgeClient(client: PluginRpcClient): StoryBridgeCli
 
   return {
     async listStories() {
-      const payload = await invokePayload<{ stories: StorySummaryPayload[] }>(client, "stories.list", {});
+      const payload = await invokePayload<{ stories: StorySummaryPayload[] }>(client, rpcMethods["list"], {});
       return payload.stories.map(toStorySummary);
     },
     getStory,
@@ -100,11 +101,11 @@ export function createStoryBridgeClient(client: PluginRpcClient): StoryBridgeCli
         },
       };
       requestPayload.creation_id = creationId;
-      const payload = await invokePayload<{ story: StoryPayload }>(client, "stories.create", requestPayload);
+      const payload = await invokePayload<{ story: StoryPayload }>(client, rpcMethods["create"], requestPayload);
       return rememberStory(payload.story);
     },
     async submitInput(storyId, input) {
-      const payload = await invokePayload<{ story: StoryPayload }>(client, "stories.input", {
+      const payload = await invokePayload<{ story: StoryPayload }>(client, rpcMethods["input"], {
         story_id: storyId,
         input,
         expected_revision: revisions.get(storyId) ?? 0,
@@ -112,14 +113,14 @@ export function createStoryBridgeClient(client: PluginRpcClient): StoryBridgeCli
       return rememberStory(payload.story);
     },
     async continueStory(storyId) {
-      const payload = await invokePayload<{ story: StoryPayload }>(client, "stories.continue", {
+      const payload = await invokePayload<{ story: StoryPayload }>(client, rpcMethods["continue"], {
         story_id: storyId,
         expected_revision: revisions.get(storyId) ?? 0,
       });
       return rememberStory(payload.story);
     },
     async listCgGallery() {
-      const payload = await invokePayload<{ stories: StoryCgGalleryPayload[] }>(client, "stories.cg.list", {});
+      const payload = await invokePayload<{ stories: StoryCgGalleryPayload[] }>(client, rpcMethods["cg.list"], {});
       return payload.stories.map((story) => ({
         storyId: story.story_id,
         title: story.title,
@@ -129,14 +130,14 @@ export function createStoryBridgeClient(client: PluginRpcClient): StoryBridgeCli
       }));
     },
     async retryCg(storyId, resourceId) {
-      const payload = await invokePayload<{ story: StoryPayload }>(client, "stories.cg.retry", {
+      const payload = await invokePayload<{ story: StoryPayload }>(client, rpcMethods["cg.retry"], {
         story_id: storyId,
         resource_id: resourceId,
       });
       return rememberStory(payload.story);
     },
     async regenerateCg(storyId, resourceId) {
-      const payload = await invokePayload<{ story: StoryPayload }>(client, "stories.cg.regenerate", {
+      const payload = await invokePayload<{ story: StoryPayload }>(client, rpcMethods["cg.regenerate"], {
         story_id: storyId,
         resource_id: resourceId,
       });

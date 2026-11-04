@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useCallback, useEffect, useState } from "react";
 import { errorMessage, usePluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { PromptTagWorkspaceSectionId } from "./novelAiPageStore";
@@ -39,7 +40,7 @@ export function usePromptTagLibrary(
   const [saving, setSaving] = useState(false);
 
   const loadEntries = useCallback(async (): Promise<PromptTagEntry[]> => {
-    const payload = await client.call<{ entries: PromptTagEntry[] }>("prompt_tags.list", {});
+    const payload = await client.call<{ entries: PromptTagEntry[] }>(rpcMethods["prompt_tags.list"], {});
     const next = Array.isArray(payload.entries) ? payload.entries : [];
     setEntries(next);
     setLoaded(true);
@@ -71,7 +72,7 @@ export function usePromptTagLibrary(
     setSaving(true);
     setError("");
     try {
-      await client.call("prompt_tags.upsert", payload);
+      await client.call(rpcMethods["prompt_tags.upsert"], payload);
       setSelectedId(payload.id);
       setDraft(payload);
       onOpenSection("detail");
@@ -86,7 +87,7 @@ export function usePromptTagLibrary(
   }
 
   async function remove(id: string): Promise<void> {
-    await client.call("prompt_tags.delete", { id });
+    await client.call(rpcMethods["prompt_tags.delete"], { id });
     if (selectedId === id) {
       setSelectedId("");
       setDraft(emptyPromptTagDraft);

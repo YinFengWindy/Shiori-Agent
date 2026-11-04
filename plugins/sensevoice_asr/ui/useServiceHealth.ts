@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useRef, useState } from "react";
 import { errorMessage, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { SenseVoiceHealth, SenseVoiceSettings } from "./contract";
@@ -18,7 +19,7 @@ export function useServiceHealth(client: PluginRpcClient, settings: SenseVoiceSe
     const current = ++revision.current;
     setBusy(true); setError("");
     try {
-      const value = await client.call<SenseVoiceHealth>("health");
+      const value = await client.call<SenseVoiceHealth>(rpcMethods["health"]);
       if (current === revision.current) setHealth(value);
     } catch (cause) { if (current === revision.current) setError(errorMessage(cause)); }
     finally { if (current === revision.current) setBusy(false); }

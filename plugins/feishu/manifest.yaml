@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0"
 id: feishu
 display_name: 飞书
-version: '0.1.2'
+version: 0.1.3
 desc: 飞书 / Lark 私聊渠道（长连接收消息，流式卡片回复）
 inject:
   - channels

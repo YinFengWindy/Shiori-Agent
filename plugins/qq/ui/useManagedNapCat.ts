@@ -1,3 +1,4 @@
+import { rpcMethods, type RpcMethod } from "../rpcMethods.generated";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, type HostInlineErrorProps, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { napCatPreparing } from "./qqStatusPresentation";
@@ -35,7 +36,7 @@ export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: 
   const reload = useCallback(async () => {
     if (!enabled || !ref) return;
     try {
-      const next = await client.call<ManagedStatus>("accounts.managed_status", { ref });
+      const next = await client.call<ManagedStatus>(rpcMethods["accounts.managed_status"], { ref });
       setStatus(next);
       setError(null);
     } catch (failure) {
@@ -63,7 +64,7 @@ export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: 
     }
   }, [status?.account_id, onVerified]);
 
-  async function command(kind: "refresh" | "logout", method: string, payload: Record<string, unknown>) {
+  async function command(kind: "refresh" | "logout", method: RpcMethod, payload: Record<string, unknown>) {
     setPending(kind);
     setError(null);
     try {
@@ -75,7 +76,7 @@ export function useManagedNapCat(client: PluginRpcClient, ref: string, enabled: 
       setPending(null);
     }
   }
-  const refreshQr = () => command("refresh", "accounts.refresh_qrcode", { ref });
-  const logout = (accountId: string) => command("logout", "accounts.logout", { account_id: accountId });
+  const refreshQr = () => command("refresh", rpcMethods["accounts.refresh_qrcode"], { ref });
+  const logout = (accountId: string) => command("logout", rpcMethods["accounts.logout"], { account_id: accountId });
   return { status, error, pending, busy: pending !== null, reload, refreshQr, logout };
 }

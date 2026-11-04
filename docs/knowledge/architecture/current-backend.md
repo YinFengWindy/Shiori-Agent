@@ -2,7 +2,7 @@
 title: 当前后端架构
 kind: 架构说明
 status: 当前有效
-last_verified_commit: a0dc6d73
+last_verified_commit: 0f870fd0
 source_paths:
   - apps/backend/main.py
   - apps/backend/bootstrap/app.py
@@ -32,7 +32,7 @@ related:
 
 ## 进程与装配
 
-`apps/backend/main.py` 的 `serve_bridge()` 先恢复未完成的配置事务（`ConfigTransaction.recover()`）并应用待处理的插件包安装/卸载操作，再构建 `AppRuntime`。`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()` 经 `bootstrap/runtime/construction.py:prepare_core_runtime()` 调用 `apps/backend/bootstrap/tools.py:build_core_runtime()` 装配一代 `CoreRuntime`（构建失败时回收已分配资源）。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、Scheduler、LLMProvider、MemoryRuntime、presence（`SessionManager.presence`，即 `session/presence.py` 的 `SessionPresence`）、RoleRuntimeRegistry、GroupEnvironment、群聊旁听开关和 PluginKernel。好感、场景观察和 MCP 登记由插件提供；stdio MCP 客户端在 `infra/process/mcp_client.py`。
+`apps/backend/main.py` 的 `serve_bridge()` 先恢复未完成的配置事务（`ConfigTransaction.recover()`）并应用待处理的插件包安装/卸载操作，再构建 `AppRuntime`。`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()` 经 `bootstrap/runtime/construction.py:prepare_core_runtime()` 调用 `apps/backend/bootstrap/tools.py:build_core_runtime()` 装配一代 `CoreRuntime`（构建失败时回收已分配资源）。CoreRuntime 持有 AgentLoop、MessageBus、EventBus、ToolRegistry、SessionManager、调度与主动回合的宿主端口、LLMProvider、MemoryRuntime、presence（`SessionManager.presence`，即 `session/presence.py` 的 `SessionPresence`）、RoleRuntimeRegistry、GroupEnvironment、群聊旁听开关和 PluginKernel。好感、场景观察和 MCP 登记由插件提供；stdio MCP 客户端在 `infra/process/mcp_client.py`。
 
 ```mermaid
 flowchart TD
@@ -40,7 +40,7 @@ flowchart TD
   B --> C[prepare_core_runtime / build_core_runtime]
   C --> D[Providers / RoleStore / SessionManager]
   C --> E[RoleRuntimeRegistry]
-  C --> F[Tool / Memory / Scheduler / MCP]
+  C --> F[Tool / Markdown Memory / plugin host ports]
   C --> G[AgentLoop + lifecycle wiring]
   C --> H[PluginKernel]
   B --> P[CoreRuntime.start: PluginKernel.load_all + AgentLoop / spawn 绑定内核]
@@ -65,9 +65,9 @@ flowchart TD
 - `GenerationManager` / `RuntimeCandidate` 管理按引用计数的多代 `CoreRuntime`；`RuntimeLease` 把一个任务固定在开始时选中的那一代。
 - `RuntimeReloadMixin.prepare()` / `publish()` 由设置事务边界（`desktop_bridge/runtime/apply.py`）调用：先构建新一代，再切换发布指针，旧代在已接收工作排空后关闭（`CoreRuntime.stop()` + `MemoryRuntime.aclose()`）。
 - `RuntimeDispatcher` 是 bus 的唯一消费者，为每条渠道消息获取租约后交给当代 `AgentLoop.process_inbound()`；定时任务与子回合沿用父操作的那一代。
-- `RuntimeBackground` 为每一代准备主动循环（记忆整理已是系统插件 `memory_optimizer` 的进程资源，不在这里）。换代或关闭时 `stop()` 取消上一代在途的后台工作（主动 tick 放弃未发出的部分，已进出站队列的回复照常发出），新一代等它退出后按自身间隔重新调度；切换不等待卡在模型重试里的后台任务。
+- `RuntimeBackground` 在代发布时通知 `SCENE_HOST`，不再构造主动循环。`schedule`、`proactive` 与 `memory_optimizer` 分别拥有跨代进程资源，并在发布后重绑可用端口；宿主提供租约与角色执行边界。插件停用关闭其资源，普通代替换按各资源的保留规则交接。
 - `ChannelHost`（`bootstrap/channel_host.py`）是跨代长驻的渠道宿主，负责渠道启动、交接与失败快照。
-- 例外：`plugin.config.set` 只改一张插件表时不换代（#857）。`RuntimeSettingsApplication._reload_plugin` 调 `PluginKernel.reload` 在当前代内重载目标及其强依赖消费者（排空它们自己的在途调用，含正在执行的 `on` / `watch` 事件处理器，最长 60 秒），落盘在内核不可取消的替换步骤里完成，桥接发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、目标非 ACTIVE 时仍走整代切换；已停用插件只落盘。
+- 例外：`plugin.config.set` 只改一张插件表时不换代（#857）。`RuntimeSettingsApplication._reload_plugin` 调 `PluginKernel.reload` 在当前代内重载目标及其强依赖和活动可选消费者（排空它们自己的在途调用，含正在执行的 `on` / `watch` 事件处理器，最长 60 秒），落盘在内核不可取消的替换步骤里完成，桥接发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、目标非 ACTIVE 时仍走整代切换；已停用插件只落盘。
 - 例外：`plugins.setEnabled` 同样不换代（#858）。`_reload_plugin` 改调 `PluginKernel.set_enabled`：停用直接处置目标及其活动的强依赖消费者（不排空，在途工作随之取消，进程资源关闭），按启用标记与内核状态派生 DISABLED / BLOCKED；启用加载 DISABLED 的目标和因它而 BLOCKED 的消费者，setup 失败照整代切换的做法保留为 FAILED。启停都带上活动的可选消费者（`optional_inject` / `optional_dependencies`，#949）：先排空，再随切换重新 setup（`was_active` 为真），失败同样保留为 FAILED。落盘失败恢复原状态，桥接同样发 `plugins.reloaded`。闭包含渠道或不支持热卸载的插件、启用目标的依赖处于 FAILED 等只能整代重试的状态时仍走整代切换。
 
 ## Bridge 与消息入口
@@ -118,8 +118,8 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 - `ToolRegistry` 保存工具、schema、风险、always-on、搜索索引和 source metadata；MCP 工具也同步到该 registry。内置 toolset 由 `apps/backend/bootstrap/toolsets/` 注册。
 - 记忆契约 `MemoryEngine`、`MemoryQuery`、`MemoryQueryResult`、`MemoryMutation` 定义在 SDK 的 `packages/sdk/python/shiori_sdk/memory/`；插座是 `MEMORY_ENGINE`。`default_memory` 在 setup 里构造并 `provide`。`MemoryRuntime` 的 getter 读这一代的插座，可以是 None：没有语义检索时对话仍继续，Markdown 记忆照常。
 - `PluginKernel` 同时负责 discover/import/config/context 注入、EventBus handler、tool、channel、RPC、服务注册、initialize rollback、drain 和 terminate；插件的回合与工具事件处理器挂在本代内核（`shiori_sdk.kernel`）上。
-- 回合与工具事件经本代内核发出：`CoreRuntime.start()` 把读取本代内核的来源绑定给 `AgentLoop.bind_kernel()` 与 spawn 的 `SubagentManager.bind_kernel()`，主动循环（`RuntimeBackground`）同样传入该来源。被动回合各阶段（`agent/core/turn_events.py` 的 `TurnEvents`）与 `ToolExecutor` 每次发出事件时读取内核，内核只运行当前 ACTIVE 插件的处理器，插件在代内卸载或新加载后下一次回合/工具调用/主动 tick 即生效。阶段本身只由核心模块组成，构造一次。
-- `ScopedEventBus` 将每个事件订阅注册到所属 `EffectScope`，插件卸载和初始化回滚会撤销贡献；已经开始的 handler 由插件 disposer 等待或取消。
+- 回合与工具事件经本代内核发出：`CoreRuntime.start()` 把读取本代内核的来源绑定给 `AgentLoop.bind_kernel()` 与 spawn 的 `SubagentManager.bind_kernel()`，主动插件通过本代 `PROACTIVE_HOST` 进入角色执行边界。被动回合各阶段（`agent/core/turn_events.py` 的 `TurnEvents`）与 `ToolExecutor` 每次发出事件时读取内核，内核只运行当前 ACTIVE 插件的处理器，插件在代内卸载或新加载后下一次回合/工具调用/主动 tick 即生效。阶段本身只由核心模块组成，构造一次。
+- typed `on` / `watch` 由 SDK Kernel 的 Scope 管理；宿主事件 binder 同样把订阅登记到该 Scope。卸载与 setup 失败回滚先撤销订阅，再取消任务，最后按 LIFO 释放 effect；排空与不可卸载判断由宿主在替换前执行。
 
 ## 持久化边界
 
@@ -136,11 +136,11 @@ LLM 调用由 `apps/backend/agent/provider.py` 封装，使用官方 `openai` SD
 ```mermaid
 flowchart TD
   A[AppRuntime.shutdown] --> B[关闭 bus 入站]
-  B --> C[停止 AgentLoop / Scheduler 控制任务]
-  C --> D[停止并取消各代 RuntimeBackground 在途工作]
+  B --> C[停止 AgentLoop 控制任务]
+  C --> D[停止并排空各代 RuntimeBackground]
   D --> E[排空各代已接收工作: CoreRuntime.drain]
   E --> F[排空出站并停止 ChannelHost]
-  F --> G[各代 CoreRuntime.stop: PluginKernel.terminate_all / MCP.shutdown / EventBus.aclose / provider.aclose]
+  F --> G[各代 CoreRuntime.stop: PluginKernel.terminate_all / EventBus.aclose / provider.aclose]
   G --> H[MemoryRuntime.aclose]
   H --> I[停止出站分发 / 关闭进程 EventBus]
   I --> J[SharedHttpResources.aclose]

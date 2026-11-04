@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import type { AffectionSummary, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 
 /** Where one affection change came from; mirrors the backend's `AffectionSource`. */
@@ -34,7 +35,7 @@ export const affectionHistoryBatchSize = 20;
 
 /** Reads one page of the role's affection history; another role's answer is an error. */
 export async function readAffectionHistory(client: PluginRpcClient, roleId: string, page: number) {
-  const response = await client.call<AffectionHistoryPage>("history", {
+  const response = await client.call<AffectionHistoryPage>(rpcMethods["history"], {
     role_id: roleId,
     page,
     page_size: affectionHistoryBatchSize,

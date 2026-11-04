@@ -97,7 +97,6 @@ async def test_fixed_runtime_local_page_multimodal_persistence_and_cancellation(
         )
     )
     assert metadata == expected
-    assert metadata["agentBrowser"]["version"] == "0.38.2"
     # Runtime evidence must describe the executable actually used by this test.
     with (native / "agent-browser.exe").open("rb") as executable:
         runtime_sha256 = hashlib.file_digest(executable, "sha256").hexdigest()

@@ -1,0 +1,83 @@
+{
+  "plugin_id": "sensevoice_asr",
+  "dependencies": [],
+  "methods": [
+    "health",
+    "runtime.cancel",
+    "runtime.prepare",
+    "runtime.relocate",
+    "runtime.remove",
+    "runtime.start",
+    "runtime.status",
+    "runtime.stop",
+    "settings.get",
+    "settings.set",
+    "transcribe_file"
+  ],
+  "registrations": [
+    {
+      "name": "health",
+      "path": "plugins/sensevoice_asr/backend/plugin.py",
+      "line": 84
+    },
+    {
+      "name": "runtime.cancel",
+      "path": "packages/sdk/python/shiori_sdk/managed/rpc.py",
+      "line": 135
+    },
+    {
+      "name": "runtime.prepare",
+      "path": "packages/sdk/python/shiori_sdk/managed/rpc.py",
+      "line": 135
+    },
+    {
+      "name": "runtime.relocate",
+      "path": "packages/sdk/python/shiori_sdk/managed/rpc.py",
+      "line": 135
+    },
+    {
+      "name": "runtime.remove",
+      "path": "packages/sdk/python/shiori_sdk/managed/rpc.py",
+      "line": 135
+    },
+    {
+      "name": "runtime.start",
+      "path": "packages/sdk/python/shiori_sdk/managed/rpc.py",
+      "line": 135
+    },
+    {
+      "name": "runtime.status",
+      "path": "packages/sdk/python/shiori_sdk/managed/rpc.py",
+      "line": 126
+    },
+    {
+      "name": "runtime.stop",
+      "path": "packages/sdk/python/shiori_sdk/managed/rpc.py",
+      "line": 135
+    },
+    {
+      "name": "settings.get",
+      "path": "plugins/sensevoice_asr/backend/plugin.py",
+      "line": 82
+    },
+    {
+      "name": "settings.set",
+      "path": "plugins/sensevoice_asr/backend/plugin.py",
+      "line": 83
+    },
+    {
+      "name": "transcribe_file",
+      "path": "plugins/sensevoice_asr/backend/plugin.py",
+      "line": 85
+    }
+  ],
+  "services": [
+    {
+      "service_id": "asr",
+      "contract": "shiori.asr.v1",
+      "methods": [
+        "transcribe"
+      ]
+    }
+  ]
+}

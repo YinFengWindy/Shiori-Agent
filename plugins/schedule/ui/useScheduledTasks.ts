@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useEffect, useState } from "react";
 import { errorMessage, useLatestRef, type PluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { ScheduledTask, ScheduleTaskFormData } from "./types";
@@ -30,7 +31,7 @@ function withTask(task: ScheduledTask): TasksChange {
 }
 
 async function readTasks(client: PluginRpcClient, roleId: string) {
-  const { tasks } = await client.call<{ tasks: ScheduledTask[] }>("list", { role_id: roleId });
+  const { tasks } = await client.call<{ tasks: ScheduledTask[] }>(rpcMethods["list"], { role_id: roleId });
   return tasks;
 }
 
@@ -102,7 +103,7 @@ export function useScheduledTasks(client: PluginRpcClient, host: PluginHostServi
   async function create(data: ScheduleTaskFormData) {
     const { task } = await mutate(
       { kind: "create", taskId: "" },
-      () => client.call<{ task: ScheduledTask }>("create", { ...data, role_id: roleId }),
+      () => client.call<{ task: ScheduledTask }>(rpcMethods["create"], { ...data, role_id: roleId }),
       (result) => withTask(result.task),
     );
     return task;
@@ -111,7 +112,7 @@ export function useScheduledTasks(client: PluginRpcClient, host: PluginHostServi
   async function update(taskId: string, data: ScheduleTaskFormData) {
     await mutate(
       { kind: "update", taskId },
-      () => client.call<{ task: ScheduledTask }>("update", { ...data, task_id: taskId, role_id: roleId }),
+      () => client.call<{ task: ScheduledTask }>(rpcMethods["update"], { ...data, task_id: taskId, role_id: roleId }),
       (result) => withTask(result.task),
     );
   }
@@ -119,7 +120,7 @@ export function useScheduledTasks(client: PluginRpcClient, host: PluginHostServi
   async function cancel(taskId: string) {
     await mutate(
       { kind: "cancel", taskId },
-      () => client.call<{ tasks: ScheduledTask[] }>("cancel", { task_id: taskId, role_id: roleId }),
+      () => client.call<{ tasks: ScheduledTask[] }>(rpcMethods["cancel"], { task_id: taskId, role_id: roleId }),
       (result) => () => result.tasks,
     );
   }

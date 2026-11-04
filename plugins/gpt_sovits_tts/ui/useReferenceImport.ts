@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { useState } from "react";
 import { errorMessage, usePluginHostServices, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 
@@ -20,7 +21,7 @@ export function useReferenceImport(client: PluginRpcClient, roleId: string) {
     try {
       const [source] = await host.pickFiles({ namespace: "gpt_sovits_tts-audio", filters: [{ name: "WAV 参考音频", extensions: ["wav"] }], maxFileBytes: 32 * 1024 * 1024 });
       if (!source) return null;
-      return await client.call<ImportedReference>("reference.import", { role_id: roleId, source });
+      return await client.call<ImportedReference>(rpcMethods["reference.import"], { role_id: roleId, source });
     } catch (cause) {
       setError(errorMessage(cause));
       return null;

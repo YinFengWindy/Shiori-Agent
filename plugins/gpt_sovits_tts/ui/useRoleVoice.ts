@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { usePrivateAutosave, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { RoleVoice } from "../shared/contracts";
 
@@ -7,8 +8,8 @@ import type { RoleVoice } from "../shared/contracts";
  */
 export function useRoleVoice(client: PluginRpcClient, roleId: string | null) {
   return usePrivateAutosave<RoleVoice>(client, roleId, {
-    load: () => client.call<RoleVoice>("role.get", { role_id: roleId }),
-    save: (voice) => client.call<RoleVoice>("role.set", { role_id: roleId, voice }),
+    load: () => client.call<RoleVoice>(rpcMethods["role.get"], { role_id: roleId }),
+    save: (voice) => client.call<RoleVoice>(rpcMethods["role.set"], { role_id: roleId, voice }),
   });
 }
 

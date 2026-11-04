@@ -1,3 +1,4 @@
+import { rpcMethods } from "../../rpcMethods.generated";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import type { LiveStatus } from "./liveContracts";
@@ -34,7 +35,7 @@ export function useLiveRun(client: PluginRpcClient, roleId: string, open: boolea
   const refresh = useCallback(async () => {
     const id = ++requests.current;
     try {
-      const next = await client.call<LiveStatus>("live.status", { role_id: roleId });
+      const next = await client.call<LiveStatus>(rpcMethods["live.status"], { role_id: roleId });
       if (id !== requests.current) return;
       setStatus((current) => sameStatus(current, next) ? current : next);
       setReadError("");
@@ -51,7 +52,7 @@ export function useLiveRun(client: PluginRpcClient, roleId: string, open: boolea
     setPending(action);
     setActionError("");
     try {
-      const next = await client.call<LiveStatus>(`live.${action}`, { role_id: roleId });
+      const next = await client.call<LiveStatus>(rpcMethods[`live.${action}`], { role_id: roleId });
       setStatus((current) => sameStatus(current, next) ? current : next);
     } catch (cause) {
       // e.g. 开始 refused by a precondition: the backend's reason is shown as is.

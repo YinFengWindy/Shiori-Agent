@@ -7,6 +7,14 @@
 
 版本记录见 [插件变更](plugin-changelog.md)。手把手的写法见 [插件开发](plugins-tutorial.md)。这些文档与源码冲突时以源码为准。
 
+## 创建插件
+
+在仓库根目录运行 `pnpm new-plugin example`，带界面时运行 `pnpm new-plugin example --ui`。ID 使用小写 Python 标识符；工具拒绝宿主保留名和已有目录，不覆盖文件。生成包位于 `plugins/example/`，默认 `distribution: external`，包含 API 4 manifest、Python 包与 SDK-only 测试；`--ui` 额外生成前端入口、设置页和错误恢复测试。
+
+后端 RPC 注册有变化后运行 `pnpm rpc:generate`，提交 `rpcMethods.generated.ts` 和 `rpc-contract.generated.json`，再运行 `pnpm rpc:check`。前端用生成常量调用；不维护另一份人工方法列表。`tests/contract.json` 为初始示例选择受限的 RPC 生命周期契约；增加服务、资源或 provider 后，需要补对应宿主 fixture。运行 `pnpm plugins:contract` 验证实际 setup、重载与关闭，具体见[插件测试](../agents/plugin-testing.md)。
+
+通过 `node scripts/build-plugin.mjs --plugin plugins/example --output artifacts/plugins` 构建 ZIP，然后从应用插件设置中安装并确认信任。源码插件的前端不会因创建目录而自动成为宿主内置入口。
+
 ## manifest
 
 ### 字段
@@ -25,6 +33,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `frontend.entry` | 否 | 包内前端入口，具名导出 `ui` / `background` / `surface`。外部构建生成同一 ESM 的 `frontend.exports`、`frontend.css` 和 `frontend.peers`，见[前端契约](plugin-frontend.md#入口与产物) |
 | `assets` | 否 | 必须存在的包内常规文件列表，默认 `[]` |
 | `dependencies` / `optional_dependencies` | 否 | 插件 ID 列表（强 / 可选），不能重复出现在两边 |
+| `replaces` / `conflicts` | 否 | 其他插件的合法 ID 列表，不引用自身或宿主保留命名空间。只在准入通过且启用的候选间判定：replaces 让被替换插件整体不激活，conflicts 让双方 BLOCKED；详见生命周期 |
 | `supports_hot_unload` | 否 | 布尔，默认 `true`；只有证实无法安全卸载的原生扩展才写 `false`。声明渠道的插件由宿主判为不可代内重载；TTS/ASR 保持默认。闭包含不可重载插件时整体走需重启路径 |
 | `display_name` / `category` / `default_enabled` | 否 | 标题、`feature` / `channel` / `system` 分组、默认启用（严格布尔） |
 | `distribution` | 否 | `builtin`（默认）或 `external` |
@@ -65,7 +74,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 `ctx.require` 只取 `inject` 里的 Key，`ctx.get` 只取 `optional_inject`，`ctx.provide` 只发布 `provides`；没声明就抛内核的 `undeclared_key`。声明了但当前没有提供方时，`require` 抛 `provider_unavailable`。消费方每次用时再取，不要缓存跨代的引用。
 
-宿主在任何插件启动前 `provide` 它拥有的核心 Key。`config`、`kv`、`dependencies`、`runtime`、`services` 是逐插件现建的：宿主在内核里只放一个标记，`require` 时换成为这个插件建好的对象；`kv`、`services` 只在被声明时才建。宿主没能建出某个已声明的对象时抛 `HostServiceUnavailable`，setup 失败并留下 `PluginDiagnostic`。账号、渠道、工具等 Key 给每个插件一份按插件 ID 隔离的视图。
+宿主在任何插件启动前 `provide` 它拥有的核心 Key。`config`、`kv`、`dependencies`、`runtime` 是逐插件现建的：宿主在内核里只放一个标记，`require` 时换成为这个插件建好的对象；`kv` 只在被声明时才建。宿主没能建出某个已声明的对象时抛 `HostServiceUnavailable`，setup 失败并留下 `PluginDiagnostic`。账号、渠道、工具、RPC 和 `services` 等 Key 由 binder 给每个插件一份绑定其作用域与调用门的视图；释放该作用域就撤回对应注册。
 
 插件 `provides` 一个核心 Key 会让整代启动失败；两个插件 `provides` 同一个 Key 时双方都 `BLOCKED`。细节见[生命周期](plugin-lifecycle.md#规划)。
 

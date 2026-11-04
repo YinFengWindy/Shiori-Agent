@@ -1458,3 +1458,191 @@ async def test_toggle_views_show_not_started_while_an_optional_consumer_restarts
         await enabling
     assert {view.state for view in kernel.views()} == {"ACTIVE"}
     await kernel.terminate_all(force=True)
+
+
+def _relation_plugins(tmp_path, relation, *, provider_manifest=""):
+    for plugin_id in ("first", "second"):
+        _write(
+            tmp_path,
+            plugin_id,
+            "provides: [shared.engine]\n"
+            + (
+                f"{relation}: [first]\n"
+                if plugin_id == "second" and relation != "duplicate_provider"
+                else provider_manifest if plugin_id == "first" else ""
+            ),
+            "import sys\nfrom shiori_sdk.kernel import Key\n"
+            "async def setup(ctx):\n"
+            f"    ctx.provide(Key('shared.engine'), {plugin_id!r})\n"
+            f"    sys.modules['reload_probe'].events.append(('setup', {plugin_id!r}))\n"
+            f"    ctx.effect('close', lambda: sys.modules['reload_probe'].events.append(('dispose', {plugin_id!r})))\n",
+        )
+    _write(
+        tmp_path,
+        "consumer",
+        "inject: [shared.engine]\n",
+        "import sys\nfrom shiori_sdk.kernel import Key\n"
+        "async def setup(ctx):\n"
+        "    value = ctx.require(Key('shared.engine'))\n"
+        "    sys.modules['reload_probe'].events.append(('consumer', value))\n"
+        "    ctx.expose(value)\n",
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("relation", ["replaces", "conflicts", "duplicate_provider"])
+async def test_enabling_a_manifest_relation_retires_the_excluded_live_provider(
+    probe, tmp_path, relation
+):
+    _relation_plugins(tmp_path, relation)
+    settings = PluginGenerationSettings(plugin_configs={"second": {"enabled": False}})
+    kernel = host_kernel([tmp_path], settings=settings)
+    await kernel.load_all()
+    try:
+        await set_plugin_enabled(kernel, "second", True)
+        expected = (
+            {"first": "BLOCKED", "second": "ACTIVE", "consumer": "ACTIVE"}
+            if relation == "replaces"
+            else dict.fromkeys(("first", "second", "consumer"), "BLOCKED")
+        )
+        assert _states(kernel) == expected
+        assert ("dispose", "first") in probe.events
+        if relation == "replaces":
+            assert probe.events.index(("dispose", "first")) < probe.events.index(
+                ("setup", "second")
+            )
+            assert kernel._dependency_api("consumer") == "second"
+            result = await kernel.reload(
+                "second",
+                values={"enabled": True},
+                raw_values={"enabled": True},
+                drain_timeout=5,
+            )
+            assert set(result.plugin_ids) == {"second", "consumer"}
+            assert _states(kernel) == expected
+        await set_plugin_enabled(kernel, "second", False)
+        assert _states(kernel) == {
+            "first": "ACTIVE",
+            "second": "DISABLED",
+            "consumer": "ACTIVE",
+        }
+        assert kernel._dependency_api("consumer") == "first"
+    finally:
+        await kernel.terminate_all(force=True)
+    # Cold startup with both enabled reaches the same graph before any setup.
+    probe.events.clear()
+    cold = host_kernel([tmp_path])
+    await cold.load_all()
+    try:
+        assert _states(cold) == expected
+        assert ("setup", "first") not in probe.events
+        if relation != "replaces":
+            assert probe.events == []
+        else:
+            assert cold._dependency_api("consumer") == "second"
+    finally:
+        await cold.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "provider_manifest",
+    ["supports_hot_unload: false\n", "inject: [channels]\n" + _RELAY_CHANNEL],
+)
+async def test_manifest_replacement_refuses_restart_only_opponent_before_disposal(
+    probe, tmp_path, provider_manifest
+):
+    _relation_plugins(tmp_path, "replaces", provider_manifest=provider_manifest)
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            plugin_configs={"second": {"enabled": False}}
+        ),
+    )
+    await kernel.load_all()
+    probe.events.clear()
+    try:
+        with pytest.raises(PluginReloadUnsupported):
+            await set_plugin_enabled(kernel, "second", True)
+        assert _states(kernel) == {
+            "first": "ACTIVE",
+            "second": "DISABLED",
+            "consumer": "ACTIVE",
+        }
+        assert kernel._dependency_api("consumer") == "first"
+        assert probe.events == []
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_replacement_commit_restores_old_provider_and_consumer(
+    probe, tmp_path
+):
+    _relation_plugins(tmp_path, "replaces")
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            plugin_configs={"second": {"enabled": False}}
+        ),
+    )
+    await kernel.load_all()
+
+    def refuse(_ids):
+        raise OSError("commit unavailable")
+
+    try:
+        with pytest.raises(PluginReloadFailed) as failed:
+            await kernel.set_enabled(
+                "second",
+                values={"enabled": True},
+                raw_values={"enabled": True},
+                drain_timeout=5,
+                commit=refuse,
+            )
+        assert failed.value.restore_failed == {}
+        assert _states(kernel) == {
+            "first": "ACTIVE",
+            "second": "DISABLED",
+            "consumer": "ACTIVE",
+        }
+        assert kernel._dependency_api("consumer") == "first"
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_replacement_drain_can_be_cancelled_without_disposing_old_provider(
+    probe, tmp_path
+):
+    _relation_plugins(tmp_path, "replaces")
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            plugin_configs={"second": {"enabled": False}}
+        ),
+    )
+    await kernel.load_all()
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def drain():
+        entered.set()
+        await release.wait()
+
+    kernel.kernel.scope("first").drainers.append(drain)
+    switching = asyncio.create_task(set_plugin_enabled(kernel, "second", True))
+    try:
+        await asyncio.wait_for(entered.wait(), 1)
+        switching.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await switching
+        assert _states(kernel) == {
+            "first": "ACTIVE",
+            "second": "DISABLED",
+            "consumer": "ACTIVE",
+        }
+        assert ("dispose", "first") not in probe.events
+        assert kernel._instances["first"].calls.open
+    finally:
+        release.set()
+        await kernel.terminate_all(force=True)

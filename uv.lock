@@ -1845,7 +1845,7 @@ requires-dist = [
 
 [[package]]
 name = "shiori-plugin-default-memory"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "plugins/default_memory" }
 dependencies = [
     { name = "httpx" },
@@ -1872,7 +1872,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "shiori-plugin-herdr"
-version = "0.1.1"
+version = "0.1.2"
 source = { editable = "plugins/herdr" }
 dependencies = [
     { name = "pydantic" },

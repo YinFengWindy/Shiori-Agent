@@ -2,7 +2,7 @@
 title: 启动与关闭流程
 kind: 流程说明
 status: 当前有效
-last_verified_commit: bdfdae59
+last_verified_commit: 0f870fd0
 source_paths:
   - apps/backend/main.py
   - apps/backend/bootstrap/app.py
@@ -37,7 +37,7 @@ sequenceDiagram
   Core->>Core: AgentLoop / spawn 绑定内核（回合与工具事件每次使用时读取）
   App->>App: GenerationManager.start(第 1 代)
   App->>App: start_channels() -> ChannelHost.start_all()
-  App->>App: RuntimeDispatcher / outbound / RuntimeBackground（定时任务、寂寞心跳由各自插件启动）
+  App->>App: RuntimeDispatcher / outbound / RuntimeBackground 发布 scene；定时、主动与整理循环由插件拥有
   Main->>Bridge: create server
   Bridge-->>Main: serve_stdio()
 ```
@@ -51,7 +51,7 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
   participant App as AppRuntime
-  participant Loop as Bus / AgentLoop / Scheduler
+  participant Loop as Bus / AgentLoop
   participant Gen as 各代 CoreRuntime
   participant Plugin as PluginKernel
   participant Store as Channels / Memory / HTTP
@@ -62,7 +62,7 @@ sequenceDiagram
   App->>Store: ChannelHost.stop_all()
   App->>Gen: stop(force)
   Gen->>Plugin: terminate_all()
-  Gen->>Gen: MCP shutdown / EventBus close / provider close
+  Gen->>Gen: EventBus close / provider close
   Gen->>Store: MemoryRuntime.aclose()
   App->>Loop: stop outbound dispatch, close EventBus
   App->>Store: SharedHttpResources.aclose()

@@ -1,0 +1,63 @@
+{
+  "plugin_id": "novelai",
+  "dependencies": [],
+  "methods": [
+    "generate",
+    "history",
+    "prompt_tags.delete",
+    "prompt_tags.list",
+    "prompt_tags.upsert",
+    "regenerateMessageMedia",
+    "role_settings.get",
+    "role_settings.set",
+    "status"
+  ],
+  "registrations": [
+    {
+      "name": "generate",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 236
+    },
+    {
+      "name": "history",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 244
+    },
+    {
+      "name": "prompt_tags.delete",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 256
+    },
+    {
+      "name": "prompt_tags.list",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 250
+    },
+    {
+      "name": "prompt_tags.upsert",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 255
+    },
+    {
+      "name": "regenerateMessageMedia",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 239
+    },
+    {
+      "name": "role_settings.get",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 138
+    },
+    {
+      "name": "role_settings.set",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 141
+    },
+    {
+      "name": "status",
+      "path": "plugins/novelai/backend/plugin.py",
+      "line": 247
+    }
+  ],
+  "services": []
+}

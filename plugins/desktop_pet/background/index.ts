@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import { chatTerminalEventMethods, type PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController, desktopPetSurfaceId } from "./controller";
@@ -35,7 +36,7 @@ const desktopPetBackground = {
       settings: normalizeDesktopPetSettings(await ctx.store.read()),
       saveSettings: (settings) => ctx.store.write(settings),
       resolveBinding: async () => readDesktopPetBinding(
-        await ctx.rpc.call("binding.get"),
+        await ctx.rpc.call(rpcMethods["binding.get"]),
         (path) => ctx.assets.url(path),
       ),
       onError: reportError,
@@ -69,7 +70,7 @@ const desktopPetBackground = {
     // Optional speech initialization cannot tear down the pet's visual and text features.
     let preferences = defaultVoicePreferences;
     try {
-      preferences = await ctx.rpc.call<VoicePreferences>("voice.preferences.get");
+      preferences = await ctx.rpc.call<VoicePreferences>(rpcMethods["voice.preferences.get"]);
     } catch (error) {
       reportError("voice.preferences", error);
     }

@@ -1,3 +1,4 @@
+import { rpcMethods } from "../rpcMethods.generated";
 import type { PluginHostServices, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
 import { directControls, type DirectControl } from "./AgentComposer";
 import { Composer } from "./Composer";
@@ -25,7 +26,7 @@ export function ContinueComposer({ task, connected, client, host, onApplied, dir
     errorTitle: "追加要求未提交",
     disabled: !connected || !task.can_continue,
     run: async (requirement: string) => {
-      onApplied(await client.call<TaskDetailResponse>("tasks.continue", { task_id: task.id, requirement }));
+      onApplied(await client.call<TaskDetailResponse>(rpcMethods["tasks.continue"], { task_id: task.id, requirement }));
     },
   };
   const controls = direct ? directControls(client, host, direct, "直接发送") : null;
