@@ -145,6 +145,9 @@ class PluginManifest:
     dependencies: tuple[str, ...] = ()
     # Optional APIs never cause provider activation or dependent teardown.
     optional_dependencies: tuple[str, ...] = ()
+    # Enabled candidates may replace another plugin or conflict with it (D24).
+    replaces: tuple[str, ...] = ()
+    conflicts: tuple[str, ...] = ()
     # Kernel service keys (``Key.name``): required through ``ctx.require``,
     # optional through ``ctx.get``, and published through ``ctx.provide``.
     inject: tuple[str, ...] = ()
@@ -259,6 +262,8 @@ def _parse_manifest(
         config_model=_optional_str(raw.get("config_model")),
         dependencies=dependencies,
         optional_dependencies=optional_dependencies,
+        replaces=_parse_relations(raw, "replaces", plugin_id),
+        conflicts=_parse_relations(raw, "conflicts", plugin_id),
         inject=inject,
         optional_inject=optional_inject,
         provides=provides,
@@ -540,3 +545,18 @@ def _parse_keys(raw: dict[str, object], field: str) -> tuple[str, ...]:
     ):
         raise ManifestError(f"{field} 必须是服务 Key 名称的列表（非空、无首尾空白）")
     return tuple(dict.fromkeys(value))
+
+
+def _parse_relations(
+    raw: dict[str, object], field: str, plugin_id: str
+) -> tuple[str, ...]:
+    """Read plugin-id relations without allowing self or nonportable targets."""
+    targets = _parse_dependencies(raw, field)
+    if any(
+        target == plugin_id
+        or target in HOST_RPC_NAMESPACES
+        or re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", target) is None
+        for target in targets
+    ):
+        raise ManifestError(f"{field} 必须引用其他插件的合法 ID")
+    return targets

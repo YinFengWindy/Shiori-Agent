@@ -445,6 +445,9 @@ class PluginKernel:
                 )
             else:
                 closure = closures.disable_closure(target, self.views(), self._kernel)
+            closure = closures.relation_closure(
+                target, enabled, closure, self.views(), self._kernel, self._spec
+            )
             if closure is None:
                 previous = tables.swap(plugin_id, values, raw_values)
                 try:

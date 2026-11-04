@@ -44,6 +44,8 @@ _PACKAGE_FIELDS = {
     "config_model",
     "dependencies",
     "optional_dependencies",
+    "replaces",
+    "conflicts",
     "inject",
     "optional_inject",
     "provides",

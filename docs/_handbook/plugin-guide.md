@@ -25,6 +25,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `frontend.entry` | 否 | 包内前端入口，具名导出 `ui` / `background` / `surface`。外部构建生成同一 ESM 的 `frontend.exports`、`frontend.css` 和 `frontend.peers`，见[前端契约](plugin-frontend.md#入口与产物) |
 | `assets` | 否 | 必须存在的包内常规文件列表，默认 `[]` |
 | `dependencies` / `optional_dependencies` | 否 | 插件 ID 列表（强 / 可选），不能重复出现在两边 |
+| `replaces` / `conflicts` | 否 | 其他插件的合法 ID 列表，不引用自身或宿主保留命名空间。只在准入通过且启用的候选间判定：replaces 让被替换插件整体不激活，conflicts 让双方 BLOCKED；详见生命周期 |
 | `supports_hot_unload` | 否 | 布尔，默认 `true`；只有证实无法安全卸载的原生扩展才写 `false`。声明渠道的插件由宿主判为不可代内重载；TTS/ASR 保持默认。闭包含不可重载插件时整体走需重启路径 |
 | `display_name` / `category` / `default_enabled` | 否 | 标题、`feature` / `channel` / `system` 分组、默认启用（严格布尔） |
 | `distribution` | 否 | `builtin`（默认）或 `external` |

@@ -281,3 +281,80 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
             if sibling.startswith("shiori-plugin-"):
                 assert sibling in projects, (name, requirement)
                 assert projects[sibling] in requirement.specifier, (name, requirement)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "relation, after",
+    [
+        ("replaces", {"first": "BLOCKED", "external_demo": "ACTIVE"}),
+        ("conflicts", {"first": "BLOCKED", "external_demo": "BLOCKED"}),
+    ],
+)
+async def test_trusted_package_relations_take_effect_only_after_approval(
+    contract_package, tmp_path, relation, after
+):
+    from functools import partial
+    from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
+    from agent.plugin_host.package_fingerprint import inspect_package_content
+    from agent.plugin_host.settings import PluginGenerationSettings
+    from tests.support.plugin_kernel import host_kernel, set_plugin_enabled
+
+    _change(contract_package, **{relation: ["first"]})
+    import json
+    from jsonschema import Draft202012Validator
+    from tests.support.plugin_kernel import REPOSITORY_ROOT
+
+    schema = json.loads(
+        (REPOSITORY_ROOT / "packages/sdk/manifest.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    Draft202012Validator(schema).validate(
+        yaml.safe_load((contract_package / "manifest.yaml").read_text(encoding="utf-8"))
+    )
+    validated = validate_package(contract_package)
+    assert getattr(validated.manifest, relation) == ("first",)
+    first = tmp_path / "builtins" / "first"
+    (first / "backend").mkdir(parents=True)
+    (first / "manifest.yaml").write_text(
+        "api: 4\nsdk: '>=4.0.0'\nid: first\n", encoding="utf-8"
+    )
+    (first / "backend/plugin.py").write_text(
+        "async def setup(ctx): ctx.expose('first')\n", encoding="utf-8"
+    )
+    trust = PluginTrustStore(tmp_path)
+    kernel = host_kernel(
+        [first.parent, tmp_path],
+        external_plugin_dirs=[tmp_path],
+        settings=PluginGenerationSettings(
+            workspace=tmp_path, is_trusted=partial(trust.is_trusted, activation=True)
+        ),
+    )
+    await kernel.load_all()
+    try:
+        assert kernel.view("first").state == "ACTIVE"
+        assert kernel.view("external_demo").state == "UNTRUSTED"
+        content = inspect_package_content(contract_package)
+        trust.approve(contract_package, content.fingerprint, approved_session="")
+        candidate = next(
+            record
+            for record in kernel.inspect_candidates()
+            if record.manifest.id == "external_demo"
+        )
+        await kernel.admit_trusted_candidate(candidate)
+        await set_plugin_enabled(kernel, "external_demo", True)
+        assert {view.plugin_id: view.state for view in kernel.views()} == after
+    finally:
+        await kernel.terminate_all(force=True)
+
+
+@pytest.mark.parametrize("relation", ["replaces", "conflicts"])
+@pytest.mark.parametrize("targets", ["first", ["../first"], ["external_demo"]])
+def test_package_relations_reject_malformed_or_self_targets_before_trust(
+    contract_package, relation, targets
+):
+    _change(contract_package, **{relation: targets})
+    with pytest.raises(PackageContractError) as rejected:
+        validate_package(contract_package)
+    assert rejected.value.diagnostic.code == "invalid_manifest"

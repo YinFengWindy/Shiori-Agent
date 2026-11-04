@@ -225,6 +225,8 @@ def build_spec(
             *manifest.optional_inject,
         ),
         provides=(plugin_key(manifest.id).name, *manifest.provides),
+        replaces=manifest.replaces,
+        conflicts=manifest.conflicts,
         runnable=runnable(record, settings),
         hot_reload=manifest.supports_hot_unload,
         channels=bool(record.manifest.channels),

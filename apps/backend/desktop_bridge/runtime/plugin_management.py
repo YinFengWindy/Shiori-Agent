@@ -104,9 +104,16 @@ class RuntimePluginManagement:
                     "content_fingerprint": record.fingerprint,
                     "content_hashes": record.content_hashes,
                     "enabled": self._enabled(record.manifest),
-                    # A replacement has already passed admission. Its queued
-                    # toggle/uninstall must wait for the settings transaction.
+                    # Transitional and graph-excluded candidates passed admission.
+                    # Their toggle waits for the transaction or resolves the graph;
+                    # actual package/dependency admission failures stay disabled.
                     "can_toggle": view.diagnostic == NOT_STARTED
+                    or (
+                        record.admission is None
+                        and view.diagnostic is not None
+                        and view.diagnostic.code
+                        in {"replaced", "conflict", "duplicate_provider"}
+                    )
                     or runtime_state
                     not in {"CONFLICT", "UNTRUSTED", "BLOCKED", "RESTART_REQUIRED"},
                     "supports_hot_unload": record.manifest.supports_hot_unload,

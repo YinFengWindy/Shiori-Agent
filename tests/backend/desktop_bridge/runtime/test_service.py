@@ -996,3 +996,75 @@ async def test_plugin_disable_waits_for_not_started_replacement(
         },
     )
     assert rejected.error is not None and rejected.error.code == "plugin_not_admitted"
+
+
+@pytest.mark.parametrize("relation", ["replaces", "conflicts", "duplicate_provider"])
+async def test_graph_excluded_plugins_can_be_disabled_to_restore_the_provider(
+    plugin_runtime, tmp_path, monkeypatch, relation
+):
+    packages = {}
+    for plugin_id in ("first", "second", "consumer", "missing"):
+        package = tmp_path / "source" / plugin_id
+        (package / "backend").mkdir(parents=True)
+        if plugin_id == "consumer":
+            declarations = "inject: [rpc, shared.engine]\n"
+            source = (
+                "from shiori_sdk.kernel import Key\nfrom shiori_sdk.core.services import RPC\n"
+                "async def setup(ctx):\n"
+                "    value = ctx.require(Key('shared.engine'))\n"
+                "    async def echo(payload): return {'provider': value}\n"
+                "    ctx.require(RPC).register('echo', echo)\n"
+            )
+        elif plugin_id == "missing":
+            declarations = "inject: [unavailable.key]\n"
+            source = "async def setup(ctx): pass\n"
+        else:
+            declarations = "provides: [shared.engine]\n"
+            if plugin_id == "second" and relation != "duplicate_provider":
+                declarations += f"{relation}: [first]\n"
+            source = f"from shiori_sdk.kernel import Key\nasync def setup(ctx): ctx.provide(Key('shared.engine'), {plugin_id!r})\n"
+        (package / "manifest.yaml").write_text(
+            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n" + declarations,
+            encoding="utf-8",
+        )
+        (package / "backend/plugin.py").write_text(source, encoding="utf-8")
+        packages[plugin_id] = package
+    monkeypatch.setattr(
+        "shiori_host_testing.pytest_plugin.plugin_directory", packages.__getitem__
+    )
+    async with plugin_runtime(tuple(packages), "") as (bridge, _path):
+        before = (await plugin_bridge_request(bridge, "plugins.list")).payload[
+            "plugins"
+        ]
+        first = next(row for row in before if row["id"] == "first")
+        assert first["state"] == "BLOCKED" and first["can_toggle"]
+        assert (
+            first["diagnostic"]["code"]
+            == {
+                "replaces": "replaced",
+                "conflicts": "conflict",
+                "duplicate_provider": "duplicate_provider",
+            }[relation]
+        )
+        missing = next(row for row in before if row["id"] == "missing")
+        assert missing["state"] == "BLOCKED" and not missing["can_toggle"]
+        disabled = await plugin_bridge_request(
+            bridge,
+            "plugins.setEnabled",
+            {
+                "plugin_id": "second",
+                "enabled": False,
+                "operation_id": "resolve-graph-exclusion",
+            },
+        )
+        assert disabled.error is None
+        assert (await plugin_bridge_request(bridge, "consumer.echo")).payload == {
+            "provider": "first"
+        }
+        after = (await plugin_bridge_request(bridge, "plugins.list")).payload["plugins"]
+        assert {row["id"]: row["state"] for row in after} == {
+            "first": "ACTIVE",
+            "second": "DISABLED",
+            "consumer": "ACTIVE",
+            "missing": "BLOCKED",
+        }
