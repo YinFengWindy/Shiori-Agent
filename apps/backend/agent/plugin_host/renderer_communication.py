@@ -3,9 +3,9 @@
 from typing import Literal, Protocol
 
 CommunicationEndReason = Literal[
-    "context_disposed", "plugin_disabled", "plugin_reloading", "runtime_replaced"
+    "context_disposed", "plugin_disabled", "plugin_reloading"
 ]
-"""Why a renderer owner stopped accepting work."""
+"""Why the plugin host withdraws a renderer owner."""
 
 
 class RendererCommunication(Protocol):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
 from agent.account_delivery.turn_state import mark_account_delivery_sent
 from core.accounts import AccountRegistry
@@ -31,13 +31,17 @@ from shiori_sdk.accounts.routing import (
     AccountRoute,
 )
 from core.identity import IdentityChat, UserIdentityStore, identities_for_account
-
-if TYPE_CHECKING:
-    # The registry is injected; importing its package here initializes the kernel
-    # and turn orchestration before AccountDelivery itself has been defined.
-    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
+from shiori_sdk.rpc import RpcHandler
 
 logger = logging.getLogger(__name__)
+
+
+class AccountRpcResolver(Protocol):
+    """Resolve account handlers without depending on the bridge registry."""
+
+    def resolve(self, full_name: str, /) -> tuple[str, RpcHandler] | None:
+        """Return the owning plugin and its handler, or None when unavailable."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -114,7 +118,7 @@ class AccountDelivery:
     def __init__(
         self,
         accounts: AccountRegistry,
-        rpc: PluginRpcRegistry[Any],
+        rpc: AccountRpcResolver,
         ledger: AccountDeliveryLedger,
         identities: UserIdentityStore,
     ) -> None:

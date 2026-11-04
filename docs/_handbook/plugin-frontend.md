@@ -41,7 +41,7 @@ React、React DOM 和 SDK 主入口是宿主提供的对等依赖，不打进插
 
 名册初载、桥接重连、`runtime.applied`、`plugins.changed`、`plugins.reloaded` 和启停开关走同一条串行刷新路径。某个入口导入、样式或导出校验失败时，宿主撤掉这个插件已渲染的部分，在插件管理页显示 `UI FAILED`，并经 `plugins.activation.report` 回报后端，后端把整个插件回滚到 `FAILED` / `RESTART_REQUIRED` 并重新发布名册，其它窗口随之拆掉过期的贡献；其它插件不受影响。
 
-每个入口（和名册行）带一个不透明的 `activation_token`，插件句柄每次变成 `ACTIVE` 都会铸新的。renderer 回报激活结果时原样带回，不匹配就当作未知插件处理。这样停用再启用之后，旧代际里被放弃的加载不能确认或判失败当前句柄。代内重载后，被重载插件的 renderer 入口用新 token 重新回报激活。
+每个入口（和名册行）带一个不透明的 `activation_token`，插件每次激活成功都会为当前实例铸新的。renderer 回报激活结果时原样带回，不匹配就当作未知插件处理。这样停用再启用之后，旧代际里被放弃的加载不能确认或判失败当前实例。代内重载后，被重载插件的 renderer 入口用新 token 重新回报激活。
 
 ## 注入的 client
 

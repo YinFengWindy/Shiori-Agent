@@ -2,11 +2,14 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from shiori_sdk.rpc import PluginRpcError
 from agent.plugin_host.renderer_communication import CommunicationEndReason
+
+RendererRequestEndReason = CommunicationEndReason | Literal["runtime_replaced"]
+"""A host-requested withdrawal or retirement of the bridge's whole generation."""
 
 _END_MESSAGES = {
     "context_disposed": "插件通信已处置",
@@ -69,7 +72,7 @@ class RendererRequests:
         self,
         owner: str | None = None,
         *,
-        reason: CommunicationEndReason = "context_disposed",
+        reason: RendererRequestEndReason = "context_disposed",
     ) -> None:
         """Rejects requests for a removed endpoint or a replaced runtime generation."""
         for request_id, request in list(self.pending.items()):
