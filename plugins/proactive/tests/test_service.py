@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from shiori_sdk.testing.processes import FakeProcesses
 
 from plugins.proactive.backend import loop as loop_module
 from plugins.proactive.backend.loop import ProactiveLoop
@@ -125,7 +124,7 @@ def _binding(
         host=host,  # type: ignore[arg-type]
         conversation=object(),  # type: ignore[arg-type]
         roles=roles,  # type: ignore[arg-type]
-        processes=FakeProcesses(),
+        dependencies=None,
         workspace=workspace,
         presence=None,
         markdown=_Markdown(),  # type: ignore[arg-type]
@@ -346,7 +345,7 @@ async def test_each_tick_rereads_the_role_settings(tmp_path: Path) -> None:
         roles=roles,  # type: ignore[arg-type]
         role_prompt_fn=lambda: "",
         state_path=_db(tmp_path, "mira"),
-        processes=FakeProcesses(),
+        dependencies=None,
         config_fn=read,  # type: ignore[arg-type]
         tick_dispatcher=dispatch,  # type: ignore[arg-type]
     )
@@ -426,7 +425,7 @@ async def test_switching_off_releases_mcp_and_feeds_within_a_check(
         roles=roles,  # type: ignore[arg-type]
         role_prompt_fn=lambda: "",
         state_path=_db(tmp_path, "mira"),
-        processes=FakeProcesses(),
+        dependencies=None,
         config_fn=read,  # type: ignore[arg-type]
         tick_dispatcher=dispatch,  # type: ignore[arg-type]
     )

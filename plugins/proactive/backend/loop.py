@@ -14,7 +14,6 @@ import asyncio
 import logging
 import random as _random_module
 import time
-from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, cast
@@ -42,14 +41,14 @@ from .session_workspace import SessionWorkspace
 from shiori_sdk.core.conversation import Conversation
 from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
-from shiori_sdk.processes import Processes
+from shiori_sdk.extensions import Dependencies
 from shiori_sdk.roles import Roles
 from shiori_sdk.session_keys import role_id_from_session_key
 
 logger = logging.getLogger(__name__)
 
 # How often a waiting loop rereads its role's switch and config: a switch
-# turned off releases MCP sessions, feed polling and the state store within
+# turned off releases feed polling and the state store within
 # this many seconds, and a changed config reschedules the next tick.
 SETTINGS_CHECK_SECONDS = 60.0
 
@@ -65,7 +64,7 @@ class ProactiveLoop:
         roles: Roles,
         role_prompt_fn: Callable[[], str],
         state_path: Path,
-        processes: Processes | None = None,
+        dependencies: Dependencies | None = None,
         config_fn: Callable[[Roles], ProactiveConfig] | None = None,
         max_tokens: int = 1024,
         memory_store: "MemoryProfileApi | MemoryRetrievalApi | None" = None,
@@ -89,7 +88,7 @@ class ProactiveLoop:
         switch found off skips ticks and closes what is open, a changed config
         rebuilds the tick pipeline and reschedules. ``config`` is only the
         starting point. Nothing is opened until a tick runs: the state store
-        at ``state_path``, the MCP pool (stdio sessions from ``processes``)
+        at ``state_path``, the MCP source adapter
         and the feed poller start with the first tick that runs."""
         self._sessions = session_manager
         self._cfg = config
@@ -97,7 +96,7 @@ class ProactiveLoop:
         self._max_tokens = max_tokens
         self._state_path = state_path
         self._state: ProactiveStateStore | None = None
-        self._processes = processes
+        self._dependencies = dependencies
         self._memory = memory_store
         self._presence = presence
         self._rng = rng
@@ -134,20 +133,16 @@ class ProactiveLoop:
 
         workspace = getattr(self._sessions, "workspace", None)
 
-        def open_session(name: str, command: Sequence[str], env: dict[str, str]):
-            if self._processes is None:
-                raise RuntimeError("MCP 会话需要宿主进程服务")
-            return self._processes.mcp(name, list(command), dict(env))
-
         return McpClientPool(
-            Path(workspace) if workspace else None, open_session=open_session
+            Path(workspace) if workspace else None,
+            dependencies=lambda: getattr(self, "_dependencies", None),
         )
 
     def rebind(
         self,
         *,
         sessions: SessionWorkspace,
-        processes: Processes | None,
+        dependencies: Dependencies | None,
         conversation: Conversation,
         roles: Roles,
         max_tokens: int,
@@ -165,7 +160,7 @@ class ProactiveLoop:
         ``run`` keeps the pipeline object it started with.
         """
         self._sessions = sessions
-        self._processes = processes
+        self._dependencies = dependencies
         self._conversation = conversation
         self._roles = roles
         self._max_tokens = max_tokens
@@ -321,10 +316,10 @@ class ProactiveLoop:
             await self._release()
 
     async def _prepare(self) -> None:
-        """Opens what a running tick needs, once: state, pipeline, MCP, feeds.
+        """Opens the tick state and feeds; the MCP plugin owns connections.
 
-        Connecting and the first feed poll sit inside ``run``'s cleanup
-        boundary: a stop can cancel them after some servers are already up.
+        The first feed poll sits inside ``run``'s cleanup
+        boundary: a stop can cancel them during an accepted source call.
         """
         if self._prepared:
             return
@@ -332,7 +327,6 @@ class ProactiveLoop:
             self._state = ProactiveStateStore(self._state_path)
         self._init_runtime_components()
         self._prepared = True
-        await self._mcp_pool.connect_all()
         # 首次 tick 前同步完成一次 feed 轮询，保证拿到新鲜数据
         await self._poll_feeds_once()
         self._poll_task = asyncio.create_task(self._poll_loop())
@@ -347,14 +341,9 @@ class ProactiveLoop:
                 poll_task, self._poll_task = self._poll_task, None
                 await self._stop_poll_task(poll_task)
         finally:
-            try:
-                # Never leaks MCP connections.
-                await self._mcp_pool.disconnect_all()
-                logger.info("[proactive] mcp pool 已关闭")
-            finally:
-                state, self._state = self._state, None
-                if state is not None:
-                    state.close()
+            state, self._state = self._state, None
+            if state is not None:
+                state.close()
 
     async def _run_loop(self) -> None:
         """Ticks when due; rereads the role's settings at least every check.

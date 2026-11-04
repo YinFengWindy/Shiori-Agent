@@ -12,3 +12,8 @@ inject:
   - mcp_tools
   - workspace
   - background
+  - rpc
+  - process_resources
+
+frontend:
+  entry: frontend.ts

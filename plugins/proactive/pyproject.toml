@@ -9,7 +9,8 @@ requires-python = ">=3.12"
 dependencies = ["shiori-sdk>=4.0.0,<5", "pydantic>=2.11.7", "ftfy>=6.3.1", "tzdata>=2025.2; sys_platform == 'win32'"]
 
 [project.optional-dependencies]
-test = ["shiori-sdk[testing]>=4.0.0,<5"]
+mcp = ["shiori-plugin-mcp==0.1.0"]
+test = ["shiori-sdk[testing]>=4.0.0,<5", "shiori-plugin-mcp==0.1.0"]
 
 [tool.setuptools]
 include-package-data = false

@@ -35,7 +35,7 @@ def _bare_run_loop(tmp_path: Path) -> ProactiveLoop:
 
 
 @pytest.mark.asyncio
-async def test_run_disconnects_mcp_when_cancelled_while_connecting(tmp_path: Path):
+async def test_run_closes_state_when_cancelled_during_first_poll(tmp_path: Path):
     loop = _bare_run_loop(tmp_path)
     connecting = asyncio.Event()
 
@@ -46,19 +46,18 @@ async def test_run_disconnects_mcp_when_cancelled_while_connecting(tmp_path: Pat
     async def run_loop():
         await loop._prepare()
 
-    loop._mcp_pool.connect_all = connect_all
+    loop._poll_feeds_once = connect_all
     loop._run_loop = run_loop
     run = asyncio.create_task(loop.run())
     await connecting.wait()
     run.cancel()
     with pytest.raises(asyncio.CancelledError):
         await run
-    loop._mcp_pool.disconnect_all.assert_awaited_once()
     assert loop._state is None
 
 
 @pytest.mark.asyncio
-async def test_run_disconnects_mcp_and_reports_a_failed_feed_poll(tmp_path: Path):
+async def test_run_reports_a_failed_feed_poll(tmp_path: Path):
     loop = _bare_run_loop(tmp_path)
 
     async def failing_poll():
@@ -72,7 +71,6 @@ async def test_run_disconnects_mcp_and_reports_a_failed_feed_poll(tmp_path: Path
     loop._run_loop = run_loop
     with pytest.raises(OSError, match="poll failed"):
         await loop.run()
-    loop._mcp_pool.disconnect_all.assert_awaited_once()
 
 
 def test_next_interval_falls_back_to_configured_interval_without_presence():

@@ -4,19 +4,18 @@ proactive/mcp_sources.py — 从 MCP server 拉取 ProactiveEvent 的通用客�
 读取 ~/.shiori/workspace/proactive_sources.json 中的配置，
 动态调用各 MCP server 的 get_tool / ack_tool。
 
-stdio 会话由宿主 ``PROCESSES.mcp`` 创建（进程树归属由宿主决定）。用户服务器登记在插件 mcp。
+连接和凭据只由 mcp 插件管理；此模块只解析主动信息源的业务结果。
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from shiori_sdk.storage import plugin_data_dir
+from shiori_sdk.extensions import Dependencies
 from shiori_sdk.tools import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -53,80 +52,17 @@ def _load_sources(workspace: Path) -> list[dict]:
         return []
 
 
-def _get_server_cfg(server_name: str, workspace: Path) -> dict | None:
-    path = plugin_data_dir(workspace, "mcp") / "mcp_servers.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-        return data.get("servers", {}).get(server_name)
-    except Exception as e:
-        logger.warning("[mcp_sources] mcp_servers.json 读取失败: %s", e)
-        return None
-
-
-# ── Persistent connection pool ────────────────────────────────────────────────
-
-
 class McpClientPool:
-    """每个 MCP server 保持一个常驻连接，避免每次调用重启子进程。
-
-    用法:
-        pool = McpClientPool()
-        await pool.connect_all()      # agent 启动时
-        await pool.call(server, tool, args)
-        await pool.disconnect_all()   # agent 关闭时（finally 块）
-    """
+    """Source adapter over the MCP owner's current export; owns no sessions."""
 
     def __init__(
         self,
         workspace: Path | None = None,
         *,
-        open_session: Callable[[str, Sequence[str], dict[str, str]], Any] | None = None,
-    ) -> None:
-        # No workspace means no sources. The host opens each stdio session.
+        dependencies: Callable[[], Dependencies | None] = lambda: None,
+    ):
         self._workspace = workspace
-        self._open_session = open_session
-        self._clients: dict[str, Any] = {}  # server -> McpClient
-        self._configs: dict[str, tuple[list, dict]] = {}  # server -> (command, env)
-        self._locks: dict[str, asyncio.Lock] = (
-            {}
-        )  # server -> per-server lock（MCP stdio 不支持并发调用）
-
-    async def connect_all(self) -> None:
-        """按当前配置连接所有 server，连接失败的 server 跳过。"""
-        workspace = self._workspace
-        if workspace is None:
-            return
-        seen: set[str] = set()
-        for src in _load_sources(workspace):
-            server = src.get("server", "")
-            if not server or server in seen:
-                continue
-            seen.add(server)
-            cfg = _get_server_cfg(server, workspace)
-            if not cfg:
-                continue
-            command = cfg.get("command", [])
-            env = cfg.get("env") or {}
-            if not command:
-                continue
-            self._configs[server] = (command, env)
-            await self._connect(server)
-
-    async def _connect(self, server: str) -> bool:
-        command, env = self._configs.get(server, ([], {}))
-        if not command:
-            return False
-        if self._open_session is None:
-            raise RuntimeError("MCP 会话工厂未配置")
-        try:
-            client = self._open_session(server, list(command), dict(env))
-            await client.connect()
-            self._clients[server] = client
-            logger.info("[mcp_pool] connected: %s", server)
-            return True
-        except Exception as e:
-            logger.warning("[mcp_pool] connect failed %s: %s", server, e, exc_info=True)
-            return False
+        self._dependencies = dependencies
 
     async def call(
         self,
@@ -137,66 +73,24 @@ class McpClientPool:
         timeout: float | None = None,
         retry_on_transport: bool = False,
     ) -> Any:
-        """调用 tool，默认只清理断开的连接并把失败交给调用方。
+        """Resolve on every call so disable/reload cannot retain an old export."""
+        dependencies = self._dependencies()
+        api = dependencies.get_optional("mcp") if dependencies else None
+        if api is None:
+            raise RuntimeError("MCP 插件未启用")
+        # Import only after the optional provider exists; no mandatory install.
+        from plugins.mcp.backend.api import McpAPI
 
-        只有调用方明确声明操作可安全重放时，才会对 transport failure
-        重连并重试一次。MCP stdio 传输不支持并发调用，per-server lock 保证串行。
-        """
-        if server not in self._locks:
-            self._locks[server] = asyncio.Lock()
-        async with self._locks[server]:
-            if server not in self._clients:
-                if server not in self._configs:
-                    raise RuntimeError(f"[mcp_pool] unknown server: {server}")
-                if not await self._connect(server):
-                    raise RuntimeError(f"[mcp_pool] could not connect: {server}")
-            client = self._clients[server]
-            try:
-                raw = await client.call(tool_name, args, timeout=timeout)
-                return _decode_result(raw)
-            except Exception as exc:
-                await self._discard_client(server, client)
-                if not retry_on_transport or not _is_transport_failure(exc):
-                    raise
-                logger.warning(
-                    "[mcp_pool] transport failed %s.%s, reconnecting once: %s",
-                    server,
-                    tool_name,
-                    exc,
-                )
-                if not await self._connect(server):
-                    raise
-                retry_client = self._clients[server]
-                try:
-                    raw = await retry_client.call(tool_name, args, timeout=timeout)
-                    return _decode_result(raw)
-                except Exception:
-                    await self._discard_client(server, retry_client)
-                    raise
-
-    async def _discard_client(self, server: str, client: Any) -> None:
-        """Removes and closes one failed client without masking the root error."""
-
-        if self._clients.get(server) is client:
-            self._clients.pop(server, None)
-        try:
-            await client.disconnect()
-        except Exception:
-            logger.debug(
-                "[mcp_pool] disconnect failed after %s failure",
-                server,
-                exc_info=True,
-            )
-
-    async def disconnect_all(self) -> None:
-        """断开所有连接。agent 关闭时在 finally 块调用。"""
-        for server, client in list(self._clients.items()):
-            try:
-                await client.disconnect()
-                logger.info("[mcp_pool] disconnected: %s", server)
-            except Exception as e:
-                logger.warning("[mcp_pool] disconnect error %s: %s", server, e)
-        self._clients.clear()
+        if not isinstance(api, McpAPI):
+            raise TypeError("MCP 插件未提供调用接口")
+        raw = await api.call(
+            server,
+            tool_name,
+            args,
+            timeout=timeout,
+            retry_on_transport=retry_on_transport,
+        )
+        return _decode_result(raw)
 
 
 def _decode_result(raw: str | ToolResult) -> Any:
@@ -211,13 +105,6 @@ def _decode_result(raw: str | ToolResult) -> Any:
     if raw and raw.strip().startswith(("[", "{")):
         return json.loads(raw)
     return raw
-
-
-def _is_transport_failure(error: BaseException) -> bool:
-    return isinstance(
-        error,
-        (ConnectionError, BrokenPipeError, EOFError, OSError),
-    ) and not isinstance(error, TimeoutError)
 
 
 # ── Async pool-based variants ─────────────────────────────────────────────────
@@ -292,8 +179,8 @@ async def _fetch_by_channel_async(pool: McpClientPool, *, channel: str) -> list[
             "get_context" if channel == "context" else "get_proactive_events",
         )
         try:
-            # 3. 通过常驻 McpClientPool 调远端 MCP 工具。
-            #    pool.call() 内部会负责串行、断线重连、JSON 反序列化。
+            # 3. 通过 MCP 插件当前导出调用允许的工具。
+            #    MCP owner 负责准入及明确允许的单次重试；此处只解析业务 JSON。
             data = await pool.call(
                 server,
                 get_tool,
