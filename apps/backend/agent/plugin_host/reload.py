@@ -16,7 +16,7 @@ from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from agent.plugin_host.handle import PluginRecord
+from agent.plugin_host.record import PluginRecord
 from agent.plugin_host.state import PluginView
 from agent.plugin_host.call_gate import PluginCallGate
 from agent.plugin_host.unload import (

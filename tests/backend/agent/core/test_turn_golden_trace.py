@@ -43,7 +43,8 @@ from agent.looping.ports import (
     LLMConfig,
     MemoryServices,
 )
-from agent.plugin_host import PluginGenerationSettings, PluginKernel
+from agent.plugin_host import PluginKernel
+from agent.plugin_host.settings import PluginGenerationSettings
 from agent.prompting.input_budget import InputBudget
 from agent.provider import LLMProvider, LLMResponse, ToolCall
 from agent.retrieval.default_pipeline import DefaultMemoryRetrievalPipeline

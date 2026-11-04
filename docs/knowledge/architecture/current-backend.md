@@ -28,7 +28,7 @@ related:
 
 # 当前后端架构基线
 
-本文记录 Python backend 的实际运行边界。Shiori 保留 Python 后端，插件内核自行实现（`apps/backend/agent/plugin_host/`），不引入外部插件框架。
+本文记录 Python backend 的实际运行边界。Shiori 保留 Python 后端，插件内核自行实现（`packages/sdk/python/shiori_sdk/kernel/`），宿主装配在 `apps/backend/agent/plugin_host/`，不引入外部插件框架。
 
 ## 进程与装配
 
@@ -51,6 +51,12 @@ flowchart TD
 ```
 
 事实依据：`apps/backend/main.py` 的 `serve_bridge()`、`apps/backend/bootstrap/app.py` 的 `AppRuntime.start()`、`apps/backend/bootstrap/tools.py` 的 `CoreRuntime` 与 `build_core_runtime()`。
+
+## 插件宿主模块
+
+`agent/plugin_host/kernel.py` 保存每代候选、实例、首次信任激活错误和转换锁，装配公开生命周期方法。`settings.py` 管理代际配置与启用判定，`record.py` 保存候选及其定位规则；`admission.py` 负责信任、内容预检和本轮可激活集合；`plugin_setup.py` 组装 spec、可信导入、配置 schema、上下文与插件导出；`closures.py` 选择启停/重载闭包并执行 D14 拒绝和逐成员排空；`renderer_gate.py` 核对激活 token、渲染就绪与失败。`reload.py` 继续负责配置与实例替换事务，`state.py` 继续从内核状态和准入派生展示状态。辅助模块读取或修改显式传入的现有 owner 引用，不保存另一份生命周期状态。
+
+通信注册、服务 binder 与 renderer 请求生命周期归 `desktop_bridge/plugin_rpc/`；宿主仅持有撤销通信的窄协议。具体边界与规模见 [P8b 决策](../../decisions/2026-11-04-kernel-primitives-host-single-state.md)。
 
 ## 运行时换代
 

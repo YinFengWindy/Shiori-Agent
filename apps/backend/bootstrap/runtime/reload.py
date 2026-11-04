@@ -8,7 +8,7 @@ from functools import partial
 import logging
 
 from agent.config_models import Config
-from agent.plugin_host.handle import PluginRecord
+from agent.plugin_host.record import PluginRecord
 from bootstrap.runtime.events import RuntimeEventBus
 from bootstrap.runtime.generations import RuntimeCandidate, RuntimeRetention
 from bootstrap.tools import build_core_runtime

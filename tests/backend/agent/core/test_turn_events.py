@@ -17,7 +17,7 @@ from typing import Any
 import pytest
 
 from agent.core.turn_events import TurnEvents, core_kernel
-from agent.plugin_host import PluginGenerationSettings
+from agent.plugin_host.settings import PluginGenerationSettings
 from agent.tools.execution import ToolExecutionRequest, ToolExecutor
 from agent.tools.shell.guard import destructive_command_reason
 from bus.event_bus import EventBus

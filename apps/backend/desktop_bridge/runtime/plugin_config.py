@@ -17,7 +17,8 @@ from agent.plugin_host.config_schema import (
     format_validation_error,
     validate_against,
 )
-from agent.plugin_host.kernel import PLUGIN_ENABLED_CONFIG_KEY, PluginKernel
+from agent.plugin_host.kernel import PluginKernel
+from agent.plugin_host.settings import PLUGIN_ENABLED_CONFIG_KEY
 from bootstrap.app import AppRuntime
 from desktop_bridge.plugin_config_text import PluginTableConflict, merge_plugin_table
 from desktop_bridge.runtime.apply import (

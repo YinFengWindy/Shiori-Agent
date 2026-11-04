@@ -10,7 +10,7 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from agent.plugin_host import PluginKernel
-    from agent.plugin_host.handle import PluginRecord
+    from agent.plugin_host.record import PluginRecord
     from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
     from desktop_bridge.method_policy import MethodPolicy
 
@@ -589,7 +589,8 @@ def build_core_runtime(
         active_turn_states=loop.active_turn_states,
     )
 
-    from agent.plugin_host import PluginGenerationSettings, PluginKernel
+    from agent.plugin_host import PluginKernel
+    from agent.plugin_host.settings import PluginGenerationSettings
     from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
     from agent.core.turn_events import install_core_checks
     from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules

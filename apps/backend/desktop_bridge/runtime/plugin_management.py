@@ -21,11 +21,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from agent.plugin_host.kernel import (
-    PLUGIN_ENABLED_CONFIG_KEY,
-    PluginKernel,
-    plugin_enabled,
-)
+from agent.plugin_host.kernel import PluginKernel
+from agent.plugin_host.settings import PLUGIN_ENABLED_CONFIG_KEY, plugin_enabled
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.state import NOT_STARTED
@@ -229,7 +226,7 @@ class RuntimePluginManagement:
         naming a plugin/kind the current generation's kernel is not tracking
         as ACTIVE is silently ignored (``changed: False``) rather than
         raising, since a renderer process cannot synchronously know the
-        backend's current view — see ``PluginKernel._find_active_instance``.
+        backend's current view — see ``renderer_gate.find_active_instance``.
         """
         plugin_id = str(payload.get("plugin_id") or "").strip()
         kind = str(payload.get("kind") or "").strip()

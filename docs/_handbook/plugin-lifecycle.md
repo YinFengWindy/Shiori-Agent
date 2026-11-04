@@ -1,6 +1,6 @@
 # 插件生命周期与准入
 
-[插件指南](plugin-guide.md)的专题篇：插件从被发现到运行、重载、停用的规则。内核在 `packages/sdk/python/shiori_sdk/kernel/`，宿主编排在 `apps/backend/agent/plugin_host/`（`kernel.py`、`reload.py`、`unload.py`）与 `apps/backend/desktop_bridge/runtime/apply.py`。与源码冲突时以源码为准。
+[插件指南](plugin-guide.md)的专题篇：插件从被发现到运行、重载、停用的规则。内核在 `packages/sdk/python/shiori_sdk/kernel/`，宿主编排在 `apps/backend/agent/plugin_host/`（`kernel.py` 统一持有状态和锁；`admission.py`、`plugin_setup.py`、`closures.py`、`renderer_gate.py` 分别处理准入、setup、闭包和渲染门；`reload.py` 负责替换事务）与 `apps/backend/desktop_bridge/runtime/apply.py`。与源码冲突时以源码为准。
 
 ## 状态
 

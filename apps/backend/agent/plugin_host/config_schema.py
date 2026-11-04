@@ -9,7 +9,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 from pydantic_core import to_jsonable_python
 
-from agent.plugin_host.handle import PluginRecord
+from agent.plugin_host.record import PluginRecord
 
 
 class ConfigModelError(Exception):

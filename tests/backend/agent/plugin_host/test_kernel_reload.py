@@ -14,12 +14,12 @@ from shiori_sdk.kernel import KernelError, KernelState, PluginFailed
 from shiori_sdk.rpc import PluginRpcError
 
 from agent.plugin_host import (
-    PluginGenerationSettings,
     PluginKernel,
     PluginReloadFailed,
     PluginReloadTimeout,
     PluginReloadUnsupported,
 )
+from agent.plugin_host.settings import PluginGenerationSettings
 from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from tests.support.plugin_kernel import host_kernel, set_plugin_enabled
 from infra.process.resources import ProcessResourceOwner

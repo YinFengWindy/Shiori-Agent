@@ -13,7 +13,8 @@ from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.tools import ToolCalled
 from shiori_sdk.memory.engine import MemoryQuery, MemoryQueryResult
-from agent.plugin_host import PluginGenerationSettings, PluginKernel
+from agent.plugin_host import PluginKernel
+from agent.plugin_host.settings import PluginGenerationSettings
 from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from agent.tools.registry import ToolRegistry
 from tests.support.plugin_kernel import host_kernel

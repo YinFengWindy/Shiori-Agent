@@ -16,7 +16,7 @@ from shiori_sdk.testing.http import FakeHttp
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 
 from agent.account_delivery import AccountDelivery
-from agent.plugin_host import PluginGenerationSettings
+from agent.plugin_host.settings import PluginGenerationSettings
 from tests.support.plugin_kernel import host_kernel
 from agent.provider import LLMResponse, ToolCall
 from agent.tools.account_delivery import AccountSendTool

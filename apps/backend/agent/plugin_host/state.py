@@ -6,7 +6,7 @@ from typing import Any, Literal
 from shiori_sdk.kernel import KernelState, PluginDiagnostic, PluginStatus
 
 from agent.plugin_host.call_gate import PluginCallGate
-from agent.plugin_host.handle import PluginRecord
+from agent.plugin_host.record import PluginRecord
 
 type PluginViewState = Literal[
     "ACTIVE",

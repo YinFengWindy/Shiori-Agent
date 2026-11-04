@@ -15,7 +15,7 @@ from agent.core.response_parser import parse_response
 from agent.core.runtime_support import TurnRunResult
 from agent.core.types import ContextBundle
 from agent.lifecycle.facade import TurnLifecycle
-from agent.plugin_host import PluginGenerationSettings
+from agent.plugin_host.settings import PluginGenerationSettings
 from tests.support.plugin_kernel import host_kernel
 from bootstrap.wiring import wire_turn_lifecycle
 from bus.event_bus import EventBus

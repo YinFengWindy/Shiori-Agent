@@ -12,7 +12,8 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from agent.plugin_host import PluginGenerationSettings, PluginKernel
+from agent.plugin_host import PluginKernel
+from agent.plugin_host.settings import PluginGenerationSettings
 from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from agent.core.turn_events import install_core_checks
 from agent.config import resolve_config_reference

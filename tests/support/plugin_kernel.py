@@ -16,7 +16,8 @@ from typing import Any, cast
 from agent.core.passive_turn import ContextStore as _  # noqa: F401
 from agent.core.turn_events import install_core_checks
 from agent.lifecycle.types import BeforeTurnCtx
-from agent.plugin_host import PluginGenerationSettings, PluginKernel
+from agent.plugin_host import PluginKernel
+from agent.plugin_host.settings import PluginGenerationSettings
 from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from agent.plugin_host.core_keys import CoreModule, CoreProvide
 from agent.config import resolve_config_reference
