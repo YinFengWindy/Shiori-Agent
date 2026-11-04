@@ -375,7 +375,7 @@ async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
             }
         )
         await registry.wait_operations()
-        assert registry.snapshot()["servers"][0]["status"] == "connected"
+        assert _only_server(registry.snapshot())["status"] == "connected"
         assert await registry.call("http", "echo", {}, timeout=180) == "hello"
         with pytest.raises(McpToolError) as error:
             await registry.call("http", "tool_error", {})
@@ -400,7 +400,7 @@ async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
         await fresh.load_and_connect_all()
         await fresh.wait_operations()
         try:
-            assert fresh.snapshot()["servers"][0]["transport"] == {
+            assert _only_server(fresh.snapshot())["transport"] == {
                 "kind": "streamable_http",
                 "auth": "bearer",
             }
@@ -436,8 +436,10 @@ async def test_http_call_auth_failure_removes_tools_and_retains_configuration(tm
         peer.status = 403
         with pytest.raises(ValueError, match="403"):
             await registry.call("http", "echo", {})
-        row = registry.snapshot()["servers"][0]
-        assert row["enabled"] and row["status"] == "error" and "403" in row["error"]
+        row = _only_server(registry.snapshot())
+        error_message = row["error"]
+        assert isinstance(error_message, str)
+        assert row["enabled"] and row["status"] == "error" and "403" in error_message
         assert registry._states["http"].wrappers == {}
         assert peer.calls["echo"] == 0
         await registry.shutdown()
