@@ -172,7 +172,14 @@ def observe_lifecycle() -> Iterator[LifecycleObservation]:
         )
         observation.tasks.append(task)
         owner = _ACTIVATING.get()
-        if owner is not None:
+        # CPython schedules async-generator finalizers using the context active
+        # at GC time. They are still tracked above for leaks and exceptions, but
+        # that inherited activation is not evidence of a plugin-authored spawn.
+        finalizer = (
+            type(coro).__module__ == "builtins"
+            and type(coro).__name__ == "async_generator_athrow"
+        )
+        if owner is not None and not finalizer:
             observation.spawned.append(
                 (owner, getattr(coro, "__qualname__", type(coro).__name__), task)
             )
