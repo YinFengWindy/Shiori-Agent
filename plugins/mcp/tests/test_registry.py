@@ -53,6 +53,15 @@ class _Registration:
         self.tools = [item for item in self.tools if item[0] != name]
 
 
+def _only_server(snapshot: dict[str, object]) -> dict[str, object]:
+    """Require a one-server public response before asserting its fields."""
+    servers = snapshot["servers"]
+    assert isinstance(servers, list) and len(servers) == 1
+    server = servers[0]
+    assert isinstance(server, dict)
+    return server
+
+
 @pytest.mark.asyncio
 async def test_add_persists_command_and_registers_the_server_tool(tmp_path: Path):
     path = tmp_path / "mcp_servers.json"
@@ -106,8 +115,11 @@ async def test_migration_keeps_offline_server_and_private_values(tmp_path, monke
     await registry.load_and_connect_all()
     await registry.wait_operations()
     snapshot = registry.snapshot()
-    assert snapshot["servers"][0]["status"] == "error"
-    assert snapshot["servers"][0]["transport"]["cwd"] == "/wanted"
+    server = _only_server(snapshot)
+    assert server["status"] == "error"
+    transport = server["transport"]
+    assert isinstance(transport, dict)
+    assert transport["cwd"] == "/wanted"
     assert "private-token" not in json.dumps(snapshot)
     assert "private-argument" not in path.read_text(encoding="utf-8")
     await registry.add("other", ["another"])
@@ -234,7 +246,7 @@ async def test_disable_during_connection_cannot_publish_late_tools(
     registry.set_enabled("docs", False, 1)
     await registry.wait_operations()
     assert registration.tools == []
-    assert registry.snapshot()["servers"][0]["status"] == "disabled"
+    assert _only_server(registry.snapshot())["status"] == "disabled"
     assert len(closed) == 1
     await registry.shutdown()
 
@@ -299,7 +311,7 @@ async def test_cancel_before_reconnect_starts_closes_existing_session(tmp_path):
     await registry.wait_operations()
     assert session.disconnected
     assert registry._states["docs"].session is None
-    assert registry.snapshot()["servers"][0]["status"] == "disconnected"
+    assert _only_server(registry.snapshot())["status"] == "disconnected"
     assert registry.store.servers["docs"].enabled
     await registry.shutdown()
 
