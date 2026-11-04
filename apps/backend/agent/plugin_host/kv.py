@@ -1,10 +1,14 @@
-"""Persistent storage exposed by the plugin kv capability."""
+"""Persistent plugin KV storage: package directories hold code, user data belongs
+to the workspace and must never be written into the installed package.
+"""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
+
+from shiori_sdk.storage import plugin_data_dir
 
 
 class PluginKVStore:
@@ -50,3 +54,15 @@ class PluginKVStore:
         _ = self._path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+
+
+_KV_FILENAME = "kv.json"
+
+
+def open_plugin_kv(*, workspace: Path, plugin_id: str) -> PluginKVStore:
+    """Opens a plugin's KV store under the workspace data root.
+
+    workspace 必传：内核在 setup 前已对缺 workspace 的宿主报 HostServiceUnavailable，
+    这里不存在退回写插件目录的路径（#209 的病根）。
+    """
+    return PluginKVStore(plugin_data_dir(workspace, plugin_id) / _KV_FILENAME)

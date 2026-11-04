@@ -11,15 +11,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Iterable
 from typing import cast
 
 from shiori_sdk.channels import Channel
 from shiori_sdk.channels.avatars import AvatarFetch
-
-from agent.plugin_host import PluginKernel
-from agent.plugin_host.capabilities import ContributionsByPlugin, contribute_to_list
+from shiori_sdk.kernel import Scope
 from shiori_sdk.core.services import CHANNELS
 
+from agent.plugin_host import PluginKernel
 from agent.plugin_host.core_keys import (
     PluginBinding,
     required_core_key,
@@ -29,6 +29,46 @@ from agent.plugin_host.manifest import matches_channel_instance
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
 
 logger = logging.getLogger(__name__)
+
+
+def contribute_to_list[T](
+    target: list[T],
+    item: T,
+    *,
+    effects: Scope,
+    label: str,
+) -> None:
+    """把一项贡献登记进目标列表，并登记"从列表移除"的可回滚 effect。
+
+    渠道登记与撤销共用同一列表；移除守卫使重复处置保持幂等。
+    """
+    effects.ensure_active(label)
+    target.append(item)
+
+    def discard() -> None:
+        if item in target:
+            target.remove(item)
+
+    _ = effects.effect(discard, label)
+
+
+class ContributionsByPlugin[T]:
+    """Each plugin's contributed objects, read back in a given plugin order.
+
+    A plugin's channel view adds to ``of(plugin_id)`` with ``contribute_to_list``
+    so disposal withdraws it; ``active`` returns the active plugins' channels.
+    """
+
+    def __init__(self) -> None:
+        self._by_plugin: dict[str, list[T]] = {}
+
+    def of(self, plugin_id: str) -> list[T]:
+        """The (live) list holding ``plugin_id``'s contributions."""
+        return self._by_plugin.setdefault(plugin_id, [])
+
+    def active(self, plugin_ids: Iterable[str]) -> list[T]:
+        """The contributions of ``plugin_ids``, plugin by plugin in that order."""
+        return [item for pid in plugin_ids for item in self._by_plugin.get(pid, ())]
 
 
 class PluginChannels(ContributionsByPlugin[Channel]):

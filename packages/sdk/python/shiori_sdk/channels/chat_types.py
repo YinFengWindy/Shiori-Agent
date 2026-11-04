@@ -9,7 +9,6 @@ by name.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
@@ -92,10 +91,6 @@ class ChatTypeDeclaration:
             "chat_id_hint": self.chat_id_hint,
             "prefix": self.prefix,
         }
-
-
-# Channel name -> declared session types; channels without declarations are absent.
-ChatTypeDeclarations = Mapping[str, tuple[ChatTypeDeclaration, ...]]
 
 
 def validate_chat_id_for_type(

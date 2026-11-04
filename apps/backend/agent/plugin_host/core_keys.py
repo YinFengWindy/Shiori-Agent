@@ -9,11 +9,10 @@ inject: no manifest, whatever its api version, may name a ``host.`` key.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from shiori_sdk.accounts.capability import AccountsCapability
 from shiori_sdk.kernel import Key, Scope
 from shiori_sdk.runtime import HostServiceUnavailable
 
@@ -52,25 +51,6 @@ class PluginViewBinder[T](Protocol):
         ...
 
 
-class ActiveContributions[T](Protocol):
-    """Objects plugins contributed, read back for the active plugins only."""
-
-    def active(self, plugin_ids: Iterable[str]) -> Sequence[T]:
-        """The contributions of ``plugin_ids`` (kernel order), in that order."""
-        ...
-
-
-class PluginContributionService[C, T](
-    PluginViewBinder[C], ActiveContributions[T], Protocol
-):
-    """A per-plugin view ``C`` whose contributions ``T`` the host aggregates.
-
-    Each plugin adds through its own ``for_plugin`` view; consumers read the
-    active plugins' contributions with ``active``.
-    ``capabilities.ContributionsByPlugin`` is the shared storage behind it.
-    """
-
-
 class CoreProvide(Protocol):
     """What a core module is given to publish its services: ``Kernel.provide``."""
 
@@ -79,25 +59,6 @@ class CoreProvide(Protocol):
 
 CoreModule = Callable[[CoreProvide], None]
 """Provides one core module's keys; raising aborts startup (§8.5)."""
-
-
-# Deliberately accounts-only, not a generic "generation lifecycle" protocol:
-# accounts is the only core service with per-generation publish/drop.
-class GenerationAccounts(PluginViewBinder[AccountsCapability], Protocol):
-    """One kernel generation's account index, stored under ``ACCOUNTS``.
-
-    Plugins register into the generation's own index; ``publish`` makes it the
-    one routing, sending and the UI see, and ``drop`` discards it once the
-    generation is retired or abandoned.
-    """
-
-    def publish(self) -> None:
-        """Makes this generation's account reports authoritative."""
-        ...
-
-    def drop(self) -> None:
-        """Discards this generation's account index."""
-        ...
 
 
 # The policy type (``desktop_bridge.method_policy.MethodPolicy``) is a host

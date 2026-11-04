@@ -11,7 +11,6 @@ from pathlib import Path
 from shiori_sdk import __version__
 from shiori_sdk.channels.chat_types import (
     ChatTypeDeclaration,
-    ChatTypeDeclarations,
     parse_chat_type,
 )
 from agent.plugin_host.versions import satisfies
@@ -159,7 +158,7 @@ class PluginManifest:
     category: str = "feature"
     # ``[plugins.<id>]`` 没有显式 ``enabled`` 时是否启用；显式值始终优先。
     default_enabled: bool = True
-    # api: 4 的前端入口。宿主在 P7 前仍按目录发现 ui/background/surface。
+    # api: 4 的统一前端入口，提供 ui/background/surface 导出。
     frontend_entry: str | None = None
     metadata: dict[str, object] = field(default_factory=dict)
 
@@ -486,30 +485,13 @@ def _parse_string_fields(
     return values
 
 
-def declared_chat_types(manifests: Iterable[PluginManifest]) -> ChatTypeDeclarations:
-    """Collects every declared channel's session types for role binding checks.
-
-    Declarations are static, so disabled or failed plugins still contribute.
-    A channel name claimed twice only occurs between CONFLICT candidates; the
-    first declaration wins, matching ``channels.list``.
-    """
-    result: dict[str, tuple[ChatTypeDeclaration, ...]] = {}
-    prefixes: list[tuple[str, tuple[ChatTypeDeclaration, ...]]] = []
-    for manifest in manifests:
-        for declaration in manifest.channels:
-            result.setdefault(declaration.name, declaration.chat_types)
-            if declaration.instance_prefix:
-                prefixes.append((declaration.instance_prefix, declaration.chat_types))
-    return _DeclaredChatTypes(result, prefixes)
-
-
 def group_listening_channels(
     manifests: Iterable[PluginManifest],
 ) -> Callable[[str], bool]:
     """Whether a channel (or an instance of a declared prefix) supports listening.
 
-    Like ``declared_chat_types``, static declarations of every discovered
-    plugin count, enabled or not; the first declaration of a name wins.
+    Static declarations of every discovered plugin count, enabled or not;
+    the first declaration of a name wins.
     """
     exact: dict[str, bool] = {}
     prefixes: list[str] = []
@@ -525,32 +507,6 @@ def group_listening_channels(
         return any(matches_channel_instance(name, prefix) for prefix in prefixes)
 
     return supports
-
-
-class _DeclaredChatTypes(dict[str, tuple[ChatTypeDeclaration, ...]]):
-    """Keep static listings while validating generated instance names."""
-
-    def __init__(
-        self,
-        exact: dict[str, tuple[ChatTypeDeclaration, ...]],
-        prefixes: list[tuple[str, tuple[ChatTypeDeclaration, ...]]],
-    ) -> None:
-        super().__init__(exact)
-        self._prefixes = prefixes
-
-    def __missing__(self, name: str) -> tuple[ChatTypeDeclaration, ...]:
-        for prefix, chat_types in self._prefixes:
-            if matches_channel_instance(name, prefix):
-                return chat_types
-        raise KeyError(name)
-
-    def get(
-        self, name: str, default: tuple[ChatTypeDeclaration, ...] | None = None
-    ) -> tuple[ChatTypeDeclaration, ...] | None:
-        try:
-            return self[name]
-        except KeyError:
-            return default
 
 
 def _parse_category(
