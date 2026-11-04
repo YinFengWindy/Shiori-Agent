@@ -13,6 +13,10 @@ export function createRuntimePyinstallerArgs({
     "--paths", join(repositoryRoot, "packages/sdk/python"),
     // Package admission reads the distribution's direct runtime requirements.
     "--recursive-copy-metadata", "shiori-agent",
+    // Builtin MCP is staged separately from the host wheel. Its pyproject owns
+    // the dependency closure; HTTP libraries read distribution metadata at run time.
+    ...(pluginModules.some((name) => name.startsWith("plugins.mcp."))
+      ? ["--recursive-copy-metadata", "shiori-plugin-mcp"] : []),
     "--exclude-module", "shiori_sdk.testing",
     "--add-data", `${stagedPluginsDir}${delimiter}plugins`,
     "--add-data", `${browserRuntime}${delimiter}native/browser-use`,

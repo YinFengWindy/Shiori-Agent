@@ -26,6 +26,7 @@ dev = [
     "rich>=15.0.0",
     "shiori-host-testing==0.1.0",
     "shiori-plugin-herdr[test]==0.1.2",
+    "shiori-plugin-mcp[test]==0.1.0",
     "black>=26.0.0",
     "ruff>=0.15",
     "pyright>=1.1.403",
@@ -42,6 +43,7 @@ shiori-sdk = { path = "packages/sdk", editable = true }
 shiori-plugin-default-memory = { path = "plugins/default_memory", editable = true }
 
 shiori-plugin-herdr = { path = "plugins/herdr", editable = true }
+shiori-plugin-mcp = { path = "plugins/mcp", editable = true }
 
 # 四层分层契约（docs/decisions/2026-10-22-plugin-system-four-layer-refactor.md §5.4），
 # P2（#901）起在 CI 阻塞：契约全部保持，任何新违规都会让 CI 失败。不得用
