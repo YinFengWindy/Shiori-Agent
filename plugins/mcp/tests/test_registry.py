@@ -346,3 +346,63 @@ async def test_private_value_redaction_preserves_binary_tool_content(
     assert result.structured_content == {"secret": "[已隐藏]"}
     assert result.content_blocks == [image]
     await registry.shutdown()
+
+
+async def test_manual_reconnect_supersedes_pending_source_retry(tmp_path, monkeypatch):
+    retry_entered = asyncio.Event()
+    release_retry = asyncio.Event()
+    sessions = []
+    calls = []
+
+    def session_factory(_self, name, command, env=None, cwd=None, **_kwargs):
+        session = _Session(name, command, env, cwd)
+        sessions.append(session)
+        return session
+
+    async def connect(session):
+        if sessions.index(session) == 1:
+            retry_entered.set()
+            await release_retry.wait()
+        return [McpToolInfo("echo", "Echo", {"type": "object"})]
+
+    async def call(session, _tool, _args, **_kwargs):
+        number = sessions.index(session) + 1
+        calls.append(number)
+        if number == 1:
+            raise ConnectionError("lost connection")
+        return f"session {number}"
+
+    monkeypatch.setattr(_Processes, "mcp", session_factory)
+    monkeypatch.setattr(_Session, "connect", connect)
+    monkeypatch.setattr(_Session, "call", call)
+    registration = _Registration()
+    registry = McpServerRegistry(
+        tmp_path / "mcp_servers.json", processes=_Processes(), registration=registration
+    )
+    await registry.add("docs", ["server"])
+    retry = asyncio.create_task(
+        registry.call("docs", "echo", {}, retry_on_transport=True)
+    )
+    try:
+        async with asyncio.timeout(2):
+            await retry_entered.wait()
+            registry.start_operation("docs", "connect")
+            await registry.wait_operations()
+            assert _only_server(registry.snapshot())["status"] == "connected"
+            release_retry.set()
+            with pytest.raises(ValueError):
+                await retry
+        assert sessions[1].disconnected
+        assert not sessions[2].disconnected
+        assert _only_server(registry.snapshot())["status"] == "connected"
+        assert _only_server(registry.snapshot())["error"] is None
+        assert registration.tools == [("mcp_docs__echo", "docs")]
+        assert await registry.call("docs", "echo", {}) == "session 3"
+        assert calls == [
+            1,
+            3,
+        ]  # Superseded reads are not replayed under a new operation.
+    finally:
+        release_retry.set()
+        await asyncio.gather(retry, return_exceptions=True)
+        await registry.shutdown()

@@ -140,8 +140,9 @@ async def connect(registry: "McpServerRegistry", server: str, epoch: int) -> Non
         adopted = True
     finally:
         if not adopted:
-            registry._unregister(state)
+            # An obsolete candidate must not unregister the successor's tools.
             if state.session is session:
+                registry._unregister(state)
                 state.session = None
             await disconnect(session)
     registry._changed()
