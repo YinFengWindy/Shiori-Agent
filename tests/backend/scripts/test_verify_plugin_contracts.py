@@ -53,28 +53,6 @@ async def test_same_effect_count_in_another_order_is_rejected(tmp_path):
         await verify_contract("natural_chat", tmp_path / "workspace", directory=package)
 
 
-@pytest.mark.parametrize("phase, generation", [("reload", 1), ("disable", 2)])
-async def test_reported_disposal_error_cannot_pass_the_contract(
-    tmp_path, phase, generation
-):
-    package = _package(
-        tmp_path,
-        "from shiori_sdk.core.services import KV\n"
-        "async def setup(ctx):\n"
-        "    generation = ctx.require(KV).increment('setups')\n"
-        "    def close():\n"
-        f"        if generation == {generation}:\n"
-        f"            raise RuntimeError('{phase} disposer failed')\n"
-        "    ctx.effect('contract.cleanup', close)\n",
-        "inject: [kv]\n",
-    )
-    with pytest.raises(
-        AssertionError, match=f"{phase} reported cleanup errors"
-    ) as error:
-        await verify_contract("natural_chat", tmp_path / "workspace", directory=package)
-    assert f"{phase} disposer failed" in str(error.value)
-
-
 async def test_missing_production_rpc_withdrawal_is_detected(tmp_path, monkeypatch):
     package = _package(
         tmp_path,

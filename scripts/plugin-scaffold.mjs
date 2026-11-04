@@ -4,8 +4,8 @@ export function pluginFiles(id, ui) {
   const files = {
     "manifest.yaml": `api: 4
 sdk: ">=4.0.0"
-id: ${id}
-display_name: ${id}
+id: ${JSON.stringify(id)}
+display_name: ${JSON.stringify(id)}
 version: '0.1.0'
 distribution: external
 entry: backend/plugin.py

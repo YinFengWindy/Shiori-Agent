@@ -134,9 +134,9 @@ async def contract_runtime(
     consumer = workspace / "contract-consumer"
     consumer.mkdir(parents=True)
     (consumer / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: contract_consumer\nentry: plugin.py\ndependencies: ["
-        + plugin_id
-        + "]\n"
+        "api: 4\nsdk: '>=4.0.0'\nid: contract_consumer\nentry: plugin.py\ndependencies: "
+        + json.dumps([plugin_id])
+        + "\n"
         + "inject: "
         + json.dumps(list(records[0].manifest.provides))
         + "\n",

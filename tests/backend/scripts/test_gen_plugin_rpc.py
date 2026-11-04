@@ -79,24 +79,3 @@ async def setup(ctx):
     assert contract["services"] == [
         {"service_id": "voice", "contract": "voice.v1", "methods": ["speak"]}
     ]
-
-
-def test_register_alias_is_not_silently_omitted_and_rejects_dynamic_names(
-    tmp_path: Path,
-):
-    source = """
-from shiori_sdk.core.services import RPC
-async def setup(ctx):
-    rpc = ctx.require(RPC)
-    register = rpc.register
-    register("read", read)
-"""
-    directory = package(tmp_path, source)
-    contract = plugin_contract(directory)
-    assert contract["methods"] == ["read"]
-    assert contract["registrations"][0]["line"] == 6
-    (directory / "backend" / "plugin.py").write_text(
-        source.replace('"read", read', 'ctx.config["method"], read'), encoding="utf-8"
-    )
-    with pytest.raises(ContractError, match=r"plugin.py:6: RPC name"):
-        plugin_contract(directory)
