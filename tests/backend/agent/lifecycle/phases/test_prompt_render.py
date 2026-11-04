@@ -16,6 +16,7 @@ from bus.event_bus import EventBus
 from core.roles import RoleStore
 from plugins.natural_chat.backend.prompts import NATURAL_CHAT_PROMPT
 from shiori_sdk.core.conversation import PromptRendering
+from shiori_sdk.testing.kernel import KernelHarness
 from shiori_sdk.kernel import Context, Kernel, PluginSpec
 from shiori_sdk.prompting import PromptSectionRender
 from tests.support.generation_getters import turn_getters
@@ -121,7 +122,7 @@ async def test_prompt_rendering_handlers_choose_reply_mode_and_add_sections(tmp_
         ctx.on(PromptRendering, single_reply)
 
     kernel = Kernel()
-    await kernel.start([PluginSpec("probe", setup)])
+    _ = await KernelHarness(kernel=kernel).start(PluginSpec("probe", setup))
 
     result = await _render(tmp_path, lambda: kernel)
 

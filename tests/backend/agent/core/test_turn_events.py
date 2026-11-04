@@ -23,6 +23,7 @@ from agent.tools.shell.guard import destructive_command_reason
 from bus.event_bus import EventBus
 from shiori_sdk.core.conversation import ReasoningFinished, ReasoningStarting
 from shiori_sdk.core.tools import ToolCalling
+from shiori_sdk.testing.kernel import KernelHarness
 from shiori_sdk.kernel import Context, Kernel, PluginSpec, Scope, Veto
 from shiori_sdk.testing.packages import plugin_directory, stage_plugin_package
 from tests.support.plugin_kernel import host_kernel
@@ -37,7 +38,7 @@ async def _vetoing_kernel() -> Kernel:
         ctx.on(ReasoningStarting, refuse)
 
     kernel = Kernel()
-    await kernel.start([PluginSpec("refuser", setup)])
+    _ = await KernelHarness(kernel=kernel).start(PluginSpec("refuser", setup))
     return kernel
 
 

@@ -1911,7 +1911,7 @@ async def test_context_budget_reaches_watchers_read_only_and_the_bus_as_a_dict()
 
     # The generation's kernel is bound after construction, like the host does.
     kernel = Kernel()
-    await kernel.start([PluginSpec("observe", setup)])
+    _ = await KernelHarness(kernel=kernel).start(PluginSpec("observe", setup))
     reasoner.bind_kernel(lambda: kernel)
     status = {"failure_stage": "summary", "final_budget": {"schema_tokens": 0}}
     assert reasoner._compaction is not None
