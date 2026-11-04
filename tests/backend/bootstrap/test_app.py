@@ -22,6 +22,8 @@ async def test_app_runtime_desktop_mode_enables_message_channels(
 ):
     start_channel_host = AsyncMock(wraps=start_channels)
     monkeypatch.setattr("bootstrap.app.start_channels", start_channel_host)
+    (tmp_path / "scene").mkdir()
+    (tmp_path / "scene/state.json").write_text("{}", encoding="utf-8")
     app = AppRuntime(empty_config, tmp_path, features=DESKTOP_RUNTIME_FEATURES)
 
     try:
@@ -30,6 +32,8 @@ async def test_app_runtime_desktop_mode_enables_message_channels(
         start_channel_host.assert_awaited_once()
         assert start_channel_host.call_args.kwargs["enable_message_channels"] is True
         assert app.channel_host is not None
+        assert (tmp_path / "plugin-data/scene/state.json").read_text() == "{}"
+        assert not (tmp_path / "scene/state.json").exists()
     finally:
         await app.shutdown()
 

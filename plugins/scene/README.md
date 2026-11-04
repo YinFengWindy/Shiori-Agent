@@ -17,7 +17,7 @@ observation_enabled = true   # 场景观察，默认开
 - 插件设置页改配置（代内重载）或代内重新启用后，立即恢复观察，不必等下次换代。
 - 本代被丢弃前，宿主先停止观察并等进行中的观察结束。
 
-状态存于 `<workspace>/scene/state.json`，首次写入时会导入旧 `scene_awareness` 插件留下的状态。
+状态存于 `<workspace>/plugin-data/scene/state.json`。冷启动会迁入旧 `scene/state.json`，已有新目标优先，旧文件核对后归档。当前状态不存在时，首次写入仍可导入更早的 `scene_awareness` 状态；详见[存储决策](../../docs/decisions/2026-11-04-plugin-storage-paths.md)。
 
 ## 插件关闭时
 

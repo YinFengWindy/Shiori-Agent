@@ -93,13 +93,13 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `affection_host` | `AFFECTION_HOST` | 宿主事实：角色、会话、在场、记忆文档、对话模型 |
 | `mcp_tools` | `MCP_TOOLS` | 宿主。动态 MCP 工具的登记。管理工具仍走 `TOOLS.register` |
 | `schedule_host` | `SCHEDULE_HOST` | 宿主（P6s）。按角色跑定时回合（`run_turn`）或直接投递（`deliver`），走当前发布代；端口本身跨代 |
-| `scheduler` | `SCHEDULER` | 系统插件 `schedule`（P6s）。只有创建、列出、取消角色的任务。消费方用 `optional_inject`，`get` 为 `None` 时不用定时能力。任务仍在 `<workspace>/schedules.json` |
+| `scheduler` | `SCHEDULER` | 系统插件 `schedule`（P6s）。只有创建、列出、取消角色的任务。消费方用 `optional_inject`，`get` 为 `None` 时不用定时能力。任务在 `<workspace>/plugin-data/schedule/schedules.json`，旧根目录文件在冷启动时迁入并归档 |
 | `markdown_memory` | `MARKDOWN_MEMORY` | 宿主（P6b）。`role(role_id)` 给出角色的 Markdown 记忆：读 `MEMORY.md` / `SELF.md`、写 `SELF.md`、`PENDING.md` 两阶段合并（`snapshot_pending` → `commit_long_term` / `rollback_pending_snapshot`）、`read_recent_context`（当前仍可见的近期语境正文）、首版 SELF 是否待生成，以及角色 `memory_init_state` 里插件自有的键（`read_state` / `write_state`；宿主自己的初始化键读不到、写入抛 `ValueError`）。端口本身跨代 |
 | `proactive_host` | `PROACTIVE_HOST` | 宿主（P6b）。主动 tick 的宿主能力：角色串行 tick、被动忙碌、补全（含自然草稿的一次格式纠正）、带核心校验的工具执行与宿主工具执行、工具 schema 与 MCP 服务器及其工具、目标候选与桌面在场、会话历史、自然回复作用域与投递。跑回合和投递走当前发布代；端口本身跨代。主动循环搬进插件之前仍可增删成员，4.0 发版时定稿 |
 | `conversation` | `CONVERSATION` | 宿主（P6b），每个代一份。`deliver_initiated_reply(InitiatedReply) -> InitiatedDelivery` 以会话所属角色投递一条主动回复，可带目标、媒体、心情、自然回复序列和工具事实，返回已落库的消息 id 与是否完整发出；`reply_state(role_id)` 读该代角色会话的心情目录和已存心情时间 |
 | `memory_optimizer` | `MEMORY_OPTIMIZER` | 系统插件 `memory_optimizer`（P6b）。只有 `active_run()`：正在整理的角色与开始时间。核心 `get` 它在任务面板列出记忆维护，`None` 时不列 |
 
-旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是外部插件，新装默认关闭，没启用时没有 `mcp_add`；`mcp_servers.json` 里已有服务器的老工作区会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
+旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是外部插件，新装默认关闭，没启用时没有 `mcp_add`；`plugin-data/mcp/mcp_servers.json` 里已有服务器的工作区（旧根目录文件先由 bootstrap 迁入）会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
 
 即时聊天的选用：插件在提供，并且角色 `runtime_config.natural_chat_enabled` 是布尔 `True`。插件关闭时不选用，回复是单条。`natural_chat_enabled` 仍在角色 JSON，不进 `config.toml`。
 

@@ -8,6 +8,7 @@ the event subscription to it.
 
 from __future__ import annotations
 
+from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.core.schedule_host import SCHEDULE_HOST
 from shiori_sdk.core.scheduler import (
     SCHEDULER,
@@ -150,7 +151,7 @@ def _form_fields(payload: dict[str, object]) -> dict[str, str]:
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Attaches to the process scheduler and serves its tools, RPC and key."""
     resources = ctx.require(PROCESS_RESOURCES)
-    store_path = ctx.require(WORKSPACE) / "schedules.json"
+    store_path = plugin_data_dir(ctx.require(WORKSPACE), "schedule") / "schedules.json"
     service = resources.acquire(
         _RESOURCE_KEY, lambda: SchedulerService(store_path, tracker=LatencyTracker())
     )

@@ -22,7 +22,7 @@ related:
 
 # 调度与角色任务
 
-定时任务是系统插件 `plugins/schedule`（#906 P6s，默认启用）。`backend/scheduler.py` 的 `SchedulerService` 负责计算触发时间和调度执行（asyncio tick 循环），任务由 `JobStore` 持久化到工作区的 `schedules.json`（路径和格式与插件化之前一致，经 `WORKSPACE` 定位，不在插件数据目录）。`backend/tools.py` 向 Agent 暴露 `schedule`（创建）、`list_schedules`（查询）和 `cancel_schedule`（按 ID 前缀或名称取消）三个工具，插件 setup 时经 `TOOLS` 注册，其中只有 `list_schedules` 声明外部可用，外部上下文的受限回合不能增删计划（#489）。三个工具的 `role_id`（`schedule` 还有 `role_config_version`、`thread_id`、`delivery_key`）只取自回合的执行上下文（`context_precedence`），模型同名参数不能改写任务归属，也不能查看或取消别的角色的任务。插件 provide `SCHEDULER`（`shiori_sdk.core.scheduler`：创建、列出、取消角色的任务），供主动推送等消费方 `optional_inject`。核心不再注册这些工具；`[agent.wiring] toolsets` 里的 `"schedule"` 只是保留下来、不注册任何东西的名字。
+定时任务是系统插件 `plugins/schedule`（#906 P6s，默认启用）。`backend/scheduler.py` 的 `SchedulerService` 负责计算触发时间和调度执行（asyncio tick 循环），任务由 `JobStore` 持久化到工作区的 `plugin-data/schedule/schedules.json`（格式仍为根数组；旧根目录文件由 bootstrap 在冷启动时迁入并归档，见[存储决策](../../decisions/2026-11-04-plugin-storage-paths.md)）。`backend/tools.py` 向 Agent 暴露 `schedule`（创建）、`list_schedules`（查询）和 `cancel_schedule`（按 ID 前缀或名称取消）三个工具，插件 setup 时经 `TOOLS` 注册，其中只有 `list_schedules` 声明外部可用，外部上下文的受限回合不能增删计划（#489）。三个工具的 `role_id`（`schedule` 还有 `role_config_version`、`thread_id`、`delivery_key`）只取自回合的执行上下文（`context_precedence`），模型同名参数不能改写任务归属，也不能查看或取消别的角色的任务。插件 provide `SCHEDULER`（`shiori_sdk.core.scheduler`：创建、列出、取消角色的任务），供主动推送等消费方 `optional_inject`。核心不再注册这些工具；`[agent.wiring] toolsets` 里的 `"schedule"` 只是保留下来、不注册任何东西的名字。
 
 调度器是插件的进程资源（`PROCESS_RESOURCES.acquire("scheduler-v1", ...)`）：进程里只有一份，第一次 setup 时 `start` 读取 `schedules.json`、清理孤儿并开始 tick；之后每一代（换代、代内重载）的 setup 只重新绑定 `SCHEDULE_HOST`、工具、RPC 和事件订阅，不重复读取、不多开 tick 循环。插件停用时宿主关闭这个资源：tick 停止，在途任务取消，`schedules.json` 保留。进程退出时同样关闭。
 

@@ -16,6 +16,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
+from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.tools import ToolResult
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ class ContextSourceFormatError(ValueError):
 def _load_sources(workspace: Path) -> list[dict]:
     path = workspace / "proactive_sources.json"
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         return [s for s in data.get("sources", []) if s.get("enabled", True)]
     except FileNotFoundError:
         return []
@@ -53,9 +54,9 @@ def _load_sources(workspace: Path) -> list[dict]:
 
 
 def _get_server_cfg(server_name: str, workspace: Path) -> dict | None:
-    path = workspace / "mcp_servers.json"
+    path = plugin_data_dir(workspace, "mcp") / "mcp_servers.json"
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
         return data.get("servers", {}).get(server_name)
     except Exception as e:
         logger.warning("[mcp_sources] mcp_servers.json 读取失败: %s", e)

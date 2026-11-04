@@ -1,4 +1,4 @@
-"""Strategy-trace envelopes written beside a role's memory directory."""
+"""Strategy-trace envelopes in the proactive plugin's private logs."""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import logging
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from shiori_sdk.storage import plugin_data_dir
 from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
@@ -89,9 +91,9 @@ def rate_decision_payload(
 def append_loop_trace(
     workspace: Path, filename: str, payload: dict[str, Any], *, role_id: str
 ) -> None:
-    """Appends ``payload`` to ``memory/<filename>``; a failed write only warns."""
+    """Appends ``payload`` to ``plugin-data/proactive/logs/<filename>``; a failed write only warns."""
     try:
-        memory_dir = workspace / "memory"
+        memory_dir = plugin_data_dir(workspace, "proactive") / "logs"
         memory_dir.mkdir(parents=True, exist_ok=True)
         if "trace_type" not in payload or "payload" not in payload:
             trace_type: StrategyTraceType = (

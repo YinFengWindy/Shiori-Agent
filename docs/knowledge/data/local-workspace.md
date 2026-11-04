@@ -37,7 +37,10 @@ Shiori 是本地优先应用。默认工作区为 `~/.shiori/workspace`（`core/
 | 角色 Markdown 记忆 | `core/memory/`（`roles/<role_id>/memory`） | 删除角色时级联清理 |
 | 默认记忆引擎 | `plugins/default_memory/backend/semantic/store/`（默认 `plugin-data/default_memory/memory2.db`，旧 `memory/memory2.db` 自动迁移；可由插件配置 `db_path` 覆盖） | 带角色、会话和时间/向量索引 |
 | NovelAI 设置、生成记录与标签 | `plugins/novelai/backend/`（生成数据在 `plugin-data/novelai/generation`，旧 `private_runtime/novelai` 自动迁移） | 敏感配置不进入 Git |
-| 调度任务 | `plugins/schedule/backend/scheduler.py`（`schedules.json`） | 删除角色后插件取消该角色任务，启动时清理孤儿 |
+| 调度任务 | `plugins/schedule/backend/scheduler.py`（`plugin-data/schedule/schedules.json`） | 删除角色后插件取消该角色任务，启动时清理孤儿 |
+| 场景状态 | `plugins/scene/backend/state.py`（`plugin-data/scene/state.json`） | 当前场景与视觉标识按会话保存 |
+| MCP 服务器登记 | `plugins/mcp/backend/registry.py`（`plugin-data/mcp/mcp_servers.json`） | MCP 插件和 proactive 客户端共用同一文件 |
+| 主动推送诊断日志 | `plugins/proactive/backend/traces.py`（`plugin-data/proactive/logs/proactive_config_trace.jsonl`、`proactive_rate_trace.jsonl`） | 角色数据库与 Drift 状态仍在 `roles/<id>/` |
 | 账号投递与用户身份 | `core/accounts/delivery_ledger.py`（`account_deliveries.sqlite3`）、`core/identity/store.py`（`user_identities.json`） | 渠道账号与身份配对 |
 | 插件包与插件状态 | `agent/plugin_host/`、`desktop_bridge/runtime/plugin_package_*.py`（外部插件包在 `plugins/`，私有数据与 KV 在 `plugin-data/<id>/`，待执行安装事务在 `private_runtime/plugin-operations/`） | 卸载插件时同时处理私有数据 |
 
@@ -46,5 +49,7 @@ Shiori 是本地优先应用。默认工作区为 `~/.shiori/workspace`（`core/
 JSON 写入复用 SDK `shiori_sdk.files.json` 的 `atomic_save_json()`（文本与字节见 `shiori_sdk.files.text`）；SQLite 由 owning store 管理连接和 schema，事务辅助在 `infra/persistence/sqlite_transaction.py`。迁移应幂等、失败即停并保留可诊断信息。不要在 UI 或渠道适配器中直接编辑运行时文件。
 
 ## 备份与迁移验收
+
+scene、schedule、mcp 和 proactive 上述五个文件由 bootstrap 在冷启动时从旧位置迁入。新目标已存在时保留新目标；旧文件核对后归档到 `private_runtime/plugin-storage-archive/<原相对路径>.<sha256>.bak`，再移除旧路径。失败时保留失败文件的原始来源并阻止启动，重试可继续。归档不随普通插件数据清理删除，也不会被自动恢复。完整备份应包含仍需保留的归档；范围与顺序见[存储决策](../../decisions/2026-11-04-plugin-storage-paths.md)。
 
 验证旧数据读取、新格式落盘、重复运行迁移、部分失败恢复、角色/会话引用完整性、UTF-8 文本、附件路径和回滚前备份。源码和知识库只能说明代码中的数据关系，不能证明某个本地实例的数据健康。

@@ -90,11 +90,18 @@ def test_bridge_keeps_dependency_prints_off_protocol_pipe(
         main.Config.load = load
         main.build_app_runtime = build
         main.DesktopBridgeServer = Server
-        assert main.main(["bridge", "--config", sys.argv[1]]) == 0
+        assert main.main(["bridge", "--config", sys.argv[1], "--workspace", sys.argv[3]]) == 0
         assert sys.stdout is protocol_output
         """)
     result = subprocess.run(
-        [sys.executable, "-c", probe, str(config_path), initial_encoding],
+        [
+            sys.executable,
+            "-c",
+            probe,
+            str(config_path),
+            initial_encoding,
+            str(tmp_path / "workspace"),
+        ],
         cwd=Path(app_main.__file__).parent,
         input=(
             json.dumps({"id": "settings-1", "method": "settings.read"}) + "\n"
@@ -278,6 +285,39 @@ def test_dev_launch_makes_top_level_plugins_importable(tmp_path: Path):
 
     assert result.returncode == 0, result.stderr
     assert "PLUGINS_IMPORTABLE 0" in result.stdout
+
+
+async def test_bridge_migrates_before_uninstall_and_mcp_enablement(
+    tmp_path, monkeypatch
+):
+    """Cold-start ordering cannot revive cleared data or hide existing servers."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    old = workspace / "mcp_servers.json"
+    old.write_text('{"servers":{"docs":{"command":["docs-server"]}}}', encoding="utf-8")
+    (workspace / "schedules.json").write_text("[]", encoding="utf-8")
+    config = tmp_path / "config.toml"
+    config.write_text("", encoding="utf-8")
+
+    def uninstall(workspace, config_path):
+        assert not old.exists()
+        # An explicitly requested data deletion must run after the upgrade.
+        (workspace / "plugin-data/schedule/schedules.json").unlink()
+
+    def build(cfg, **kwargs):
+        import tomllib
+
+        assert tomllib.loads(config.read_text())["plugins"]["mcp"]["enabled"] is True
+        assert not (workspace / "plugin-data/schedule/schedules.json").exists()
+        raise RuntimeError("checked before runtime starts")
+
+    monkeypatch.setattr(
+        "desktop_bridge.runtime.plugin_package_transaction.apply_pending_plugin_operations",
+        uninstall,
+    )
+    monkeypatch.setattr(app_main, "build_app_runtime", build)
+    with pytest.raises(RuntimeError, match="checked before runtime starts"):
+        await app_main.serve_bridge(str(config), workspace)
 
 
 @pytest.mark.asyncio

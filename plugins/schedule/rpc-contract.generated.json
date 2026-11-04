@@ -11,22 +11,22 @@
     {
       "name": "cancel",
       "path": "plugins/schedule/backend/plugin.py",
-      "line": 192
+      "line": 193
     },
     {
       "name": "create",
       "path": "plugins/schedule/backend/plugin.py",
-      "line": 193
+      "line": 194
     },
     {
       "name": "list",
       "path": "plugins/schedule/backend/plugin.py",
-      "line": 189
+      "line": 190
     },
     {
       "name": "update",
       "path": "plugins/schedule/backend/plugin.py",
-      "line": 194
+      "line": 195
     }
   ],
   "services": []

@@ -885,7 +885,7 @@ One due occurrence of a role's scheduled job. ``job_id`` with ``fire_at``, the n
 
 ## `shiori_sdk.core.scheduler`
 
-``SCHEDULER``: roles' scheduled jobs (P6s, D17). The ``schedule`` plugin provides this key; the host never does. A consumer declares it in ``optional_inject``, ``get``s it on every use and does without scheduling when it is ``None`` (the plugin is off). Jobs persist in ``<workspace>/schedules.json``; this key does not change that file. Due jobs run through ``SCHEDULE_HOST`` (``shiori_sdk.core.schedule_host``).
+``SCHEDULER``: roles' scheduled jobs (P6s, D17). The ``schedule`` plugin provides this key; the host never does. A consumer declares it in ``optional_inject``, ``get``s it on every use and does without scheduling when it is ``None`` (the plugin is off). Jobs persist in ``<workspace>/plugin-data/schedule/schedules.json``; this key does not change that file. Due jobs run through ``SCHEDULE_HOST`` (``shiori_sdk.core.schedule_host``).
 
 ### `scheduler`
 

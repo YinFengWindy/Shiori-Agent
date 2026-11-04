@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.core.mcp_tools import MCP_TOOLS
 from shiori_sdk.core.services import BACKGROUND, PROCESSES, TOOLS, WORKSPACE
 from shiori_sdk.runtime import PluginRuntimeContext
@@ -13,7 +14,7 @@ from .registry import McpServerRegistry
 async def setup(ctx: PluginRuntimeContext) -> None:
     """Registers manage tools and reconnects ``mcp_servers.json`` in the background."""
     registry = McpServerRegistry(
-        ctx.require(WORKSPACE) / "mcp_servers.json",
+        plugin_data_dir(ctx.require(WORKSPACE), "mcp") / "mcp_servers.json",
         processes=ctx.require(PROCESSES),
         registration=ctx.require(MCP_TOOLS),
     )

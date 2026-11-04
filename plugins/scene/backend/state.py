@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Any
 
+from shiori_sdk.storage import plugin_data_dir
 from shiori_sdk.files.json import atomic_save_json, load_json
 
 from .contracts import SceneDecision
@@ -19,7 +20,7 @@ class SceneStateStore:
 
     def __init__(self, workspace: Path, legacy_roots: tuple[Path, ...] = ()) -> None:
         self._revisions: dict[str, int] = {}
-        self.path = workspace / "scene" / "state.json"
+        self.path = plugin_data_dir(workspace, "scene") / "state.json"
         self._sources = (
             workspace / "plugins" / "scene_awareness" / "kv.json",
         ) + tuple(root / "scene_awareness" / ".kv.json" for root in legacy_roots)

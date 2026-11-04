@@ -4,7 +4,7 @@
 
 ## 数据
 
-任务存于 `<workspace>/schedules.json`（根数组），路径和格式与插件化之前一致。插件启用后，已有任务继续执行；超过 5 分钟宽限期的单次任务在启动时丢弃，循环任务推进到下一次。
+任务存于 `<workspace>/plugin-data/schedule/schedules.json`，仍为根数组。冷启动迁入旧工作区根目录的 `schedules.json`；已有新目标优先，旧文件核对后归档，详见[存储决策](../../docs/decisions/2026-11-04-plugin-storage-paths.md)。插件启用后，已有任务继续执行；超过 5 分钟宽限期的单次任务在启动时丢弃，循环任务推进到下一次。
 
 ## 运行
 
