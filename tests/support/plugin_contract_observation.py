@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import functools
+import gc
 import socket
 import sqlite3
 import subprocess
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import patch
@@ -152,6 +153,15 @@ def observe_lifecycle() -> Iterator[LifecycleObservation]:
     original_connect = sqlite3.connect
     loop = asyncio.get_running_loop()
     original_factory = loop.get_task_factory()
+    gc_tokens: list[Token[str | None]] = []
+
+    def gc_phase(phase, _info):
+        # Unrelated objects can be collected during setup. Neutralize the
+        # context before their destructors run, including callbacks they defer.
+        if phase == "start":
+            gc_tokens.append(_ACTIVATING.set(None))
+        else:
+            _ACTIVATING.reset(gc_tokens.pop())
 
     def scope_add(scope, entry):
         observation.registrations.append((scope.owner, entry.subscription, entry.label))
@@ -172,9 +182,9 @@ def observe_lifecycle() -> Iterator[LifecycleObservation]:
         )
         observation.tasks.append(task)
         owner = _ACTIVATING.get()
-        # CPython schedules async-generator finalizers using the context active
-        # at GC time. They are still tracked above for leaks and exceptions, but
-        # that inherited activation is not evidence of a plugin-authored spawn.
+        # Refcount-driven async-generator finalization does not enter cyclic GC.
+        # Its deferred cleanup also inherits the current activation, but remains
+        # tracked above for leaks and exceptions without plugin spawn ownership.
         finalizer = (
             type(coro).__module__ == "builtins"
             and type(coro).__name__ == "async_generator_athrow"
@@ -200,6 +210,7 @@ def observe_lifecycle() -> Iterator[LifecycleObservation]:
         denied_io(*args, **kwargs)
 
     loop.set_task_factory(task_factory)
+    gc.callbacks.append(gc_phase)
     try:
         with (
             patch.object(Scope, "_add", scope_add),
@@ -212,6 +223,7 @@ def observe_lifecycle() -> Iterator[LifecycleObservation]:
         ):
             yield observation
     finally:
+        gc.callbacks.remove(gc_phase)
         loop.set_task_factory(original_factory)
 
 
