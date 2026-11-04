@@ -34,7 +34,7 @@ from desktop_bridge.runtime.plugin_package_listing import (
     external_source_row,
     with_package_operations,
 )
-from desktop_bridge.plugin_config_text import merge_plugin_table
+from core.common.plugin_config_text import merge_plugin_table
 from desktop_bridge.runtime.apply import (
     DerivedWrite,
     RuntimeApplyError,

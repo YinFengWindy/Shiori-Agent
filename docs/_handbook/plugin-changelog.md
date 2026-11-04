@@ -28,7 +28,7 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 - `roleSettings` 新增可选 `save(roleId, values, previous, client)` 与 props `devMode`。RPC 保存发生在核心保存之后，失败保留插件草稿、更新核心基线并提示部分成功；原有无 `save` 贡献的原子扩展事务不变。主动 RPC 只合并已编辑字段并保留最新 overrides 等未编辑内容；禁用插件后面板消失、数据保留。
 
 
-尚未发布到 npm / PyPI。桌面要等插件系统重构做完才带这个 SDK 出包。
+发布通过 `sdk-v4.0.0` 标签工作流完成；只有 npm 与 PyPI 两端成功才算 SDK 发布完成。桌面发行使用定版 SDK，不能分发重构中间态。
 
 - manifest 只接受 `api: 4`，并要求 `sdk` 最低约束。基线是 `>=4.0.0`。
 - 删除 `runtime_api`。SDK 版本就是唯一版本号。

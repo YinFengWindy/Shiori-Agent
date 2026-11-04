@@ -28,7 +28,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from bootstrap.config_text_editor import plugin_table_editor
+from core.common import plugin_config_text as editor
 from shiori_sdk.files.text import atomic_save_text
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,6 @@ def _apply(path: Path, text: str, values: dict[str, Any]) -> str:
     replace. Rewriting the whole document instead would drop every comment in
     the user's file, so such a config stops startup with a fix-it message.
     """
-    editor = plugin_table_editor()
     try:
         merged = editor.merge_plugin_table(text, DEFAULT_MEMORY_PLUGIN_ID, values)
     except editor.PluginTableConflict as exc:

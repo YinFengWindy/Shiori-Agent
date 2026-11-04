@@ -12,7 +12,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from bootstrap.config_text_editor import plugin_table_editor
+from core.common import plugin_config_text as editor
 from shiori_sdk.files.text import atomic_save_text
 
 SCENE_PLUGIN_ID = "scene"
@@ -37,7 +37,6 @@ def migrate_legacy_scene_config(path: Path) -> None:
         return
     enabled = _legacy_enabled(agent["scene_observation"])
     existing = _existing_plugin_values(data)
-    editor = plugin_table_editor()
     updated = text
     if OBSERVATION_ENABLED_KEY not in existing:
         values = {**existing, OBSERVATION_ENABLED_KEY: enabled}

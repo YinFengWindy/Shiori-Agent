@@ -20,7 +20,7 @@ from agent.plugin_host.config_schema import (
 from agent.plugin_host.kernel import PluginKernel
 from agent.plugin_host.settings import PLUGIN_ENABLED_CONFIG_KEY
 from bootstrap.app import AppRuntime
-from desktop_bridge.plugin_config_text import PluginTableConflict, merge_plugin_table
+from core.common.plugin_config_text import PluginTableConflict, merge_plugin_table
 from desktop_bridge.runtime.apply import (
     DerivedWrite,
     RuntimeApplyError,
@@ -168,7 +168,7 @@ class RuntimePluginConfig:
         persisted = _persisted_values(values, normalized)
 
         # 复用设置事务：定位-替换式合并 TOML 文本后走既有事务化落盘 + 热更新路径，
-        # 不另起一套写盘逻辑（见 desktop_bridge/plugin_config_text.py）。
+        # 不另起一套写盘逻辑（见 core/common/plugin_config_text.py）。
         # 合并与守卫都在事务锁内进行：本方法只改一张表、其余文本沿用"当前已提交
         # 的配置"，若在锁外读取基准文本，并发的 runtime.apply 会被整份覆盖掉。
         # 但当幂等 memo 命中时，apply() 根本不会调用这个回调——见

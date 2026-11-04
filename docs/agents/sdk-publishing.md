@@ -5,7 +5,7 @@ SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shior
 SDK 大版本是破坏性变更。manifest 写 `api: 4` 和 `sdk` 最低约束。4.x 内不给已有
 Key 加方法。没有 Unreleased 批次，也没有 `runtime_api`。正式发布 SDK 前，源版本、
 npm 包、宿主和 host-testing 的精确 pin 必须一致。桌面包内置的 SDK 也是已分发契约，
-不能因为注册表尚未发布，就继续用已随桌面发出的版本号承载不同源码。4.0.0 尚未发布。
+不能因为注册表尚未发布，就继续用已随桌面发出的版本号承载不同源码。发布状态以对应标签工作流及两个注册表的实际结果为准。
 
 版本唯一来源是 `packages/sdk/python/shiori_sdk/_version.py`。改版本时直接改 npm 包、
 `setup.py` 和 host-testing 的 pin，用 `node scripts/check_sdk_release.mjs --align` 核对。

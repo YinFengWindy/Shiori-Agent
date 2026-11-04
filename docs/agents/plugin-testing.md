@@ -36,7 +36,7 @@ uv run pytest plugins/example/tests
 - `shiori-host-testing` 提供真实宿主集成能力，只安装在宿主开发环境。
 - 插件 wheel 只包含本包后端、明确打包的 testing helper 与资源。Story→NovelAI 为公开运行时依赖；status_commands 的 test extra→Observe 是显式测试依赖。没有声明的兄弟插件不会被注入。
 
-公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`。仓库源码已是 SDK 4.0.0 / manifest API 4；旧 `runtime_api` 已删除。4.0.0 尚未正式发布，验证必须使用当前源码构建的私有 wheel/tarball，不能用已发布的 3.1.2 代替。注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
+公开 SDK 的 npm 包为 `@yinfengwindy/shiori-sdk`，PyPI 包为 `shiori-sdk`。仓库源码是 SDK 4.0.0 / manifest API 4；旧 `runtime_api` 已删除。发行验证使用当前源码构建的精确 wheel/tarball，不能用 3.x 产物代替；注册表尚未发布对应版本时，开发也使用这些私有产物或 workspace 包。注册表安装与 testing extra 用法见 [SDK README](../../packages/sdk/README.md)。`shiori-agent`、`shiori-host-testing` 和插件 wheel 仍只构建为本地/CI 产物，不随 SDK 发布到 npm 或 PyPI。
 
 ## 插件副本运行
 

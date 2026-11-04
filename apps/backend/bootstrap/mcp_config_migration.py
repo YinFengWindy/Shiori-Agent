@@ -17,7 +17,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from bootstrap.config_text_editor import plugin_table_editor
+from core.common import plugin_config_text as editor
 from shiori_sdk.files.text import atomic_save_text
 
 MCP_PLUGIN_ID = "mcp"
@@ -42,7 +42,6 @@ def migrate_mcp_enabled(config_path: Path, workspace: Path) -> None:
     existing = _existing_plugin_values(data)
     if _ENABLED_KEY in existing:
         return
-    editor = plugin_table_editor()
     try:
         updated = editor.merge_plugin_table(
             text, MCP_PLUGIN_ID, {**existing, _ENABLED_KEY: True}

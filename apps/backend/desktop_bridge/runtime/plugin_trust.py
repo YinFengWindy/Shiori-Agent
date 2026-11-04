@@ -11,7 +11,7 @@ from agent.plugin_host.settings import plugin_enabled
 from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
 from bootstrap.app import AppRuntime
 from core.common.cancellation import finish_started
-from desktop_bridge.plugin_config_text import merge_plugin_table
+from core.common.plugin_config_text import merge_plugin_table
 from desktop_bridge.runtime.apply import (
     DerivedWrite,
     RuntimeApplyError,
