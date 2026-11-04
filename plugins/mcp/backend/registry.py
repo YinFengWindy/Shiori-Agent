@@ -14,6 +14,7 @@ from . import operations
 from .oauth import OAuthBinding
 from .models import HttpTransport
 from shiori_sdk.processes import Processes
+from shiori_sdk.redaction import redact_secrets
 from shiori_sdk.tools import ToolResult
 from .api import SourceCall
 from .configuration import connection_edit
@@ -384,7 +385,9 @@ class McpServerRegistry:
                 raise McpToolError(
                     server=server,
                     tool_name=tool,
-                    message=redactor.text(error.message),
+                    # Generic credential heuristics belong to diagnostics,
+                    # never successful MCP payloads or their opaque tokens.
+                    message=redact_secrets(redactor.text(error.message)),
                     code=error.code,
                 ) from None
             if isinstance(error, TimeoutError):

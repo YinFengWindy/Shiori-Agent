@@ -98,7 +98,9 @@ class LaunchRedactor:
             # Scrub escaped copies too; pure JSON takes the typed path below.
             text = text.replace(json.dumps(value, ensure_ascii=False)[1:-1], _HIDDEN)
             text = text.replace(value, _HIDDEN)
-        return redact_secrets(text)
+        # Payload text can contain opaque handles named token. Only the
+        # values selected from this call's launch configuration are secrets.
+        return text
 
     def text(self, text: str) -> str:
         """Redact JSON by value so substitutions never break its wire syntax."""
@@ -116,12 +118,5 @@ class LaunchRedactor:
         if isinstance(value, list):
             return [self.data(item) for item in value]
         if isinstance(value, dict):
-            return {
-                self._plain(key): (
-                    _HIDDEN
-                    if isinstance(item, str) and item and _credential_name(key)
-                    else self.data(item)
-                )
-                for key, item in value.items()
-            }
+            return {self._plain(key): self.data(item) for key, item in value.items()}
         return value
