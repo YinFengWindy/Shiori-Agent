@@ -20,19 +20,39 @@ def start_operation(
     state = registry._states[server]
     if kind not in {"disable", "delete"}:
         registry._config(server)
-    if kind == "connect" and not registry.store.servers[server].enabled:
+    if (
+        kind in {"connect", "login", "refresh"}
+        and not registry.store.servers[server].enabled
+    ):
         raise McpConfigError("请先启用服务器")
+    binding = (
+        registry.oauth_binding(server)
+        if kind in {"login", "logout", "refresh"}
+        else None
+    )
+    if kind == "logout" and binding:
+        binding.invalidate(clear=True)
+    if kind == "cancel" and server in registry._oauth:
+        registry._oauth[server][1].invalidate(clear=True)
+    if kind in {"disable", "delete"} and server in registry._oauth:
+        registry._oauth[server][1].invalidate()
     previous = registry._operations.get(server)
     if kind == "test" and previous and not previous.done():
         raise McpConfigError("服务器操作仍在进行")
-    if previous and state.operation and state.operation["kind"] in {"connect", "test"}:
+    if (
+        previous
+        and state.operation
+        and state.operation["kind"] in {"connect", "test", "login", "refresh"}
+    ):
         if not previous.cancelling():
             previous.cancel()
     epoch = state.epoch if kind == "test" else registry._invalidate(server)
     op = {"id": uuid4().hex, "kind": kind, "status": "running", "error": None}
     state.operation = op
     if kind != "test":
-        state.status = "connecting" if kind == "connect" else "disabling"
+        state.status = (
+            "connecting" if kind in {"connect", "login", "refresh"} else "disabling"
+        )
     state.error = None
 
     async def run():
@@ -43,10 +63,16 @@ def start_operation(
                 await test_connection(registry, server)
             else:
                 await close_session(registry, state)
-                if kind == "connect":
+                if kind == "login" and binding:
+                    await binding.begin(op)
+                if kind == "refresh" and binding:
+                    binding.refresh()
+                if kind in {"connect", "login", "refresh"}:
                     await connect(registry, server, epoch)
                 elif state.epoch == epoch:
-                    state.status = "disconnected" if kind == "cancel" else "disabled"
+                    state.status = (
+                        "disconnected" if kind in {"cancel", "logout"} else "disabled"
+                    )
             op["status"] = "succeeded"
         except asyncio.CancelledError:
             op["status"] = "cancelled"
@@ -58,6 +84,8 @@ def start_operation(
             if state.epoch == epoch and kind != "test":
                 state.status, state.error = "error", op["error"]
         finally:
+            if binding and kind == "login":
+                await binding.finish()
             registry._changed()
 
     registry._operations[server] = asyncio.create_task(
@@ -73,7 +101,7 @@ def cancel_operation(registry: "McpServerRegistry", server: str) -> dict[str, ob
     task = registry._operations.get(server)
     state = registry._states[server]
     if task and not task.done() and state.operation:
-        if state.operation["kind"] == "connect":
+        if state.operation["kind"] in {"connect", "login", "refresh"}:
             return start_operation(registry, server, "cancel")
         if state.operation["kind"] == "test":
             state.operation["status"] = "cancelled"
@@ -102,7 +130,16 @@ def new_session(registry: "McpServerRegistry", server: str) -> McpSession:
     if isinstance(config.transport, HttpTransport):
         from .http_session import HttpMcpSession
 
-        return HttpMcpSession(server, config.transport, credentials)
+        binding = (
+            registry.oauth_binding(server) if config.transport.auth == "oauth" else None
+        )
+        return HttpMcpSession(
+            server,
+            config.transport,
+            credentials,
+            auth=binding.provider if binding else None,
+            interactive=bool(binding and binding.operation),
+        )
     return registry._processes.mcp(
         server,
         list(credentials.command),

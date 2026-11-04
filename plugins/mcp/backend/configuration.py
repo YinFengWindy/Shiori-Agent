@@ -31,6 +31,7 @@ def secret_values(credentials: LaunchCredentials) -> list[str]:
         *credentials.command[1:],
         *credentials.headers.values(),
         credentials.bearer or "",
+        credentials.oauth.client_secret or "" if credentials.oauth else "",
         credentials.url or "",
         *(value for _, value in parse_qsl(urlsplit(credentials.url or "").query)),
     ]
@@ -111,3 +112,10 @@ def validate_connection(transport: Transport, credentials: LaunchCredentials) ->
         or not re.fullmatch(r"[A-Za-z0-9._~+/=-]+", credentials.bearer)
     ):
         raise McpConfigError("Bearer token 不能为空或包含空白、控制字符")
+
+    if transport.auth == "oauth" and credentials.oauth:
+        oauth = credentials.oauth
+        if oauth.auth_method != "none" and (
+            not oauth.client_id or not oauth.client_secret
+        ):
+            raise McpConfigError("预注册客户端认证需要 Client ID 和 Client secret")

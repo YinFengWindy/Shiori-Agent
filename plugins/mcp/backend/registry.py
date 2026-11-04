@@ -11,6 +11,8 @@ from pydantic import ValidationError
 from shiori_sdk.core.mcp_tools import McpToolRegistration
 from shiori_sdk.mcp import McpSession, McpToolInfo, McpToolError
 from . import operations
+from .oauth import OAuthBinding
+from .models import HttpTransport
 from shiori_sdk.processes import Processes
 from shiori_sdk.redaction import redact_secrets
 from shiori_sdk.tools import ToolResult
@@ -53,6 +55,7 @@ class McpServerRegistry:
         active: Callable[[], bool] = lambda: True,
     ):
         self.store = ServerStore(config_path)
+        self._oauth: dict[str, tuple[str, OAuthBinding]] = {}
         self._processes, self._registration = processes, registration
         self._changed, self._active = changed, active
         self._states: dict[str, ServerState] = {}
@@ -117,6 +120,12 @@ class McpServerRegistry:
                     "url_configured": bool(credentials.url),
                     "bearer_configured": bool(credentials.bearer),
                     "header_names": sorted(credentials.headers),
+                    "oauth": (
+                        self.oauth_binding(server).snapshot()
+                        if isinstance(config.transport, HttpTransport)
+                        and config.transport.auth == "oauth"
+                        else None
+                    ),
                     "selection": config.tools.model_dump(),
                     "status": state.status,
                     "error": state.error,
@@ -191,6 +200,16 @@ class McpServerRegistry:
             or previous.enabled != config.enabled
         )
         if reconnect:
+            if (
+                server in self._oauth
+                and previous
+                and (
+                    previous.transport != config.transport
+                    or previous.credential_ref != config.credential_ref
+                )
+            ):
+                _, binding = self._oauth.pop(server)
+                binding.invalidate(clear=True)
             self.start_operation(server, "connect" if config.enabled else "disable")
         else:
             self._register(server, state)
@@ -216,9 +235,29 @@ class McpServerRegistry:
         self._config(server, revision)
         remaining = dict(self.store.servers)
         del remaining[server]
+        if server in self._oauth:
+            self._oauth[server][1].invalidate(clear=True)
         self.store.commit(remaining)
         self.start_operation(server, "delete")
         return self.snapshot()
+
+    def oauth_binding(self, server: str) -> OAuthBinding:
+        """Return the same provider for connects, tests and admitted tool calls."""
+        config = self.store.servers[server]
+        if (
+            not isinstance(config.transport, HttpTransport)
+            or config.transport.auth != "oauth"
+        ):
+            raise McpConfigError("服务器未配置 OAuth")
+        cached = self._oauth.get(server)
+        if cached is None or cached[0] != config.credential_ref:
+            binding = OAuthBinding(
+                self.store.private / "oauth" / f"{config.credential_ref}.json",
+                self.store.credentials(config),
+                self._changed,
+            )
+            self._oauth[server] = (config.credential_ref, binding)
+        return self._oauth[server][1]
 
     def _invalidate(self, server: str) -> int:
         state = self._states.setdefault(server, ServerState())
@@ -350,7 +389,11 @@ class McpServerRegistry:
 
     def _redact(self, server: str, text: str) -> str:
         credentials = self.store.credentials(self.store.servers[server])
-        for value in sorted(secret_values(credentials), key=len, reverse=True):
+        oauth = self._oauth.get(server)
+        values = secret_values(credentials) + (
+            oauth[1].store.secrets() + oauth[1].private_values if oauth else []
+        )
+        for value in sorted(values, key=len, reverse=True):
             if value:
                 # Short non-secret env flags must not corrupt words/base64.
                 text = (
@@ -389,6 +432,8 @@ class McpServerRegistry:
     async def shutdown(self) -> None:
         """Close admission before cancelling operations and owned connections."""
         self._closed = True
+        for _, binding in self._oauth.values():
+            binding.invalidate()
         for server in self._states:
             self._invalidate(server)
         for task in self._operations.values():
@@ -397,6 +442,8 @@ class McpServerRegistry:
         await asyncio.gather(
             *(operations.close_session(self, state) for state in self._states.values())
         )
+        for _, binding in self._oauth.values():
+            await binding.finish()
         if self._loaded:
             self.store.prune_credentials()
 

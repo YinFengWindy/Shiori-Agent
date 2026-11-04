@@ -17,7 +17,13 @@ from shiori_sdk.mcp import McpToolError, McpToolInfo
 from shiori_sdk.mcp_result import decode_tool_result
 from shiori_sdk.tools import ToolResult
 
-from .models import HttpTransport, LaunchCredentials, McpConfigError, McpHttpError
+from .models import (
+    HttpTransport,
+    LaunchCredentials,
+    LoginRequired,
+    McpConfigError,
+    McpHttpError,
+)
 
 _DIAGNOSTICS: ContextVar[bool] = ContextVar(
     "shiori_mcp_http_diagnostics", default=False
@@ -44,6 +50,9 @@ _FILTER = _SafeDiagnostics()
 _FILTER_USERS = 0
 _LOGGER_NAMES = (
     "mcp.client.streamable_http",
+    "mcp.client.auth.oauth2",
+    "mcp.client.auth.utils",
+    "mcp.shared._httpx_utils",
     "mcp.client.client",
     "mcp.client.caching",
     "mcp.shared.dispatcher",
@@ -76,6 +85,13 @@ def _diagnostics_release() -> None:
 
 def _failure(error: BaseException, status: list[int], phase: str) -> Exception:
     """Translate the transport boundary without retaining unsafe exception chains."""
+    if isinstance(error, McpConfigError):
+        return error
+    if isinstance(error, BaseExceptionGroup):
+        for item in error.exceptions:
+            failure = _failure(item, [], phase)
+            if isinstance(failure, LoginRequired):
+                return failure
     if status and status[-1] in {401, 403}:
         message = "认证未通过" if status[-1] == 401 else "访问被拒绝"
         return McpHttpError(f"MCP HTTP {phase}失败（{status[-1]}）：{message}")
@@ -143,9 +159,17 @@ class HttpMcpSession:
     """A single eager HTTP connection; calls never connect or replay themselves."""
 
     def __init__(
-        self, server: str, transport: HttpTransport, credentials: LaunchCredentials
+        self,
+        server: str,
+        transport: HttpTransport,
+        credentials: LaunchCredentials,
+        *,
+        auth: httpx2.Auth | None = None,
+        interactive: bool = False,
     ):
         self.server = server
+        self._auth = auth
+        self._interactive = interactive
         self._url = credentials.url or ""
         self._headers = dict(credentials.headers)
         if transport.auth == "bearer":
@@ -163,7 +187,9 @@ class HttpMcpSession:
         self._ready = asyncio.get_running_loop().create_future()
         self._owner = asyncio.create_task(self._run(), name=f"mcp-http:{self.server}")
         try:
-            return await asyncio.wait_for(asyncio.shield(self._ready), 15.0)
+            return await asyncio.wait_for(
+                asyncio.shield(self._ready), 195.0 if self._interactive else 15.0
+            )
         except BaseException:
             await self.disconnect()
             raise
@@ -176,6 +202,7 @@ class HttpMcpSession:
         try:
             async with httpx2.AsyncClient(
                 headers=self._headers,
+                auth=self._auth,
                 timeout=httpx2.Timeout(15.0, read=300.0),
                 follow_redirects=False,
                 event_hooks={"request": [self._request], "response": [self._response]},
