@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import asyncio
+import sys
 from typing import TYPE_CHECKING
 from uuid import uuid4
 from shiori_sdk.mcp import McpSession, McpToolInfo
@@ -103,7 +104,9 @@ def new_session(registry: "McpServerRegistry", server: str) -> McpSession:
         list(credentials.command),
         dict(credentials.env),
         config.transport.cwd,
-        own_process_tree=True,
+        # Windows Job ownership is platform-specific. Other platforms retain
+        # McpClient's existing terminate/wait/kill lifecycle for the child.
+        own_process_tree=sys.platform == "win32",
     )
 
 
