@@ -295,6 +295,8 @@ SDK 的 `sdk_context` fixture 从测试文件向上（不越过 pytest rootdir�
 
 `default_memory/recall_inspector.jsonl` 写在该插件数据根。meme 图库在 `plugin-data/meme/library/`；共享 `common_emojis.json` 与角色素材仍属宿主。
 
+scene 的 `state.json`、schedule 的 `schedules.json`、mcp 的 `mcp_servers.json` 分别在各自插件数据根，proactive 的配置与频率诊断日志在 `plugin-data/proactive/logs/`。bootstrap 冷启动只迁入这五个固定旧文件：已有目标优先，旧文件核对后归档到 `private_runtime/plugin-storage-archive/<原相对路径>.<sha256>.bak`，再移除旧路径。失败阻止启动并保留失败文件的原始来源；归档不会随插件数据清理删除，也不会自动恢复。此迁移不恢复 SDK 的旧存储接口；范围与入口见[存储决策](../decisions/2026-11-04-plugin-storage-paths.md)。
+
 NovelAI 生成记录、原始请求、输出图和提示词库存于 `plugin-data/novelai/generation/`；参考图在保存时复制到其中的 `references/`，共享 imports 仅作导入来源，不能被插件整目录删除。Story 数据库位于 `plugin-data/story/stories/`，每个故事采用的 CG 复制到该故事目录的 `assets/`。会话在持久化本地图片时复制到 `sessions/media/` 并保留原始来源。清理 NovelAI 的私有数据不删除已经成为故事或会话内容的副本。重新生成仍需 NovelAI 的原始生成记录和请求；清掉这些记录后，会话图片可查看，但不再具备重新生成来源。完整工作区备份同时保留 `sessions.db`、`sessions/media/` 与使用中的插件数据目录。
 
 

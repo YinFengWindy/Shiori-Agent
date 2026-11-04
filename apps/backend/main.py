@@ -87,6 +87,9 @@ async def serve_bridge(
             apply_pending_plugin_operations,
         )
 
+        from bootstrap.plugin_data_paths import migrate_plugin_data_paths
+
+        migrate_plugin_data_paths(workspace or resolve_default_workspace())
         apply_pending_plugin_operations(
             workspace or resolve_default_workspace(), Path(config_path)
         )

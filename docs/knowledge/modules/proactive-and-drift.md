@@ -59,6 +59,10 @@ related:
 
 Drift 是独立于普通被动消息的特殊回合模式。`DriftStateStore` 保存状态，`DriftTurnPipeline` 负责执行，`plugins/proactive/backend/drift_tools.py` 提供相关工具接入。它与 Proactive 共享触发和投递基础设施，但拥有自己的回合语义与状态迁移。Drift 必须显式取得当前角色 prompt，并完整读取该角色的 `SELF.md`、长期记忆与最近上下文；任一读取失败都终止本轮，不能退化为无记忆的通用回复。内置 skill 的 `state.json` 写在角色自己的 drift skills 目录，`SKILL.md` 仍留在安装树；`read_file("skills/<name>/...")` 先读 drift 目录里的那份，没有才读内置目录。Drift 的文件工具走 `PROACTIVE_HOST.run_drift_file_tool`：只能在 `execute_tool` 的 invoker 里调用，写入与编辑由宿主限制在 `roles/<role_id>/drift`。
 
+## 数据位置
+
+配置与频率诊断日志在 `plugin-data/proactive/logs/`，文件名为 `proactive_config_trace.jsonl`、`proactive_rate_trace.jsonl`。冷启动迁入旧 `memory/` 下的同名文件，已有新目标优先，旧文件核对后归档；见[存储决策](../../decisions/2026-11-04-plugin-storage-paths.md)。`proactive_sources.json` 仍在工作区根，MCP 登记从 `plugin-data/mcp/mcp_servers.json` 读取。角色状态库 `roles/<id>/proactive.db` 和该角色的 Drift 目录继续随角色保留与删除。
+
 ## 修改影响
 
 - 修改 tick 频率或门控：检查 presence、寂寞、关系维护、调度任务和重复投递。

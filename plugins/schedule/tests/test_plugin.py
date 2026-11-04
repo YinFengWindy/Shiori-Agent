@@ -42,12 +42,16 @@ def _tickers() -> list[asyncio.Task[object]]:
 
 
 def _store(workspace: Path) -> list[dict[str, object]]:
-    return json.loads((workspace / "schedules.json").read_text(encoding="utf-8"))
+    return json.loads(
+        (workspace / "plugin-data/schedule/schedules.json").read_text(encoding="utf-8")
+    )
 
 
 def _seed_job(workspace: Path, *, role_id: str, tier: str, when: str) -> str:
     """Writes one job to ``schedules.json`` the way an earlier run left it."""
-    job = SchedulerService(workspace / "schedules.json").create_job(
+    job = SchedulerService(
+        workspace / "plugin-data/schedule/schedules.json"
+    ).create_job(
         name="提醒",
         tier=tier,
         trigger="at",

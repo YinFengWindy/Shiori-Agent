@@ -7,6 +7,7 @@ from pathlib import Path
 from agent.config import Config
 from agent.memory import MemoryStore
 from bootstrap.paths import resource_root
+from bootstrap.plugin_data_paths import migrate_plugin_data_paths
 from shiori_sdk.files.json import save_json
 from session.store import SessionStore
 
@@ -16,8 +17,8 @@ CONFIG_TEMPLATE_PATH = resource_root() / "config.example.toml"
 _TEXT_FILES: dict[str, str] = {}
 
 _JSON_FILES: dict[str, object] = {
-    "mcp_servers.json": {"servers": {}},
-    "schedules.json": [],
+    "plugin-data/mcp/mcp_servers.json": {"servers": {}},
+    "plugin-data/schedule/schedules.json": [],
     "proactive_sources.json": {"sources": []},
     "roles/roles.json": {"version": 2, "roles": []},
 }
@@ -153,6 +154,7 @@ def init_workspace(
     summary = InitSummary()
     config_path = Path(config_path)
 
+    migrate_plugin_data_paths(workspace)
     _ensure_config(config_path, force=force, summary=summary)
 
     config = Config.load(config_path)

@@ -73,10 +73,10 @@ proactive tick
 | 文件 | 维护方式 | 说明 |
 |------|---------|------|
 | `roles/roles.json` 里角色的 `proactive` | **你配**（桌面角色的「主动推送」） | 每个角色自己的开关、接收会话、推送策略（profile）、agent/drift 参数、overrides |
-| `mcp_servers.json` | **你写** | MCP server 启动命令和环境变量。也可以通过对话让 agent 调 `mcp_add` 工具写 |
+| `plugin-data/mcp/mcp_servers.json` | **你写** | MCP server 启动命令和环境变量。也可以通过对话让 agent 调 `mcp_add` 工具写 |
 | `proactive_sources.json` | **你写** | 声明哪个 MCP server 提供哪类数据（alert/content/context） |
 | `roles/<role-id>/PROACTIVE_CONTEXT.md` | **agent 维护** | 当前角色的推送规则面板。主 agent（被动回复时）通过对话帮你写和改。proactive agent 只读不写 |
-| `schedules.json` | **都行** | 建议让主 agent 调 `schedule` 工具增删改（系统插件 `schedule` 提供，默认启用），或在桌面里给角色建任务；手写时字段要求见下文 |
+| `plugin-data/schedule/schedules.json` | **都行** | 建议让主 agent 调 `schedule` 工具增删改（系统插件 `schedule` 提供，默认启用），或在桌面里给角色建任务；手写时字段要求见下文 |
 | `roles/<role-id>/drift/skills/*/SKILL.md` | **你写** | 当前角色的 Drift 任务定义。也可以用内置 skill `create-drift-skill` 让 agent 帮你生成 |
 | `roles/<role-id>/memory/*.md` | **agent 维护** | 长期记忆、自我认知、近期上下文——全部由主 agent 通过被动对话自动读写 |
 | `roles/<role-id>/drift/drift.json` | **agent 维护** | 当前角色的 Drift runner 自动写运行记录，不用管 |
@@ -103,7 +103,9 @@ min_interval_hours = 3      # 默认 3，0 表示不限
 
 投递目标同样不在这里写死：每个角色在「主动推送」里勾选接收会话，每条主动消息只发到其中一个（桌面在场时发桌面，否则发最近对话过的外部会话）。
 
-### 2. 注册 MCP server（`~/.shiori/workspace/mcp_servers.json`）
+### 2. 注册 MCP server（`~/.shiori/workspace/plugin-data/mcp/mcp_servers.json`）
+
+从旧版本升级时，宿主冷启动先迁入工作区根目录的 `mcp_servers.json`；已有新文件优先，旧文件核对后归档。主动推送和 MCP 插件都读取新位置。诊断日志也归入 `plugin-data/proactive/logs/`，角色状态与 `proactive_sources.json` 不搬动，详见[存储决策](../decisions/2026-11-04-plugin-storage-paths.md)。
 
 ```json
 {
@@ -164,7 +166,7 @@ MCP server 通过 stdio 与 agent 通信，启动时 `McpClientPool.connect_all(
 
 | 字段 | 说明 |
 |------|------|
-| `server` | 对应 `mcp_servers.json` 里的 key |
+| `server` | 对应 `plugin-data/mcp/mcp_servers.json` 里的 key |
 | `channel` | `"alert"` / `"content"` / `"context"` |
 | `get_tool` | MCP tool 名。content/alert 默认 `get_proactive_events`，context 默认 `get_context` |
 | `ack_tool` | 确认工具。alert/content 需要，context 不需要（不走 ACK） |
@@ -185,9 +187,9 @@ MCP server 通过 stdio 与 agent 通信，启动时 `McpClientPool.connect_all(
 
 规则要点：写结论不写过程、主 agent 负责维护、proactive agent 每轮读取。**怎么改：直接跟 agent 聊天说"帮我在 proactive context 里加一条规则..."**。
 
-### 5. 定时任务（`schedules.json`）
+### 5. 定时任务（`plugin-data/schedule/schedules.json`）
 
-优先通过主 agent 对话让它调 `schedule` 工具增删（或在桌面里给角色建任务）；工具和执行都由系统插件 `schedule` 提供，插件停用时任务保留但不执行。文件在 `~/.shiori/workspace/schedules.json`，根节点必须是数组；每个任务都属于一个角色，手写时 `role_id`、`fire_at`、`created_at` 必填，缺 `role_id` 整个文件加载失败：
+优先通过主 agent 对话让它调 `schedule` 工具增删（或在桌面里给角色建任务）；工具和执行都由系统插件 `schedule` 提供，插件停用时任务保留但不执行。文件在 `~/.shiori/workspace/plugin-data/schedule/schedules.json`，根节点必须是数组；每个任务都属于一个角色，手写时 `role_id`、`fire_at`、`created_at` 必填，缺 `role_id` 整个文件加载失败：
 
 ```json
 [

@@ -15,6 +15,8 @@ from __future__ import annotations
 import json
 import tomllib
 from pathlib import Path
+
+from shiori_sdk.storage import plugin_data_dir
 from typing import Any
 
 from core.common import plugin_config_text as editor
@@ -32,7 +34,9 @@ _UNLOCATABLE_MESSAGE = (
 
 def migrate_mcp_enabled(config_path: Path, workspace: Path) -> None:
     """Writes ``[plugins.mcp].enabled = true`` once, under the conditions above."""
-    if not config_path.is_file() or not _has_servers(workspace / MCP_SERVERS_FILE):
+    if not config_path.is_file() or not _has_servers(
+        plugin_data_dir(workspace, MCP_PLUGIN_ID) / MCP_SERVERS_FILE
+    ):
         return
     text = config_path.read_text(encoding="utf-8")
     try:

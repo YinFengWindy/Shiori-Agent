@@ -4,6 +4,8 @@ SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破�
 
 ## 4.0.0
 
+- 存储位置（2026-11-04）：scene、schedule、mcp 的状态文件与 proactive 的两份诊断日志统一到各自 `plugin-data/<id>/`。bootstrap 冷启动迁入五个固定旧文件；已有新目标优先，旧来源核对后归档，失败阻止启动。此项修订下文 P6s 保留 `schedules.json` 旧路径的约定；文件格式与 SDK 接口不变，详见[存储决策](../decisions/2026-11-04-plugin-storage-paths.md)。
+
 - P8b-4（#981）：宿主删除重复的生命周期状态与句柄，对外始终派生七种展示状态。重载替换期间为 `BLOCKED` / `not_started`，设置页不显示问题文案。清除准入后的默认启用目标可首次激活，等待它的消费者保持启用；信任保存后首次激活失败分别显示 `activation_failed` 或 `plugin_restart_required`。setup 失败（含未声明渠道）统一用内核 `setup_failed`；渲染失败保留 `renderer_<kind>_failed`，清理不完整统一用 `rollback_cleanup_failed`。`Kernel.plan` 清除已解除且未运行的排除状态，保留运行实例和清理错误；渲染失败先等转换锁再核对令牌。
 
 - **breaking**（P8b-3，#980）：4.0 发布前将 `Kernel` 收敛为原语，删除 `start` / `reload` / `stop` / `reload_closure`、构造参数 `drain_timeout` 与内核导出的 `DRAIN_TIMEOUT`。宿主自行按计划顺序激活选中的插件，测试使用 `shiori_sdk.testing.kernel.KernelHarness`；测试 harness 的默认排空仍为 60 秒。`Kernel.drain` 必须显式传 `timeout`，对已持有 scope 的插件再次 `activate` 抛 `already_running` 并保留原实例。启动失败但仍启用的插件继续参与重复提供、冲突与替换判定，代内启用结果与重启后的相同启用集合一致。

@@ -89,6 +89,8 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 
 ## 启动时的配置迁移
 
+桌面桥接启动先恢复配置事务，再由 bootstrap 迁移 scene、schedule、mcp 和 proactive 的五个固定旧文件，然后应用待执行安装/卸载，最后执行下列配置迁移。文件迁移的已有目标优先，旧来源核对后归档；失败阻止启动。路径与初始化入口见[存储决策](../decisions/2026-11-04-plugin-storage-paths.md)。
+
 宿主启动时把旧配置一次性搬到插件表。五条迁移都只改 `config.toml` 里涉及的表，保留注释与其他表，原子写入，再跑一次文件字节不变。目标表写成内联表或点分键、编辑器定位不到时抛错，文件不动，启动失败并给出改法。
 
 | 迁移 | 何时执行 | 写入 |
@@ -97,7 +99,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 | 场景 | 还有 `[agent.scene_observation]` | `enabled` 写成 `[plugins.scene].observation_enabled`（插件表已有该键时不覆盖），删除旧表 |
 | 记忆整理 | 还有 `[agent.maintenance]`，或顶层还有 `memory_optimizer_enabled` / `memory_optimizer_interval_seconds` | `memory_optimizer_enabled = false` 写成 `[plugins.memory_optimizer] enabled = false`，间隔写成 `interval_seconds`（不小于 60）；与默认值相同的不写，插件表已有的键不覆盖；删除旧表与顶层旧键。改写后的文件必须解析成预期内容，否则抛错、文件不动 |
 | 主动策略 | 还有 `[agent.proactive_strategies]`，或顶层还有 `[proactive]` | `scene_followup` / `relationship` 为 false 时写成 `[plugins.proactive]` 的同名键（默认 true 不写，插件表已有的键不覆盖）；删除旧表。顶层 `[proactive]` 没有运行时消费方，整段删除并记日志，不把里面的值抄进插件表。旧表有其他键、开关不是布尔值，或涉及的表写成内联表 / 点分键时抛错、文件不动 |
-| MCP | `<workspace>/mcp_servers.json` 的 `servers` 非空，且 `[plugins.mcp]` 没有显式 `enabled` | `[plugins.mcp] enabled = true`。显式写过 `true` 或 `false` 都不动；新装的空服务器列表保持关闭 |
+| MCP | `<workspace>/plugin-data/mcp/mcp_servers.json` 的 `servers` 非空（先迁入旧根目录文件），且 `[plugins.mcp]` 没有显式 `enabled` | `[plugins.mcp] enabled = true`。显式写过 `true` 或 `false` 都不动；新装的空服务器列表保持关闭 |
 
 记忆、场景、记忆整理与主动策略迁移在 `load_config` 里依次执行；MCP 迁移要读工作区，在桌面桥接启动、读配置之前执行。
 

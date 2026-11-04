@@ -4,7 +4,9 @@
 
 ## 启用
 
-新装默认关闭。从旧版本升级时，如果 `<workspace>/mcp_servers.json` 里已有服务器，并且 `config.toml` 的 `[plugins.mcp]` 没有显式写 `enabled`，启动时会一次性写入 `enabled = true`，原有工具照常可用。显式写过 `enabled`（不论真假）的不改。
+新装默认关闭。服务器登记保存在 `<workspace>/plugin-data/mcp/mcp_servers.json`。冷启动先迁入旧工作区根目录的 `mcp_servers.json`；已有新目标优先，旧文件核对后归档，详见[存储决策](../../docs/decisions/2026-11-04-plugin-storage-paths.md)。
+
+新位置里已有服务器，并且 `config.toml` 的 `[plugins.mcp]` 没有显式写 `enabled` 时，启动会一次性写入 `enabled = true`，原有工具照常可用。显式写过 `enabled`（不论真假）的不改。proactive 的 MCP 客户端也读取此登记文件。
 
 ## 工具
 

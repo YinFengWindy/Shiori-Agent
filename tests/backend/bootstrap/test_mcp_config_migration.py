@@ -22,9 +22,9 @@ label = "保留"
 def _workspace(tmp_path: Path, servers: dict) -> Path:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    (workspace / "mcp_servers.json").write_text(
-        json.dumps({"servers": servers}), encoding="utf-8"
-    )
+    target = workspace / "plugin-data/mcp/mcp_servers.json"
+    target.parent.mkdir(parents=True)
+    target.write_text(json.dumps({"servers": servers}), encoding="utf-8")
     return workspace
 
 

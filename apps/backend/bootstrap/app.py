@@ -13,6 +13,7 @@ from bootstrap.channels import start_channels
 from conversation.commands import command_menu
 from core.channels.plugin_capability import active_plugin_channels
 from bootstrap.tools import CoreRuntime, build_core_runtime
+from bootstrap.plugin_data_paths import migrate_plugin_data_paths
 from bootstrap.runtime.dispatcher import RuntimeDispatcher
 from core.accounts.plugin_capability import publish_plugin_accounts
 from infra.process.resources import ProcessResourceOwner
@@ -138,6 +139,7 @@ class AppRuntime(RuntimeReloadMixin, RuntimeBackgroundMixin, RuntimeShutdownMixi
     async def start(self) -> None:
         if self._started:
             return
+        migrate_plugin_data_paths(self.workspace)
         configure_default_shared_http_resources(self.http_resources)
         try:
             self.event_bus = EventBus()
