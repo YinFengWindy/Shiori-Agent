@@ -12,12 +12,10 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from agent.plugin_host import (
-    PluginGenerationSettings,
-    PluginKernel,
-    PluginRpcRegistry,
-)
+from agent.plugin_host import PluginGenerationSettings, PluginKernel
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from agent.core.turn_events import install_core_checks
+from agent.config import resolve_config_reference
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
 from bus.event_bus import EventBus
 from core.error_context import current_session_key
@@ -277,6 +275,7 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
         raise CoreServiceBroken("核心服务初始化失败")
 
     bus = EventBus()
+    rpc = PluginRpcRegistry(bus)
     with pytest.raises(CoreServiceBroken):
         _ = PluginKernel(
             [tmp_path],
@@ -286,7 +285,7 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                     PluginCoreInputs(
                         plugin_dirs=(tmp_path,),
                         event_bus=bus,
-                        rpc=PluginRpcRegistry(bus),
+                        rpc=rpc,
                         workspace=None,
                         tools=None,
                         role_store=None,
@@ -305,4 +304,6 @@ def test_core_module_provide_failure_aborts_startup(tmp_path: Path) -> None:
                 broken_core_module,
             ),
             core_checks=install_core_checks,
+            communication=rpc.communication,
+            resolve_reference=resolve_config_reference,
         )

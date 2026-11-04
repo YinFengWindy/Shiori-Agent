@@ -8,8 +8,13 @@ export async function buildDistributionFixture(repository: string, source: strin
   assert.equal(source, resolve(repository, "plugins/external_demo"));
   const fixture = resolve(repository, "tests/fixtures/external-plugin");
   const originalManifest = await readFile(resolve(fixture, "manifest.yaml"), "utf8");
+  await copyFile(resolve(fixture, "package.json"), resolve(source, "package.json"));
+  const frontend = await readFile(resolve(fixture, "src/frontend.ts"), "utf8");
+  await writeFile(resolve(source, "frontend.ts"), `import "./style.css";\n${frontend}`, "utf8");
   for (const version of ["1.0.0", "2.0.0", "3.0.0"]) {
-    const manifest = originalManifest.replace(/^version: .+$/m, `version: '${version}'`) + "distribution: external\n";
+    const manifest = originalManifest
+      .replace(/^version: .+$/m, `version: '${version}'`)
+      .replace("entry: renderer/frontend.mjs", "entry: frontend.ts") + "distribution: external\n";
     await writeFile(resolve(source, "manifest.yaml"), manifest, "utf8");
     for (const [input, destination] of [["plugin.py", "backend/plugin.py"], ["ui.tsx", "ui/index.tsx"], ["background.ts", "background/index.ts"], ["surface.tsx", "surface/index.tsx"]]) {
       const target = resolve(source, destination);

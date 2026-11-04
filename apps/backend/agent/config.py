@@ -275,7 +275,7 @@ def has_config_reference(value: object) -> bool:
 def resolve_config_reference(value: str) -> str:
     """Expands the ``${NAME}`` references in one string (see above).
 
-    Plugins resolve their stored credentials through it (``host.config_references``).
+    Plugin configuration receives this resolver through host constructor wiring.
     """
     resolved = _CONFIG_REFERENCE.sub(
         lambda m: os.environ.get(m.group(1), m.group(0)), value

@@ -12,8 +12,8 @@ source_paths:
   - apps/desktop/src/voice/
   - apps/desktop/src/assets/filePickerContract.ts
   - apps/desktop/renderer/src/voice/
-  - apps/backend/agent/plugin_host/services.py
-  - apps/backend/agent/plugin_host/communication.py
+  - apps/backend/desktop_bridge/plugin_rpc/services.py
+  - apps/backend/desktop_bridge/plugin_rpc/communication.py
   - packages/sdk/python/shiori_sdk/voice.py
   - packages/sdk/src/contract/native.ts
   - apps/desktop/renderer/src/plugins/PluginRoleSettingsSlot.tsx

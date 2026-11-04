@@ -12,10 +12,10 @@ from typing import Any
 
 from shiori_sdk.rpc import Concurrency
 
-from agent.plugin_host.bridge_events import PluginBridgeEvent
-from agent.plugin_host.communication import communication_name
+from desktop_bridge.plugin_rpc.bridge_events import PluginBridgeEvent
+from desktop_bridge.plugin_rpc.communication import communication_name
 from agent.plugin_host.core_keys import PluginBinding
-from agent.plugin_host.rpc import PluginRpcRegistry, RpcHandler
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry, RpcHandler
 from agent.plugin_host.rpc_names import HOST_RPC_NAMESPACES
 from shiori_sdk.rpc import PluginRpcError
 from bus.event_bus import EventBus

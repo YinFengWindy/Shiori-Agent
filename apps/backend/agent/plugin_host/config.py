@@ -7,8 +7,8 @@ from typing import Any
 class PluginConfig:
     """Snapshot of the plugin values granted by the host configuration.
 
-    ``resolve_reference`` is the host's ``${NAME}`` expansion, provided by the
-    configuration core module under ``host.config_references``.
+    ``resolve_reference`` is the host's ``${NAME}`` expansion, passed by
+    bootstrap through the host constructor.
     """
 
     def __init__(

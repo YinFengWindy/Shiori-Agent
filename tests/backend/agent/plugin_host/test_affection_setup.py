@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent.plugin_host import PluginGenerationSettings, PluginRpcRegistry
+from agent.plugin_host import PluginGenerationSettings
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from bus.event_bus import EventBus
 from core.roles import RoleStore
 from session.manager import SessionManager

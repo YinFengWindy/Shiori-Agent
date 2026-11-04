@@ -24,7 +24,7 @@ try {
   ownsSource = true;
   await buildDistributionFixture(repository, source, output);
   await app.launch();
-  assert.equal((await app.roster()).length, 0, "external source appeared as a builtin candidate");
+  assert.equal((await app.roster()).length, 0, "external source appeared as an installed candidate");
   await lifecycle(app, output);
   assert.deepEqual(app.errors, []);
   await evidence.add("complete", { sourceStillPresent: Boolean(await readFile(resolve(source, "manifest.yaml"), "utf8")), developmentRuntime: true, frozenRuntime: false });

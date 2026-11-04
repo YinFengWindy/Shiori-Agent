@@ -307,9 +307,8 @@ def _reject_removed_fields(raw: dict[str, object]) -> None:
 def _reject_host_keys(**fields: tuple[str, ...]) -> None:
     """No manifest names a ``host.`` key.
 
-    ``host.bridge`` (the shared RPC registry) and ``host.config_references``
-    are read by the host itself; a plugin holding the registry could register
-    methods as another plugin.
+    Host wiring is supplied through constructor arguments. Keep this prefix
+    reserved so plugins cannot claim names belonging to host-only assembly.
     """
     for name_field, names in fields.items():
         host = [name for name in names if name.startswith("host.")]

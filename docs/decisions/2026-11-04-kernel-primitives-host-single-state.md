@@ -1,6 +1,6 @@
 # 内核原语与宿主单一状态
 
-对应 #977 / #980 / #981，延续四层方案 D3、D14、D16、D24、D25 与 P8 安装器边界。此项属于尚未发布的 SDK 4.0 定版；P8b 全部子票完成之前不恢复桌面发版。
+对应 #977 / #980 / #981 / #982，延续四层方案 D3、D14、D16、D24、D25 与 P8 安装器边界。此项属于尚未发布的 SDK 4.0 定版；P8b 全部子票完成之前不恢复桌面发版。
 
 ## 状态归属
 
@@ -50,4 +50,26 @@ R2：重载替换或启停过程中的尚未启动成员短暂显示 BLOCKED / `
 | desktop_bridge/runtime/plugin_*.py | 10 | 1651 | 1263 |
 | shiori_sdk/kernel/*.py | 7 | 1047 | 688 |
 
-内核仍以 700 代码行为硬门禁。宿主 `kernel.py` 此时仍超过 600 物理行，按 T6 沿既定职责边界拆分；本阶段不迁移通信链、不新增层或 SDK Key。
+内核仍以 700 代码行为硬门禁。宿主 `kernel.py` 此时仍超过 600 物理行，按 T6 沿既定职责边界拆分；T4 尚未迁移通信链；各阶段都不新增层或 SDK Key。
+
+
+## T5 通信归属与装配
+
+RPC 注册表、renderer 通信、请求等待表、services 注册表与桥接事件迁入 `desktop_bridge/plugin_rpc/`。宿主仅依赖 `renderer_communication.py` 的撤销协议；`CommunicationEndReason` 在该协议旁定义宿主会发出的三种原因，由 bridge 共用。bridge 的请求终止类型以联合类型扩展自己的 `runtime_replaced`，不把整代退役职责放回宿主协议。`rpc_names.py` 仍属于宿主静态准入，因为 manifest 必须拒绝保留的 RPC 命名空间。
+
+`PluginKernel` 通过必填构造参数接收 `communication` 与 `resolve_reference`，不再注册或读取 `HOST_BRIDGE` / `HOST_CONFIG_REFERENCES`。bootstrap 构造后将 `active_peers` 绑定到通信层的 resolver，读取权威的当前活动实例与依赖声明；协议、授权、代际和请求取消语义不变。
+
+账号投递只依赖本模块的 `AccountRpcResolver.resolve` 协议，返回处理函数复用 SDK 的 `RpcHandler`，不反向引用 bridge 的具体注册表类型。默认 bootstrap 契约通过真实启动后的 renderer open 与跨插件 RPC 请求守住 resolver 装配；漏掉绑定时该通信路径直接失败。
+
+`SERVICES` 仍是同一公开 Key，核心提供现有 services 注册表作为 binder。`PluginRuntimeContext.require/get` 缓存它为当前 `PluginBinding` 创建的 `ScopedPluginServices`，其注册仍使用本实例 scope 和调用闸门；宿主 setup 不再构造或访问 RPC/services 注册表。
+
+T5 工作树实测（同上口径）：
+
+| 范围 | Python 文件 | 物理行 | 代码行 |
+|---|---|---|---|
+| agent/plugin_host/*.py | 27 | 4221 | 3075 |
+| desktop_bridge/runtime/plugin_*.py | 10 | 1651 | 1263 |
+| desktop_bridge/plugin_rpc/*.py | 6 | 551 | 424 |
+| shiori_sdk/kernel/*.py | 7 | 1047 | 688 |
+
+宿主与两组 bridge 插件模块合计从 T4 的 6436 物理行 / 4778 代码行变为 6423 / 4762。通信迁移主要改变职责归属，净减少仅 13 物理行 / 16 代码行；不能把宿主目录的缩小当作整体删除。T6 继续拆分宿主大文件。

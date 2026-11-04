@@ -6,12 +6,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
-from agent.plugin_host.bridge_events import PluginBridgeEvent
+from desktop_bridge.plugin_rpc.bridge_events import PluginBridgeEvent
 from shiori_sdk.rpc import PluginRpcError
-from agent.plugin_host.renderer_requests import CommunicationEndReason, RendererRequests
+from desktop_bridge.plugin_rpc.renderer_requests import RendererRequests
+from agent.plugin_host.renderer_communication import CommunicationEndReason
 
 if TYPE_CHECKING:
-    from agent.plugin_host.rpc import PluginRpcRegistry
+    from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 
 
 def communication_name(value: Any) -> str:
@@ -51,7 +52,7 @@ class PluginCommunication:
     def _resolve(self, plugin_id: str) -> tuple[str, ...] | None:
         """``plugin_id``'s declared peers while it is active, None otherwise.
 
-        The kernel binds the resolver when it is constructed, before any
+        Bootstrap binds the resolver after constructing the host kernel, before any
         renderer can reach this generation; an unbound one is a wiring error.
         """
         if self._resolver is None:

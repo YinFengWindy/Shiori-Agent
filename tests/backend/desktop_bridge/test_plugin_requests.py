@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent.plugin_host.rpc import PluginRpcRegistry
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from bus.event_bus import EventBus
 from desktop_bridge.method_policy import MethodPolicy
 from desktop_bridge.plugin_requests import DesktopPluginRequestHandler

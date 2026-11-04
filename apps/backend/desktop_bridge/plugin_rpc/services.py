@@ -1,5 +1,7 @@
 """Scoped public plugin contracts, independent of domain and static peer dependencies."""
 
+from __future__ import annotations
+
 import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -7,6 +9,7 @@ from dataclasses import dataclass
 from shiori_sdk.rpc import PluginRpcError
 from shiori_sdk.services import ServiceHandler
 from agent.plugin_host.call_gate import PluginCallGate
+from agent.plugin_host.core_keys import PluginBinding
 from shiori_sdk.kernel import Scope
 
 
@@ -28,6 +31,12 @@ class PluginServiceRegistry:
 
     def __init__(self) -> None:
         self._entries: dict[tuple[str, str], _Service] = {}
+
+    def for_plugin(self, binding: PluginBinding) -> ScopedPluginServices:
+        """Bind public service registration to this exact plugin activation."""
+        return ScopedPluginServices(
+            self, binding.plugin_id, binding.scope, binding.calls
+        )
 
     def register(
         self,

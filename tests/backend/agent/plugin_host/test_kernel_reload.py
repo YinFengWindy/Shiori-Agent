@@ -16,11 +16,11 @@ from shiori_sdk.rpc import PluginRpcError
 from agent.plugin_host import (
     PluginGenerationSettings,
     PluginKernel,
-    PluginRpcRegistry,
     PluginReloadFailed,
     PluginReloadTimeout,
     PluginReloadUnsupported,
 )
+from desktop_bridge.plugin_rpc.rpc import PluginRpcRegistry
 from tests.support.plugin_kernel import host_kernel, set_plugin_enabled
 from infra.process.resources import ProcessResourceOwner
 from agent.tools.registry import ToolRegistry
