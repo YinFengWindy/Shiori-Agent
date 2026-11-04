@@ -1,4 +1,4 @@
-"""The plugin kernel: provide/require, ordered setup, scoped disposal and reload."""
+"""Plugin primitives: provide/require, planning, activation, draining and disposal."""
 
 from __future__ import annotations
 
@@ -22,8 +22,6 @@ CORE = ""
 """Owner recorded for keys the host provides directly (core modules)."""
 
 _DRAIN_TIMEOUT = "插件 {} 排空超时（{:g} 秒），重载已中止，保留旧实例"
-DRAIN_TIMEOUT = 60.0
-"""Seconds a reload waits for its closure to drain before giving up (D25)."""
 
 
 @dataclass(frozen=True)
@@ -101,18 +99,15 @@ class Context:
 
 
 class Kernel:
-    """Loads plugin specs in dependency order and owns their scopes.
+    """Plans plugin specs and owns the scopes activated by its caller.
 
     The host provides core keys with ``provide`` and adds post-chain checks
-    with ``check`` before ``start``; ``reload`` and ``stop`` complete the host
-    surface. ``activate`` / ``deactivate`` / ``drain`` are the steps those
-    compose, for hosts that orchestrate enabling and rollback themselves.
+    with ``check`` before planning. Hosts compose ``activate``, ``deactivate``
+    and ``drain`` with their own enablement, admission and rollback rules.
+    Plugin tests use ``shiori_sdk.testing.KernelHarness`` for orchestration.
     """
 
-    def __init__(
-        self, *, drain_timeout: float = DRAIN_TIMEOUT, watch_limit: int = WATCH_LIMIT
-    ) -> None:
-        self.drain_timeout = drain_timeout
+    def __init__(self, *, watch_limit: int = WATCH_LIMIT) -> None:
         self._specs: dict[str, PluginSpec] = {}
         self._status: dict[str, PluginStatus] = {}
         self._scopes: dict[str, Scope] = {}
@@ -157,18 +152,6 @@ class Kernel:
             raise KernelError("duplicate_provider", "setup", "provides", reason, names)
         self._providers[key.name] = (owner, impl)
 
-    async def start(self, specs: Iterable[PluginSpec]) -> None:
-        """Plans ``specs`` and sets up every runnable plugin that is not running.
-
-        Register-only specs are ordered but not activated, so a later ``start``
-        cannot run an untrusted or disabled plugin by accident. A plugin whose
-        required key is unavailable becomes BLOCKED, one whose setup raises
-        FAILED, and its ``require`` dependents BLOCKED in turn.
-        """
-        for plugin_id in await self.plan(specs):
-            if self._specs[plugin_id].runnable and plugin_id not in self._scopes:
-                _ = await self.activate(plugin_id)
-
     async def plan(self, specs: Iterable[PluginSpec]) -> tuple[str, ...]:
         """Adds ``specs``, re-plans all known specs and returns the setup order.
 
@@ -181,7 +164,11 @@ class Kernel:
         self._rank = {plugin_id: rank for rank, plugin_id in enumerate(plan.order)}
         self._owners = plan.owners
         for plugin_id, excluded in plan.excluded.items():
-            known = getattr(self._status.get(plugin_id), "diagnostic", None)
+            status = self._status.get(plugin_id)
+            # A conflict cannot erase a failed rollback's restart barrier.
+            if status and status.state is KernelState.FAILED and status.cleanup_errors:
+                continue
+            known = status.diagnostic if status else None
             if plugin_id not in self._scopes and known != excluded:
                 _ = await self._settle(plugin_id, KernelState(excluded.state), excluded)
         return plan.order
@@ -193,9 +180,12 @@ class Kernel:
     async def activate(self, plugin_id: str) -> PluginStatus:
         """Runs one planned plugin's setup; on failure releases what it registered.
 
-        A register-only spec is refused and left unchanged. Cancellation also
-        releases the scope, then propagates.
+        A plugin already holding a scope or a register-only spec is refused
+        and left unchanged. Cancellation releases the scope, then propagates.
         """
+        if plugin_id in self._scopes:
+            reason = f"插件 {plugin_id} 已持有运行作用域，不能重复启动"
+            raise KernelError("already_running", "setup", "state", reason, [plugin_id])
         spec = self._specs[plugin_id]
         if not spec.runnable:
             reason = f"插件 {plugin_id} 只登记，不能启动"
@@ -225,12 +215,22 @@ class Kernel:
             return await self._settle(plugin_id, state, failed, error, errors)
         return await self._settle(plugin_id, KernelState.ACTIVE)
 
-    async def deactivate(self, plugin_id: str) -> list[Exception]:
-        """Releases a plugin's scope (stopped or failed) and marks it STOPPED."""
+    async def deactivate(
+        self,
+        plugin_id: str,
+        failure: PluginDiagnostic | None = None,
+        error: BaseException | None = None,
+    ) -> list[Exception]:
+        """Releases a scope and records STOPPED, or FAILED with ``failure``.
+
+        Failed deactivation retains the cause and cleanup errors and emits
+        ``PluginFailed`` instead of ``PluginStopped``. An absent scope is a no-op.
+        """
         if plugin_id not in self._scopes:
             return []
         errors = await self._release(plugin_id)
-        _ = await self._settle(plugin_id, KernelState.STOPPED, cleanup=tuple(errors))
+        state = KernelState.FAILED if failure is not None else KernelState.STOPPED
+        _ = await self._settle(plugin_id, state, failure, error, tuple(errors))
         return errors
 
     async def _release(self, plugin_id: str) -> list[Exception]:
@@ -288,41 +288,10 @@ class Kernel:
                 return KernelError("restart_required", "reload", field, reason, ids)
         return None
 
-    def reload_closure(self, plugin_id: str) -> list[str]:
-        """The reload set of ``plugin_id``, dependents first, or ``KernelError``.
-
-        Refused when the plugin is not running or the set holds a plugin only
-        a restart can change (D14: channels or ``hot_reload=False``).
-        """
-        if getattr(self._status.get(plugin_id), "state", None) != KernelState.ACTIVE:
-            reason = f"插件 {plugin_id} 未在运行，无法重载"
-            raise KernelError("not_active", "reload", "state", reason, [plugin_id])
-        members = self.closure(plugin_id, optional=True)
-        if refusal := self.restart_only(members):
-            raise refusal
-        return members
-
-    async def reload(
-        self, plugin_id: str, *, timeout: float | None = None
-    ) -> tuple[str, ...]:
-        """Drains, disposes and sets up again the ``reload_closure``.
-
-        Abandoned with the old instances kept when draining exceeds
-        ``timeout`` (default ``drain_timeout``). Returns the reloaded ids in
-        setup order; ``status`` tells each outcome.
-        """
-        members = self.reload_closure(plugin_id)
-        await self.drain(members, timeout)
-        for pid in members:
-            _ = await self.deactivate(pid)
-        for pid in reversed(members):
-            _ = await self.activate(pid)
-        return tuple(reversed(members))
-
     async def drain(
         self,
         plugin_ids: Sequence[str],
-        timeout: float | None = None,
+        timeout: float,
         prepare: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         """Drains the plugins one after another within one total timeout.
@@ -332,7 +301,6 @@ class Kernel:
         ``on_drain`` error or cancellation, the remaining plugins are skipped
         while the drain in progress finishes in the background (it only waits).
         """
-        limit = self.drain_timeout if timeout is None else timeout
         abandoned, current = False, ""
 
         async def staged() -> None:
@@ -346,8 +314,8 @@ class Kernel:
 
         waiting = asyncio.ensure_future(staged())
         try:
-            if not (await asyncio.wait({waiting}, timeout=limit))[0]:
-                reason = _DRAIN_TIMEOUT.format(current, limit)
+            if not (await asyncio.wait({waiting}, timeout=timeout))[0]:
+                reason = _DRAIN_TIMEOUT.format(current, timeout)
                 code, field = "drain_timeout", "on_drain"
                 raise KernelError(code, "reload", field, reason, [current])
             waiting.result()
@@ -356,13 +324,6 @@ class Kernel:
             if not waiting.done():
                 waiting.add_done_callback(_log_abandoned)
             raise
-
-    async def stop(self) -> list[Exception]:
-        """Releases every plugin scope, dependents first; returns the cleanup errors."""
-        errors: list[Exception] = []
-        for pid in sorted(self._scopes, key=lambda pid: -self._rank.get(pid, -1)):
-            errors.extend(await self.deactivate(pid))
-        return errors
 
 
 def _log_abandoned(task: asyncio.Future[None]) -> None:

@@ -176,11 +176,10 @@ class PluginGenerationSettings:
 class PluginKernel:
     """宿主装配层：发现、准入、信任与 capability 注入，生命周期交给 ``shiori_sdk.kernel``。
 
-    每个插件句柄对应内核里的一个 ``PluginSpec``。激活走 ``Kernel.start``：
-    内核只 setup 可运行且尚未运行的 spec。指纹与执行身份在 plan 之前复核，被拒的
-    插件只登记，不进 ``start``；spec 的 setup 只用复核过的那份内容导入，并兜底
-    拒绝未经宿主准备的启动。``runnable`` 表示宿主本轮打算运行：失败、依赖阻塞、
-    已卸载的插件都重新 plan 成只登记，``start`` 不会顺带重跑它们。
+    每个插件句柄对应内核里的一个 ``PluginSpec``。宿主按内核顺序逐个激活选中的
+    插件。指纹与执行身份在 plan 之前复核；spec 的 setup 只用复核过的内容导入，
+    并拒绝未经宿主准备的启动。``runnable`` 只表示准入通过且已启用，启动失败的
+    插件仍参与依赖与冲突判定，但不会因另一个插件启动而重试。
     """
 
     def __init__(
@@ -386,8 +385,8 @@ class PluginKernel:
     ) -> None:
         """Loads ``wanted`` plus the enabled hard dependencies they pull in.
 
-        Runnable records (admitted and enabled) are planned, then
-        ``Kernel.start`` sets them up in kernel order: dependency depth, then
+        Runnable records (admitted and enabled) are planned, then selected
+        plugins are activated in kernel order: dependency depth, then
         plugin id (§8.1). A disabled plugin never loads its dependencies as a
         side effect; a dependency cycle blocks its members before any setup
         (§8.5). ``reactivating`` names plugins brought back by an in-generation
@@ -397,9 +396,9 @@ class PluginKernel:
 
         Fingerprint and execution identity are checked before the plan, so a
         refused package is register-only and excludes no one: a duplicate
-        provider of the same key, say, starts in this same round. A selected
-        plugin this round does not start is re-planned register-only; a
-        failed or blocked one is retried only when a later round selects it.
+        provider of the same key, say, starts in this same round. A failed
+        enabled plugin remains runnable for conflict planning, but setup is
+        retried only when a later round selects it.
         """
         records = self._records_by_id()
         selected: dict[str, PluginRecord] = {}
@@ -433,23 +432,19 @@ class PluginKernel:
             for record in selected.values():
                 if not self._runnable(record):
                     self._materialize_inactive(record)
-                elif record.manifest.id not in planned:
+            # A newly enabled provider can exclude a previously failed one
+            # (D24). Reflect every inactive exclusion, not only this selection.
+            for record in records.values():
+                if (
+                    self._runnable(record)
+                    and record.manifest.id not in planned
+                    and not self._running(record.manifest.id)
+                ):
                     self._block_excluded(record)
             for record in selected.values():
                 if self._wants_start(record) and record.manifest.id in planned:
                     activate[record.manifest.id] = record
             activate.update(await self._admit_lifted(order))
-            # Planned runnable above, but not started now: a dependency-BLOCKED
-            # one, say, must not be run by this or a later ``start``.
-            await self._park(
-                record
-                for record in selected.values()
-                if record.manifest.id in planned
-                and record.manifest.id not in activate
-                and records.get(record.manifest.id) is record
-                and self._runnable(record)
-                and not self._running(record.manifest.id)
-            )
             await self._start_plugins(activate, reactivating)
         finally:
             for record in (*selected.values(), *activate.values()):
@@ -530,18 +525,6 @@ class PluginKernel:
             lifted = self._lifted_exclusions(order)
         return admitted
 
-    async def _park(self, records: Iterable[PluginRecord]) -> None:
-        """Re-plans ``records`` register-only: the host no longer means to run them.
-
-        Keeps ``runnable`` equal to what the host intends, so ``Kernel.start``
-        never runs a failed, blocked or disposed plugin as a side effect of
-        another plugin's start. A later round that selects one plans it
-        runnable again (``_load_records``).
-        """
-        specs = [replace(self._spec(record), runnable=False) for record in records]
-        if specs:
-            _ = await self._kernel.plan(specs)
-
     def _lifted_exclusions(self, order: Sequence[str]) -> dict[str, PluginRecord]:
         """Runnable plugins a plan exclusion BLOCKED that the new plan admits.
 
@@ -569,10 +552,13 @@ class PluginKernel:
     def _block_excluded(self, record: PluginRecord) -> None:
         """Records the kernel's plan exclusion (conflict, replacement, duplicate
         ``provides``, dependency cycle) as a BLOCKED handle."""
-        if record.candidate_id in self._handles:
-            return
         status = self._kernel.status(record.manifest.id)
-        assert status is not None and status.diagnostic is not None
+        if status is None or status.diagnostic is None or status.cleanup_errors:
+            return
+        if handle := self._handles.get(record.candidate_id):
+            handle.state = PluginState.BLOCKED
+            handle.error = self._dependency_error(record, status.diagnostic)
+            return
         self._handles[record.candidate_id] = PluginHandle(
             record=record,
             state=PluginState.BLOCKED,
@@ -598,11 +584,9 @@ class PluginKernel:
         """Adapts one record to a kernel spec whose setup is the v2 setup.
 
         Admission-failed and disabled records are register-only (``runnable``
-        false), so ``Kernel.start`` will not run them; callers make a spec
-        register-only too while the host does not mean to run it (``_park``).
-        ``setup`` still refuses a start the host did not prepare (see
-        ``_prepared``), so a stray ``Kernel.start`` cannot import unscreened
-        code.
+        false). ``setup`` refuses activation the host did not prepare (see
+        ``_prepared``), so a direct ``Kernel.activate`` cannot import
+        unscreened code.
         """
         manifest = record.manifest
 
@@ -620,7 +604,7 @@ class PluginKernel:
                 await self._setup_v2(handle, ctx, reactivated=handle.reactivated)
                 ctx.provide(plugin_key(manifest.id), handle.instance)
                 self._mark_renderer_pending(handle)
-                # ACTIVE before ``start`` moves on, so a later plugin's setup
+                # ACTIVE before activation moves on, so a later plugin's setup
                 # can call this one. A failure above leaves the handle LOADING
                 # and ``_sync_handles`` rolls it back.
                 handle.state = PluginState.ACTIVE
@@ -673,7 +657,7 @@ class PluginKernel:
         return handle is not None and handle.state is PluginState.ACTIVE
 
     def _materialize_inactive(self, record: PluginRecord) -> None:
-        """Records a register-only plugin without entering ``Kernel.start``."""
+        """Records a register-only plugin without activating it."""
         existing = self._handles.get(record.candidate_id)
         if existing is not None and existing.state in _SETTLED_HANDLE_STATES:
             return
@@ -696,12 +680,7 @@ class PluginKernel:
         activate: Mapping[str, PluginRecord],
         reactivating: frozenset[str],
     ) -> None:
-        """Runs ``Kernel.start`` for ``activate`` and mirrors the result on handles.
-
-        Every runnable spec without a scope is in ``activate``: the host parks
-        whatever else it does not mean to run, so ``start`` runs exactly these.
-        The ones that do not become ACTIVE are parked afterwards.
-        """
+        """Activates only the selected plugins and mirrors their kernel results."""
         if not activate:
             return
         # Handles must exist before setup. Insert them in kernel order so
@@ -719,13 +698,13 @@ class PluginKernel:
                 )
         before = {plugin_id: self._kernel.status(plugin_id) for plugin_id in activate}
         try:
-            await self._kernel.start(self._spec(record) for record in activate.values())
-        except BaseException:
-            # Cancellation: roll the handles back synchronously first, so they
-            # are right even if parking is interrupted too, then propagate.
-            await self._park(self._sync_handles(activate, before, previous))
-            raise
-        await self._park(self._sync_handles(activate, before, previous))
+            for plugin_id in self._kernel.order():
+                if plugin_id in activate:
+                    _ = await self._kernel.activate(plugin_id)
+        finally:
+            # Cancellation restores unreached handles and retains a scope whose
+            # release was interrupted, so forced termination can finish it.
+            self._sync_handles(activate, before, previous)
 
     def _running(self, plugin_id: str) -> bool:
         """Whether the kernel currently holds ``plugin_id``'s scope."""
@@ -740,7 +719,7 @@ class PluginKernel:
     ) -> tuple[PluginHandle, PackageContent | None]:
         """The LOADING handle and screened content of a start the host prepared.
 
-        A backstop: the host only lets ``Kernel.start`` run plugins it gave a
+        A backstop: the host only lets ``Kernel.activate`` run plugins it gave a
         LOADING handle and screened (``_load_records``). Anything else raises
         with the reason, before any plugin code is imported.
         """
@@ -782,22 +761,20 @@ class PluginKernel:
         activate: Mapping[str, PluginRecord],
         before: Mapping[str, PluginStatus | None],
         previous: Mapping[str, PluginHandle | None],
-    ) -> list[PluginRecord]:
-        """Copies kernel status onto host handles; returns the ones not ACTIVE.
+    ) -> None:
+        """Copies kernel status onto host handles after selected activations.
 
         One plugin's setup failure does not abort the sweep (#262): the kernel
         has already released its scope, and the handle becomes ``FAILED`` or
-        ``RESTART_REQUIRED``. A plugin ``start`` never reached (it was
+        ``RESTART_REQUIRED``. A plugin activation never reached (it was
         cancelled first) gets back the handle it had before, or none; one
         whose release was interrupted keeps its LOADING handle.
         """
-        stopped: list[PluginRecord] = []
         for plugin_id, record in activate.items():
             handle = self._handles[record.candidate_id]
             status = self._kernel.status(plugin_id)
             if handle.state is PluginState.ACTIVE:
                 continue
-            stopped.append(record)
             if status is None or status is before[plugin_id]:
                 if self._running(plugin_id):
                     # Cancelled again while releasing: the kernel still holds
@@ -817,7 +794,6 @@ class PluginKernel:
             assert status.error is not None
             logger.warning("插件 %s 加载失败，回滚: %s", record.name, status.error)
             self._after_rollback(handle, status.error, status.cleanup_errors)
-        return stopped
 
     def _config_enabled(self, manifest: PluginManifest) -> bool:
         """Reads the authoritative enable flag; absent falls back to the manifest."""
@@ -931,16 +907,16 @@ class PluginKernel:
         return open_plugin_kv(workspace=workspace, plugin_id=plugin_id)
 
     async def _rollback_failed_load(
-        self, handle: PluginHandle, error: BaseException
+        self, handle: PluginHandle, error: RendererActivationError
     ) -> None:
         """Rolls an ACTIVE plugin back to FAILED through the kernel (renderer failure)."""
         logger.warning("插件 %s 加载失败，回滚: %s", handle.record.name, error)
         # A rolled-back instance never admits calls again, even via stale references.
         handle.calls.retire()
-        cleanup_errors = await self._kernel.deactivate(handle.plugin_id)
+        cleanup_errors = await self._kernel.deactivate(
+            handle.plugin_id, failure=error.diagnostic, error=error
+        )
         self._after_rollback(handle, error, cleanup_errors)
-        # Retried only when a later round selects it, like a setup failure.
-        await self._park([handle.record])
 
     def _after_rollback(
         self,
@@ -1198,10 +1174,12 @@ class PluginKernel:
             raise PluginReloadUnsupported(
                 [plugin_id], "disabled" if disabled else "failed"
             )
-        try:
-            members = self._kernel.reload_closure(plugin_id)
-        except KernelError as error:
-            raise _restart_only(error) from error
+        status = self._kernel.status(plugin_id)
+        if status is None or status.state is not KernelState.ACTIVE:
+            raise PluginReloadUnsupported([plugin_id], "failed")
+        members = self._kernel.closure(plugin_id, optional=True)
+        if refusal := self._kernel.restart_only(members):
+            raise _restart_only(refusal) from refusal
         return self._handles_by_id(members)
 
     def _refuse_restart_only(self, closure: list[PluginHandle]) -> None:
@@ -1401,11 +1379,6 @@ class PluginKernel:
         handle.instance = None
         handle.state = PluginState.DISPOSED
         self._handles.pop(handle.record.candidate_id, None)
-        if handle.record.admission is None:
-            # Disposed: no later ``start`` may set it up again unless a round
-            # selects it (an in-generation reload or enable does). Last, so a
-            # cancelled re-plan cannot skip the synchronous cleanup above.
-            await self._park([handle.record])
         return errors
 
     async def terminate_all(self, *, force: bool = False) -> None:

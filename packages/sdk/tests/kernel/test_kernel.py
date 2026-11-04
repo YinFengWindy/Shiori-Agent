@@ -11,6 +11,7 @@ from shiori_sdk.kernel import (
     KernelError,
     KernelState,
     Key,
+    PluginDiagnostic,
     PluginFailed,
     PluginSpec,
     PluginStarted,
@@ -100,6 +101,86 @@ async def test_lifecycle_events_report_started_failed_and_stopped() -> None:
     failed = seen[2]
     assert isinstance(failed, PluginFailed)
     assert failed.diagnostic.state == "FAILED"
+
+
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+async def test_failed_deactivation_preserves_cause_and_cleanup_outcome(
+    cleanup_fails: bool,
+) -> None:
+    seen: list[PluginFailed | PluginStopped] = []
+    cleanup_error = RuntimeError("cleanup failed")
+
+    async def observe(ctx: Context) -> None:
+        async def record(event: PluginFailed | PluginStopped) -> None:
+            seen.append(event)
+
+        ctx.watch(PluginFailed, record)
+        ctx.watch(PluginStopped, record)
+
+    async def worker(ctx: Context) -> None:
+        ctx.provide(SERVICE, object())
+
+        def dispose() -> None:
+            if cleanup_fails:
+                raise cleanup_error
+
+        ctx.effect(dispose)
+
+    harness = KernelHarness()
+    kernel = await harness.start(
+        PluginSpec("observe", observe),
+        PluginSpec("worker", worker, provides=("service",)),
+    )
+    failure = PluginDiagnostic(
+        "renderer_ui_failed", "ui", "frontend.entry", "renderer failed", state="FAILED"
+    )
+    error = RuntimeError("renderer failed")
+    errors = await kernel.deactivate("worker", failure=failure, error=error)
+    await harness.idle()
+
+    status = kernel.status("worker")
+    assert status is not None and status.state is KernelState.FAILED
+    assert status.diagnostic is failure and status.error is error
+    assert errors == ([cleanup_error] if cleanup_fails else [])
+    assert status.cleanup_errors == tuple(errors)
+    assert kernel.get(SERVICE) is None
+    assert seen == [PluginFailed("worker", failure)]
+    assert await kernel.deactivate("worker", failure=failure, error=error) == []
+    await harness.idle()
+    assert seen == [PluginFailed("worker", failure)]
+    _ = await harness.stop()
+
+
+async def test_repeated_activation_preserves_the_scope_during_setup() -> None:
+    entered, finish = asyncio.Event(), asyncio.Event()
+    provided = object()
+    released: list[object] = []
+
+    async def setup(ctx: Context) -> None:
+        ctx.provide(SERVICE, provided)
+        ctx.effect(lambda: released.append(provided))
+        entered.set()
+        await finish.wait()
+
+    harness = KernelHarness()
+    kernel = harness.kernel
+    starting = asyncio.create_task(
+        harness.start(PluginSpec("provider", setup, provides=("service",)))
+    )
+    await entered.wait()
+    scope = kernel.scope("provider")
+    try:
+        with pytest.raises(KernelError) as refused:
+            _ = await kernel.activate("provider")
+        assert refused.value.diagnostic.code == "already_running"
+        assert kernel.scope("provider") is scope
+        assert kernel.get(SERVICE) is provided
+    finally:
+        finish.set()
+        _ = await starting
+        _ = await harness.stop()
+    assert released == [provided]
+    assert kernel.get(SERVICE) is None
 
 
 async def test_require_and_provide_must_be_declared_in_the_manifest() -> None:

@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 from shiori_sdk.core.conversation import StepStarting
-from shiori_sdk.kernel import KernelState, PluginFailed
+from shiori_sdk.kernel import KernelError, KernelState, PluginFailed
 from shiori_sdk.rpc import PluginRpcError
 
 from agent.plugin_host import (
@@ -1106,9 +1106,10 @@ async def test_disabled_plugin_is_not_started_again_by_the_kernel(probe, tmp_pat
     await _toggle(kernel, False)
     probe.events.clear()
 
-    # ``Kernel.start`` sets up every runnable plugin that is not running, so the
-    # disabled provider must be register-only in the kernel by now.
-    await kernel.kernel.start([])
+    # Disabled plugins are register-only even for a direct primitive call.
+    with pytest.raises(KernelError) as refused:
+        _ = await kernel.kernel.activate("provider")
+    assert refused.value.diagnostic.code == "not_runnable"
 
     assert probe.events == []
     status = kernel.kernel.status("provider")
@@ -1210,3 +1211,123 @@ async def test_providers_of_one_key_take_over_from_each_other_within_the_generat
     assert _states(kernel) == {"first": "ACTIVE", "second": "DISABLED"}
     assert probe.events == [("setup", "first"), ("setup", "second"), ("setup", "first")]
     await kernel.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+async def test_failed_enabled_provider_still_conflicts_with_a_newly_enabled_one(
+    probe, tmp_path
+):
+    for plugin_id in ("first", "second"):
+        _write(
+            tmp_path,
+            plugin_id,
+            "provides: [shared.engine]\n",
+            "import sys\n\nasync def setup(ctx):\n"
+            f"    sys.modules['reload_probe'].events.append(('setup', {plugin_id!r}))\n"
+            + (
+                "    raise RuntimeError('failed provider')\n"
+                if plugin_id == "first"
+                else ""
+            ),
+        )
+    configs = {"second": {"enabled": False}}
+    settings = PluginGenerationSettings(
+        workspace=tmp_path / "workspace",
+        plugin_configs=configs,
+        raw_plugin_configs={key: dict(value) for key, value in configs.items()},
+    )
+    kernel = host_kernel([tmp_path], settings=settings)
+    await kernel.load_all()
+    assert _states(kernel) == {"first": "FAILED", "second": "DISABLED"}
+
+    table = {"enabled": True}
+    _ = await kernel.set_enabled(
+        "second", values=table, raw_values=dict(table), drain_timeout=5
+    )
+    states = _states(kernel)
+    assert states == {"first": "BLOCKED", "second": "BLOCKED"}
+    assert {row["diagnostic"]["code"] for row in kernel.states()} == {
+        "duplicate_provider"
+    }
+    assert probe.events == [("setup", "first")]
+    await kernel.terminate_all(force=True)
+
+    # The same enabled set has the same conflict after a generation restart.
+    probe.events.clear()
+    restarted = host_kernel([tmp_path], settings=settings)
+    await restarted.load_all()
+    assert _states(restarted) == states
+    assert {row["diagnostic"]["code"] for row in restarted.states()} == {
+        "duplicate_provider"
+    }
+    assert probe.events == []
+    await restarted.terminate_all(force=True)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_stage", ["setup", "renderer"])
+async def test_conflict_replanning_cannot_retry_an_unclean_failed_provider(
+    probe, tmp_path, failure_stage
+):
+    _write(
+        tmp_path,
+        "first",
+        "provides: [shared.engine]\n"
+        + (
+            "frontend: {entry: frontend.mjs, exports: [ui], css: []}\n"
+            if failure_stage == "renderer"
+            else ""
+        ),
+        "import sys\n\nasync def setup(ctx):\n"
+        "    sys.modules['reload_probe'].events.append(('setup', 'first'))\n"
+        "    def stuck(): raise RuntimeError('cleanup failed')\n"
+        "    ctx.effect('stuck', stuck)\n"
+        + (
+            "    raise RuntimeError('setup failed')\n"
+            if failure_stage == "setup"
+            else ""
+        ),
+    )
+    if failure_stage == "renderer":
+        (tmp_path / "first" / "frontend.mjs").write_text(
+            "export const ui = {};", encoding="utf-8"
+        )
+    _write(
+        tmp_path,
+        "second",
+        "provides: [shared.engine]\n",
+        "async def setup(ctx): pass\n",
+    )
+    kernel = host_kernel(
+        [tmp_path],
+        settings=PluginGenerationSettings(
+            workspace=tmp_path / "workspace",
+            plugin_configs={"second": {"enabled": False}},
+            raw_plugin_configs={"second": {"enabled": False}},
+        ),
+    )
+    await kernel.load_all()
+    if failure_stage == "renderer":
+        first = next(row for row in kernel.states() if row["id"] == "first")
+        assert await kernel.fail_renderer_entry(
+            "first", "ui", "renderer failed", first["activation_token"]
+        )
+    assert _states(kernel)["first"] == "RESTART_REQUIRED"
+    try:
+        for enabled in (True, False):
+            table = {"enabled": enabled}
+            _ = await kernel.set_enabled(
+                "second", values=table, raw_values=dict(table), drain_timeout=5
+            )
+            assert _states(kernel)["first"] == "RESTART_REQUIRED"
+            first = kernel.kernel.status("first")
+            assert first is not None and first.cleanup_errors
+            if enabled:
+                second = kernel.kernel.status("second")
+                assert second is not None and second.diagnostic is not None
+                assert second.diagnostic.code == "duplicate_provider"
+                assert _states(kernel)["second"] == "BLOCKED"
+        assert _states(kernel)["second"] == "DISABLED"
+        assert probe.events == [("setup", "first")]
+    finally:
+        await kernel.terminate_all(force=True)
