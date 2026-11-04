@@ -62,6 +62,9 @@ class OAuthStore:
             record.tokens = None
             record.expires_at = None
             record.retired_secrets = []
+        # Revocation is fail-closed in memory even if durable cleanup fails.
+        # Earlier EpochStorage instances must never remain writable on I/O error.
+        self.record = record
         self.write(record)
 
     def secrets(self) -> list[str]:

@@ -243,8 +243,9 @@ async def test_private_tokens_reach_peer_but_not_model_or_read_rpc(tmp_path, cap
 
 
 @pytest.mark.parametrize("outcome", ["result", "error"])
+@pytest.mark.parametrize("fail_cleanup", [False, True])
 async def test_refresh_during_call_and_disposed_binding_keep_reply_private(
-    tmp_path, monkeypatch, outcome
+    tmp_path, monkeypatch, outcome, fail_cleanup
 ):
     """A late result/error keeps both admission-time and rotated OAuth secrets hidden."""
     from shiori_sdk.mcp import McpToolError
@@ -281,6 +282,12 @@ async def test_refresh_during_call_and_disposed_binding_keep_reply_private(
             await asyncio.wait_for(entered.wait(), 5)
             assert peer.refreshes == 1
             config = owner.store.servers["oauth"]
+            if fail_cleanup:
+
+                def failed_write(_record):
+                    raise OSError("simulated OAuth cleanup failure")
+
+                monkeypatch.setattr(binding.store, "write", failed_write)
             owner.save(
                 {
                     "server_id": "oauth",
@@ -310,4 +317,88 @@ async def test_refresh_during_call_and_disposed_binding_keep_reply_private(
             assert not owner._states["oauth"].wrappers
         finally:
             release.set()
+            monkeypatch.undo()
+            await owner.shutdown()
+
+
+@pytest.mark.parametrize("action", ["save", "logout", "delete"])
+async def test_credential_cleanup_io_failure_revokes_old_admission(
+    tmp_path, monkeypatch, action
+):
+    """A committed endpoint/deletion or logout cannot leave old credentials callable."""
+    from plugins.mcp.backend import oauth_store
+    from plugins.mcp.backend.models import McpConfigError
+
+    async with OAuthPeer() as peer:
+        path = tmp_path / "mcp_servers.json"
+        owner = await configured(path, peer)
+        try:
+            await login(owner, peer)
+            binding = owner.oauth_binding("oauth")
+            previous = owner.store.servers["oauth"]
+            state = owner._states["oauth"]
+            epoch = state.epoch
+            wrapper = state.wrappers["echo"]
+            old_storage = binding.provider.storage
+            tokens = binding.store.record.tokens
+            assert tokens is not None
+            previous_calls = peer.calls["echo"]
+            write = oauth_store.atomic_save_json
+
+            def failed_write(destination, payload):
+                if destination == binding.store.path:
+                    raise OSError(
+                        "simulated access-canary refresh-canary write failure"
+                    )
+                return write(destination, payload)
+
+            with monkeypatch.context() as fault:
+                fault.setattr(oauth_store, "atomic_save_json", failed_write)
+                if action == "save":
+                    owner.save(
+                        {
+                            "server_id": "oauth",
+                            "expected_revision": previous.revision,
+                            "config": {"transport": previous.transport.model_dump()},
+                            "credentials": {
+                                "url": {
+                                    "op": "replace",
+                                    "value": "http://127.0.0.1:1/replacement",
+                                }
+                            },
+                        }
+                    )
+                    assert (
+                        owner.store.credentials(owner.store.servers["oauth"]).url
+                        == "http://127.0.0.1:1/replacement"
+                    )
+                    assert (
+                        json.loads(path.read_text(encoding="utf-8"))["servers"][
+                            "oauth"
+                        ]["revision"]
+                        == previous.revision + 1
+                    )
+                elif action == "logout":
+                    owner.start_operation("oauth", "logout")
+                else:
+                    owner.delete("oauth", previous.revision)
+                    assert (
+                        "oauth"
+                        not in json.loads(path.read_text(encoding="utf-8"))["servers"]
+                    )
+                assert state.epoch > epoch
+                assert not state.wrappers
+                with pytest.raises(McpConfigError):
+                    await owner.call("oauth", "echo", {})
+                with pytest.raises(McpConfigError):
+                    await wrapper.execute()
+                with pytest.raises(LoginRequired):
+                    await old_storage.set_tokens(tokens)
+                await owner.wait_operations()
+                assert state.session is None
+                operation = state.operation
+                assert operation is not None and operation["status"] == "failed"
+                assert "access-canary" not in json.dumps(operation)
+                assert peer.calls["echo"] == previous_calls
+        finally:
             await owner.shutdown()

@@ -201,6 +201,7 @@ class McpServerRegistry:
             or previous.enabled != config.enabled
         )
         if reconnect:
+            retired_auth = None
             if (
                 server in self._oauth
                 and previous
@@ -209,9 +210,12 @@ class McpServerRegistry:
                     or previous.credential_ref != config.credential_ref
                 )
             ):
-                _, binding = self._oauth.pop(server)
-                binding.invalidate(clear=True)
-            self.start_operation(server, "connect" if config.enabled else "disable")
+                retired_auth = self._oauth[server][1]
+            self.start_operation(
+                server,
+                "connect" if config.enabled else "disable",
+                retired_auth=retired_auth,
+            )
         else:
             self._register(server, state)
             self._changed()
@@ -236,8 +240,6 @@ class McpServerRegistry:
         self._config(server, revision)
         remaining = dict(self.store.servers)
         del remaining[server]
-        if server in self._oauth:
-            self._oauth[server][1].invalidate(clear=True)
         self.store.commit(remaining)
         self.start_operation(server, "delete")
         return self.snapshot()
@@ -268,9 +270,11 @@ class McpServerRegistry:
             task.cancel()
         return state.epoch
 
-    def start_operation(self, server: str, kind: str) -> dict[str, object]:
+    def start_operation(
+        self, server: str, kind: str, *, retired_auth: OAuthBinding | None = None
+    ) -> dict[str, object]:
         """Start one finite management operation without blocking its RPC."""
-        return operations.start_operation(self, server, kind)
+        return operations.start_operation(self, server, kind, retired_auth=retired_auth)
 
     def cancel_operation(self, server: str) -> dict[str, object]:
         """Cancel owned work while keeping its persisted configuration."""

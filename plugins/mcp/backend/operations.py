@@ -10,10 +10,15 @@ from .models import HttpTransport, McpConfigError
 
 if TYPE_CHECKING:
     from .registry import McpServerRegistry, ServerState
+    from .oauth import OAuthBinding
 
 
 def start_operation(
-    registry: "McpServerRegistry", server: str, kind: str
+    registry: "McpServerRegistry",
+    server: str,
+    kind: str,
+    *,
+    retired_auth: OAuthBinding | None = None,
 ) -> dict[str, object]:
     """Return immediately; cancellation and connections never occupy RPC lanes."""
     registry._ready()
@@ -30,12 +35,6 @@ def start_operation(
         if kind in {"login", "logout", "refresh"}
         else None
     )
-    if kind == "logout" and binding:
-        binding.invalidate(clear=True)
-    if kind == "cancel" and server in registry._oauth:
-        registry._oauth[server][1].invalidate(clear=True)
-    if kind in {"disable", "delete"} and server in registry._oauth:
-        registry._oauth[server][1].invalidate()
     previous = registry._operations.get(server)
     if kind == "test" and previous and not previous.done():
         raise McpConfigError("服务器操作仍在进行")
@@ -54,6 +53,19 @@ def start_operation(
             "connecting" if kind in {"connect", "login", "refresh"} else "disabling"
         )
     state.error = None
+    auth_error: str | None = None
+    # Config is already committed for save/delete. Revoke admission before any
+    # credential I/O, and always schedule session cleanup even when that I/O fails.
+    try:
+        if retired_auth:
+            retired_auth.invalidate(clear=True)
+        elif (
+            kind in {"logout", "cancel", "delete", "disable"}
+            and server in registry._oauth
+        ):
+            registry._oauth[server][1].invalidate(clear=kind != "disable")
+    except Exception:
+        auth_error = "OAuth 凭据更新失败，连接已停止"
 
     async def run():
         try:
@@ -63,6 +75,8 @@ def start_operation(
                 await test_connection(registry, server)
             else:
                 await close_session(registry, state)
+                if auth_error:
+                    raise McpConfigError(auth_error)
                 if kind == "login" and binding:
                     await binding.begin(op)
                 if kind == "refresh" and binding:

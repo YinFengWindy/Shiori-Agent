@@ -106,11 +106,11 @@ class OAuthBinding:
 
     def invalidate(self, *, clear: bool = False) -> None:
         """Retire the provider before closing any network work."""
-        self.store.invalidate(clear=clear)
         if self.operation:
             self.operation.pop("authorization_url", None)
         self.operation = None
         self.required = clear or self.store.record.tokens is None
+        self.store.invalidate(clear=clear)
         self.provider = self._provider()
 
     async def begin(self, operation: dict[str, object]) -> None:

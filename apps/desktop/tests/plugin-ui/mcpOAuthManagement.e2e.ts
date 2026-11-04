@@ -13,7 +13,7 @@ const output = await mkdtemp(resolve(repository, ".test-tmp-root/mcp-oauth-manag
 const workspace = resolve(output, "workspace"), profile = resolve(output, "profile");
 await mkdir(workspace); await mkdir(profile);
 await writeFile(resolve(workspace, "config.toml"), '[llm]\nregistrations=[]\n[plugins.memory_optimizer]\nenabled=false\n[plugins.desktop_pet]\nenabled=false\n[plugins.mcp]\nenabled=false\n', "utf8");
-let origin = "", challenge = "", refreshes = 0;
+let origin = "", challenge = "", refreshes = 0, failAuthorization = false;
 const token = "oauth-access-canary";
 const peer = createServer((request, response) => {
   void (async () => {
@@ -27,7 +27,7 @@ const peer = createServer((request, response) => {
     if (url.pathname === "/authorize") {
       challenge = url.searchParams.get("code_challenge") ?? "";
       const callback = new URL(url.searchParams.get("redirect_uri")!);
-      callback.searchParams.set("code", "oauth-code-canary"); callback.searchParams.set("state", url.searchParams.get("state")!); callback.searchParams.set("iss", origin);
+      callback.searchParams.set("code", "oauth-code-canary"); callback.searchParams.set("state", failAuthorization ? "wrong-state" : url.searchParams.get("state")!); callback.searchParams.set("iss", origin);
       response.writeHead(302, { location: callback.href }); response.end(); return;
     }
     if (url.pathname === "/token") {
@@ -81,9 +81,21 @@ try {
   await browser(false); await page.getByRole("button", { name: "登录", exact: true }).click(); await connected();
   assert.equal(await opens(), 1);
   await app.screenshot("mcp-oauth-authorized");
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await eventually(opens, (count) => count === 2, "second explicit login opens browser");
+  await connected();
+  failAuthorization = true;
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await eventually(rows, (servers) => record(servers[0].operation).kind === "login" && record(servers[0].operation).status === "failed", "failed login keeps retry available");
+  assert.equal(await opens(), 3);
+  failAuthorization = false;
+  await page.getByRole("button", { name: "登录", exact: true }).click();
+  await eventually(opens, (count) => count === 4, "retry after failed login opens browser");
+  await connected();
+  await app.evidence.add("repeat-login-and-failed-retry-open-browser", { opens: await opens() });
   await page.getByRole("button", { name: "刷新授权", exact: true }).click();
   await eventually(rows, (servers) => record(servers[0].operation).kind === "refresh" && record(servers[0].operation).status === "succeeded", "refresh completed");
-  assert.equal(refreshes, 1); assert.equal(await opens(), 1);
+  assert.equal(refreshes, 1); assert.equal(await opens(), 4);
   await app.restart(); await browser(false); await app.settings();
   await app.page!.getByRole("button", { name: "MCP 设置", exact: true }).click(); page = app.page!;
   await connected(); assert.equal(await opens(), 0);
