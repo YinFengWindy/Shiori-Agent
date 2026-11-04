@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -350,11 +351,14 @@ async def test_private_value_redaction_preserves_binary_tool_content(
 
 async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
     tmp_path,
+    caplog,
 ):
     from .http_peer import HttpPeer
     from shiori_sdk.mcp import McpToolError
 
     path = tmp_path / "mcp_servers.json"
+    caplog.set_level(logging.DEBUG)
+    quoted_header = 'quoted"header\\canary'
     async with HttpPeer() as peer:
         registry = McpServerRegistry(
             path, processes=_Processes(), registration=_Registration()
@@ -369,7 +373,10 @@ async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
                     "bearer": {"op": "replace", "value": "private-bearer"},
                     "headers": {
                         "op": "replace",
-                        "value": {"X-API-Key": "private-header"},
+                        "value": {
+                            "X-API-Key": "private-header",
+                            "X-Custom": quoted_header,
+                        },
                     },
                 },
             }
@@ -377,12 +384,41 @@ async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
         await registry.wait_operations()
         assert _only_server(registry.snapshot())["status"] == "connected"
         assert await registry.call("http", "echo", {}, timeout=180) == "hello"
+        private_values = (
+            peer.url,
+            "private-bearer",
+            "private-header",
+            "query-canary",
+            quoted_header,
+        )
+        payload = {
+            "n": 1,
+            "format": "json",
+            "filter": "read",
+            "nested": [1, "json"],
+            "values": list(private_values),
+        }
+        expected = {**payload, "values": ["[已隐藏]"] * len(private_values)}
+        text_result = await registry.call("http", "echo", {"text": json.dumps(payload)})
+        assert isinstance(text_result, str)
+        assert json.loads(text_result) == expected
+        structured_result = await registry.call("http", "structured", {"data": payload})
+        from shiori_sdk.tools import ToolResult
+
+        assert isinstance(structured_result, ToolResult)
+        assert structured_result.structured_content == expected
         with pytest.raises(McpToolError) as error:
-            await registry.call("http", "tool_error", {})
-        for secret in (peer.url, "private-bearer", "private-header", "query-canary"):
+            await registry.call("http", "tool_error", {"text": json.dumps(payload)})
+        assert json.loads(error.value.message) == expected
+        for secret in private_values:
             assert secret not in str(error.value)
             assert secret not in json.dumps(registry.snapshot())
             assert secret not in path.read_text(encoding="utf-8")
+            assert secret not in caplog.text
+            assert (
+                json.dumps(secret, ensure_ascii=False)[1:-1]
+                not in structured_result.text
+            )
         captured = registry._states["http"].wrappers["echo"]
         registry.save(
             {
@@ -442,4 +478,64 @@ async def test_http_call_auth_failure_removes_tools_and_retains_configuration(tm
         assert row["enabled"] and row["status"] == "error" and "403" in error_message
         assert registry._states["http"].wrappers == {}
         assert peer.calls["echo"] == 0
+        await registry.shutdown()
+
+
+async def test_manual_reconnect_supersedes_pending_source_retry(tmp_path, monkeypatch):
+    retry_entered = asyncio.Event()
+    release_retry = asyncio.Event()
+    sessions = []
+    calls = []
+
+    def session_factory(_self, name, command, env=None, cwd=None, **_kwargs):
+        session = _Session(name, command, env, cwd)
+        sessions.append(session)
+        return session
+
+    async def connect(session):
+        if sessions.index(session) == 1:
+            retry_entered.set()
+            await release_retry.wait()
+        return [McpToolInfo("echo", "Echo", {"type": "object"})]
+
+    async def call(session, _tool, _args, **_kwargs):
+        number = sessions.index(session) + 1
+        calls.append(number)
+        if number == 1:
+            raise ConnectionError("lost connection")
+        return f"session {number}"
+
+    monkeypatch.setattr(_Processes, "mcp", session_factory)
+    monkeypatch.setattr(_Session, "connect", connect)
+    monkeypatch.setattr(_Session, "call", call)
+    registration = _Registration()
+    registry = McpServerRegistry(
+        tmp_path / "mcp_servers.json", processes=_Processes(), registration=registration
+    )
+    await registry.add("docs", ["server"])
+    retry = asyncio.create_task(
+        registry.call("docs", "echo", {}, retry_on_transport=True)
+    )
+    try:
+        async with asyncio.timeout(2):
+            await retry_entered.wait()
+            registry.start_operation("docs", "connect")
+            await registry.wait_operations()
+            assert _only_server(registry.snapshot())["status"] == "connected"
+            release_retry.set()
+            with pytest.raises(ValueError):
+                await retry
+        assert sessions[1].disconnected
+        assert not sessions[2].disconnected
+        assert _only_server(registry.snapshot())["status"] == "connected"
+        assert _only_server(registry.snapshot())["error"] is None
+        assert registration.tools == [("mcp_docs__echo", "docs")]
+        assert await registry.call("docs", "echo", {}) == "session 3"
+        assert calls == [
+            1,
+            3,
+        ]  # Superseded reads are not replayed under a new operation.
+    finally:
+        release_retry.set()
+        await asyncio.gather(retry, return_exceptions=True)
         await registry.shutdown()

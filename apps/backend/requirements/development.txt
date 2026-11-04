@@ -21,3 +21,6 @@ pyinstaller>=6.18.0
 -e ./packages/shiori-host-testing
 
 -e ./plugins/herdr[test]
+# Builtin MCP runtime dependencies are owned by the plugin's pyproject.
+# CI typechecks its source; Windows release freezes the same installed package.
+-e ./plugins/mcp[test]

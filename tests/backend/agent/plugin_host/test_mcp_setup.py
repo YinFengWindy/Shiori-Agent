@@ -173,3 +173,84 @@ async def test_real_source_and_chat_share_filter_and_gate_survives_failed_reload
         assert "unprintable-secret" not in json.dumps(await rpc("servers.list"))
     finally:
         await app.shutdown()
+
+
+async def test_stdio_credentials_are_redacted_without_corrupting_source_json(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Real errors reach the host logger and model; ordinary env flags stay data."""
+    from agent.plugin_host.call_gate import PluginCallGate
+    from agent.plugin_host.core_keys import PluginBinding
+    from agent.plugin_host.manifest import load_manifest
+    from agent.tools.mcp_registration import HostMcpToolRegistration
+    from agent.tools.registry import ToolRegistry
+    from infra.process.plugin_capability import HostProcesses
+    from plugins.mcp.backend.registry import McpServerRegistry
+    from shiori_sdk.kernel import Scope
+    from shiori_sdk.testing.extensions import FakeDependencies
+
+    peer = tmp_path / "credential_peer.py"
+    peer.write_text(
+        """import argparse,json,os,sys
+args=argparse.ArgumentParser()
+args.add_argument('--token'); args.add_argument('--client-secret'); args.add_argument('--format')
+options=args.parse_args()
+for line in sys.stdin:
+    request=json.loads(line)
+    if 'id' not in request: continue
+    if request['method']=='initialize': result={}
+    elif request['method']=='tools/list': result={'tools':[{'name':'context','description':'JSON context','inputSchema':{'type':'object','properties':{'format':{'type':'string','enum':['json']}}}}]}
+    elif request['params']['arguments'].get('error'):
+        result={'isError':True,'content':[{'type':'text','text':'Credential rejected: '+options.token+' '+options.client_secret+' '+os.environ['MCP_API_KEY']}]}
+    else:
+        result={'content':[{'type':'text','text':json.dumps({'n':1,'format':options.format,'nested':[1,'json']})}]}
+    print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':result}),flush=True)
+""",
+        encoding="utf-8",
+    )
+    values = ("inline-credential-995", "separate-credential-995", "env-credential-995")
+    tools = ToolRegistry()
+    scope = Scope("mcp")
+    manifest = load_manifest(plugin_directory("mcp"))
+    assert manifest is not None
+    registration = HostMcpToolRegistration(tools).for_plugin(
+        PluginBinding("mcp", "credential-stdio", manifest, scope, PluginCallGate("mcp"))
+    )
+    registry = McpServerRegistry(
+        tmp_path / "mcp_servers.json",
+        processes=HostProcesses(),
+        registration=registration,
+    )
+    try:
+        await registry.add(
+            "credentials",
+            [
+                sys.executable,
+                "-u",
+                str(peer),
+                "--token=" + values[0],
+                "--client-secret",
+                values[1],
+                "--format",
+                "json",
+            ],
+            env={"DEBUG": "1", "FORMAT": "json", "MCP_API_KEY": values[2]},
+        )
+        tool = tools.get_tool("mcp_credentials__context")
+        assert tool is not None
+        assert tool.parameters["properties"]["format"]["enum"] == ["json"]
+        source = McpClientPool(dependencies=lambda: FakeDependencies({"mcp": registry}))
+        assert await source.call("credentials", "context", {}) == {
+            "n": 1,
+            "format": "json",
+            "nested": [1, "json"],
+        }
+        with caplog.at_level("ERROR", logger="agent.tools.registry"):
+            output = await tools.execute(tool.name, {"error": True})
+        assert isinstance(output, str) and "Credential rejected" in output
+        assert "Credential rejected" in caplog.text
+        assert all(value not in output and value not in caplog.text for value in values)
+    finally:
+        await registry.shutdown()
+        assert await scope.close() == []

@@ -76,7 +76,7 @@ class OAuthBinding:
         self.store = OAuthStore(path)
         self.changed = changed
         self.required = self.store.record.tokens is None
-        self.private_values: list[str] = []
+        self.private_values: set[str] = set(self.store.secrets())
         self.listener: OAuthCallback | None = None
         self.operation: dict[str, object] | None = None
         self.provider = self._provider()
@@ -100,6 +100,7 @@ class OAuthBinding:
         )
 
     def _token_changed(self) -> None:
+        self.private_values.update(self.store.secrets())
         self.required = False
         self.changed()
 
@@ -147,7 +148,7 @@ class OAuthBinding:
             raise LoginRequired()
         result = await self.listener.wait()
         if result.code:
-            self.private_values.append(result.code)
+            self.private_values.add(result.code)
         return result
 
     def refresh(self) -> None:
@@ -159,6 +160,10 @@ class OAuthBinding:
         record.expires_at = 1.0
         self.store.write(record)
         self.provider.context.token_expiry_time = 1.0
+
+    def secrets(self) -> list[str]:
+        """Read only this binding; retain secrets needed by its in-flight replies."""
+        return [*self.store.secrets(), *self.private_values]
 
     def snapshot(self) -> dict[str, object]:
         """Return status and the public redirect URI, never account credentials."""

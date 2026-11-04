@@ -2,7 +2,7 @@
 
 import re
 from typing import Any
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import urlsplit
 
 from pydantic import TypeAdapter
 from .models import LaunchCredentials, McpConfigError, StdioTransport, Transport
@@ -22,19 +22,6 @@ _RESERVED_HEADERS = {
     "last-event-id",
     "origin",
 }
-
-
-def secret_values(credentials: LaunchCredentials) -> list[str]:
-    """Known private values, including individual query values in a private URL."""
-    return [
-        *credentials.env.values(),
-        *credentials.command[1:],
-        *credentials.headers.values(),
-        credentials.bearer or "",
-        credentials.oauth.client_secret or "" if credentials.oauth else "",
-        credentials.url or "",
-        *(value for _, value in parse_qsl(urlsplit(credentials.url or "").query)),
-    ]
 
 
 def edit_value(edit: dict[str, Any], old: object) -> object:

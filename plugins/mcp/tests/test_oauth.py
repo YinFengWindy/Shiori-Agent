@@ -240,3 +240,74 @@ async def test_private_tokens_reach_peer_but_not_model_or_read_rpc(tmp_path, cap
             assert peer.token_bodies[0][0]["code"] == ["code-canary"]
         finally:
             await owner.shutdown()
+
+
+@pytest.mark.parametrize("outcome", ["result", "error"])
+async def test_refresh_during_call_and_disposed_binding_keep_reply_private(
+    tmp_path, monkeypatch, outcome
+):
+    """A late result/error keeps both admission-time and rotated OAuth secrets hidden."""
+    from shiori_sdk.mcp import McpToolError
+
+    async with OAuthPeer() as peer:
+        owner = await configured(tmp_path / "mcp_servers.json", peer)
+        entered, release = asyncio.Event(), asyncio.Event()
+        try:
+            await login(owner, peer)
+            binding = owner.oauth_binding("oauth")
+            old_values = binding.secrets()
+            binding.refresh()
+            peer.echo_secrets = True
+            session = owner._states["oauth"].session
+            assert session is not None
+            original = session.call
+
+            async def delayed(tool, arguments, *, timeout=None):
+                result = await original(tool, arguments, timeout=timeout)
+                assert isinstance(result, str)
+                entered.set()
+                try:
+                    await release.wait()
+                except asyncio.CancelledError:
+                    # Model an already-completed remote reply delivered after revoke.
+                    pass
+                text = json.dumps({"n": 1, "reply": result, "prior": old_values})
+                if outcome == "error":
+                    raise McpToolError(server="oauth", tool_name=tool, message=text)
+                return text
+
+            monkeypatch.setattr(session, "call", delayed)
+            call = asyncio.create_task(owner.call("oauth", "echo", {}))
+            await asyncio.wait_for(entered.wait(), 5)
+            assert peer.refreshes == 1
+            config = owner.store.servers["oauth"]
+            owner.save(
+                {
+                    "server_id": "oauth",
+                    "expected_revision": config.revision,
+                    "config": {"transport": config.transport.model_dump()},
+                    "credentials": {
+                        "url": {"op": "replace", "value": peer.url + "&endpoint=new"}
+                    },
+                }
+            )
+            release.set()
+            if outcome == "error":
+                with pytest.raises(McpToolError) as caught:
+                    await call
+                text = caught.value.message
+            else:
+                text = await call
+                assert isinstance(text, str)
+            assert json.loads(text)["n"] == 1
+            assert "已隐藏" in text
+            for secret in [*old_values, peer.access, peer.refresh_token, "code-canary"]:
+                if secret:
+                    assert secret not in text
+            await owner.wait_operations()
+            assert binding.store.record.tokens is None
+            assert owner.oauth_binding("oauth") is not binding
+            assert not owner._states["oauth"].wrappers
+        finally:
+            release.set()
+            await owner.shutdown()
