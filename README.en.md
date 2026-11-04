@@ -22,7 +22,7 @@
 
 Shiori organizes personas, memories, conversations, assets and relationships around characters. You can create several characters, give each their own personality and history, chat with them, assign them tasks, or step into a story of its own.
 
-Characters can also keep you company through Telegram, QQ and Feishu. Every entry point carries on the same character identity and state; group chats and private chats with unbound identities keep their own contexts.
+Characters can also keep you company through Telegram, QQ, Feishu and Grok Bot. Every entry point carries on the same character identity and state; group chats and private chats with unbound identities keep their own contexts.
 
 The Shiori app's interface is currently in Chinese.
 
@@ -56,13 +56,15 @@ The Shiori app's interface is currently in Chinese.
 2. On first launch, follow the "Model → Character → Start" guide: enter your model service, API key and model parameters, create your first character, then start chatting.
 3. For more capabilities, enable the matching plugins under "Settings → Plugins"; external chat accounts are added under "Accounts" in the character's details.
 
+**Upgrading from 0.5.x:** Version 0.5.6 bundles SDK 4 and retains characters, conversations, memories, plugin data and enablement preferences. Legacy settings move into the corresponding plugin settings when needed. Old external plugin code is incompatible: packages without `api: 4` are blocked, with their files and data retained. Use an SDK 4 package rebuilt by its author; changing the manifest version alone is insufficient.
+
 Shiori checks for updates on startup; you can also check manually under "Settings → About". Using the Agent's shell tool on Windows requires PowerShell 7, with `pwsh` on the PATH.
 
 | Service | Used for | When you need it |
 | --- | --- | --- |
 | Model service | Character replies, Agent tasks and story progression | Configure before your first chat |
 | Embedding service | Semantic memory retrieval | When using semantic memory |
-| Telegram / QQ (NapCat) / QQBot / Feishu | External chat channels | When enabling the matching channel |
+| Telegram / QQ (NapCat) / QQBot / Feishu / Grok Bot | External chat channels | When enabling the matching channel |
 | NovelAI | Image generation, story backgrounds and CGs | When using image generation |
 | ASR / TTS service | Voice interaction | When using voice |
 
@@ -70,16 +72,19 @@ Shiori checks for updates on startup; you can also check manually under "Setting
 
 | Feature | What you can do |
 | --- | --- |
-| Characters and conversations | Create, import and export character cards; edit settings, personality and reply rules; manage avatars, mood portraits and assets; keep chat history, search messages, and turn on streaming replies. |
+| Characters and conversations | Create, import and export character cards; edit settings, personality and reply rules; manage avatars, mood portraits and assets; keep chat history, search messages, stream replies, and use natural replies split across messages with interruptions between them. |
 | Memory and affection | Retrieve and organize long-term memories, and view memory and affection timelines on the character page; affection changes with your interactions across seven stages, from loathing to devotion; the chat sidebar shows mood, current thoughts and relationship tags. |
 | Proactive interaction and tasks | Characters speak up on their own based on your relationship and interactions; with idle activities enabled they can use tools by themselves; supports tasks and scheduling. |
-| Story mode | Take a snapshot of a character into a separate story and drive it forward with your actions; autosave, review the log, and view generated scenes in the CG gallery. |
+| Stories and scene CGs | Take a snapshot of a character into a separate story and drive it forward with your actions; autosave, review the log, and view generated scenes in the CG gallery. Automatic character CGs accept additional instructions in Chinese across multiple lines. |
 | Desktop pet and voice | Import desktop pet asset packs so a character stays on your desktop and shows reply bubbles; voice interaction is configurable. One character's desktop pet can be active at a time. |
 | Live stream companion | Configure a Bilibili live room in the desktop pet's ability card, sign in by QR code, and have the character respond to danmaku comments; supports pause, resume and stop, and requires the desktop pet and speech synthesis. |
 | Multiple channels and the character's phone | Add channel accounts for a character; open the character's little phone from the chat page to see its accounts, contacts and channel conversations. |
 | Tools and plugins | Use tools such as files, shell and search as needed; with Browser Use / Computer Use enabled, characters can operate the browser and desktop; the screen reading plugin can also do read-only analysis on its own. |
+| Coding collaboration | Use Herdr to message or interrupt a local Coding Agent, or have a character inspect and take over a task and report its result. |
 
-Stories, the desktop pet, image generation and external channels are all provided as plugins. "Settings → Plugins" manages enabling, disabling, configuration and ZIP installation; installing, updating and uninstalling from ZIP takes effect after a restart, and a third-party plugin asks for trust confirmation the first time it loads. Browser Use and Computer Use are disabled by default. See the SDK documentation below for plugin development.
+Natural chat, affection, scene observation, scheduled tasks, proactive interaction, memory maintenance, stories, the desktop pet, image generation and external channels are plugins you can enable or disable. Basic chat remains available. Memory configuration lives in the Default Memory Engine plugin.
+
+"Settings → Plugins" manages enabling, disabling, configuration and ZIP installation. Most plugin adjustments take effect immediately; the app indicates when a restart is required. ZIP installation, updates and removal take effect after restart, and external plugins require trust confirmation before their first execution. Browser Use and Computer Use are disabled by default; Browser Use supports agent-browser or a separately installed ego(lite) backend. See the SDK documentation below for plugin development.
 
 [SenseVoiceSmall ASR](./plugins/sensevoice_asr/README.md) and [GPT-SoVITS TTS](./plugins/gpt_sovits_tts/README.md) are local voice providers bundled with the app, disabled by default. Once enabled under "Settings → Plugins" they can be configured and tested on their own, and the desktop pet can use them too; the inference services must be prepared separately or managed by the plugins.
 
@@ -94,42 +99,43 @@ Stories, the desktop pet, image generation and external channels are all provide
 
 ### Local development
 
-Requirements: Windows x64, Node.js 22+, pnpm 10.33.0, Python 3.12+, PowerShell 7.
+Requirements: Windows x64, Node.js 22+, pnpm 10.33.0, Python 3.12+, uv, PowerShell 7.
 
 ```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r apps/backend/requirements/development.txt
-pnpm install
+uv sync --dev --locked
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Before using [Browser Use](./plugins/browser_use/README.md) / [Computer Use](./plugins/computer_use/README.md) in development, run `pnpm prepare:browser-use` / `pnpm prepare:computer-use` respectively to prepare their native components.
+Before using the agent-browser backend of [Browser Use](./plugins/browser_use/README.md) or [Computer Use](./plugins/computer_use/README.md) in development, run `pnpm prepare:browser-use` or `pnpm prepare:computer-use` respectively to prepare their native components.
 
 In development mode the Python bridge uses the interpreter in the project's `.venv`. Common checks are below; for everyday changes, pick the tests that match what you changed.
 
 ```powershell
 pnpm lint
 pnpm typecheck
-pnpm test --file RoleDetailPage.test.tsx
+pnpm run desktop:test --file RoleDetailPage.test.tsx
 .venv\Scripts\black.exe --check .
 .venv\Scripts\ruff.exe check .
 .venv\Scripts\pytest.exe -q tests/backend/core/roles/
 ```
 
-Desktop unit tests can take `--file` several times to combine filters, `--test-name-pattern` to filter by name, or `--list` to only list the files. For a full run, `pnpm test` runs the host and plugin unit tests, `.venv\Scripts\pytest.exe -q` collects the backend, plugin and SDK tests per the repository configuration, and `pnpm build` builds the desktop app.
+Desktop unit tests can take `--file` several times to combine filters, `--test-name-pattern` to filter by name, or `--list` to only list the files. `pnpm test` runs desktop unit tests and the site's build checks. By default, pytest runs the host contract suite; plugin and SDK isolation have separate runners described in [Plugin testing](./docs/agents/plugin-testing.md). `pnpm build` builds the desktop app.
 
 ### Plugin SDK
 
-The SDK in the current source is **4.0.0** and is not published yet. The latest registry release is **3.1.2**. The frontend package is [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk) and the backend package is [shiori-sdk](https://pypi.org/project/shiori-sdk/) (Python 3.12+). These commands install the published 3.1.2 release; in-repo development uses the workspace 4.0.0 package.
+**SDK 4.0.0 is published on npm and PyPI.** The frontend package is [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk) and the backend package is [shiori-sdk](https://pypi.org/project/shiori-sdk/) (Python 3.12+). In-repo development uses the matching workspace package.
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^3.1.2"
-uv add "shiori-sdk>=3.1.2,<4"
+pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0"
+uv add "shiori-sdk>=4.0.0,<5"
 ```
 
-Plugins live in `plugins/<id>/`: `manifest.yaml` declares `api: 4` and `sdk: ">=4.0.0"`, `backend/` holds the Python backend, `ui/` an optional React interface, and `tests/` the plugin's tests. Frontend builds must keep the SDK, React and React DOM external; Shiori provides them at runtime. The Python dependency lower bound admits 4.0 (`shiori-sdk>=4.0.0,<5`).
+Plugins live in `plugins/<id>/`: `manifest.yaml` declares `api: 4` and `sdk: ">=4.0.0"`, `backend/` holds the Python backend, and `tests/` the plugin's tests. One `frontend.entry` provides named `ui`, `background` and/or `surface` exports. Keep the SDK, React and React DOM external; declare their ranges in `package.json` peerDependencies, which the builder writes to `frontend.peers`.
 
-See the [SDK compatibility notes](./packages/sdk/README.md#compatibility). A breaking contract change is a new SDK major. There is no Unreleased batch.
+From the repository root, `pnpm new-plugin example --ui` creates a plugin template. After backend RPC changes, run `pnpm rpc:generate` and `pnpm rpc:check`; `pnpm plugins:contract` checks plugin lifecycles in the real host.
+
+**SDK 4 is a breaking major.** Key services and typed events replace the old capability attributes and phases. The old `runtime_api`, `renderer` and `peer_dependencies` declarations are removed. External plugins need code migration, rebuilding and verification. Existing keys do not gain methods within 4.x; new capabilities use new keys or events. There is no Unreleased batch. See the [SDK compatibility notes](./packages/sdk/README.md#compatibility).
 
 The desktop version, the SDK version and each plugin's own version are independent. A plugin's `version` matches its Python package metadata. `sdk` in the manifest declares the minimum SDK.
 
