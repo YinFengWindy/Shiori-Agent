@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from shiori_sdk.kernel import Context, KernelError, Key, PluginSpec
+from shiori_sdk.kernel import Context, KernelError, KernelState, Key, PluginSpec
 from shiori_sdk.testing.kernel import KernelHarness
 
 CLOCK = Key[str]("clock")
@@ -104,6 +104,49 @@ async def test_reload_runs_on_drain_before_disposing_the_old_instance() -> None:
     _ = await harness.reload("plugin")
 
     assert steps == ["setup 1", "drain 1", "dispose 1", "setup 2"]
+
+
+async def test_reload_timeout_propagates_without_replacing_the_old_closure() -> None:
+    """The reload composition must not dispose or restart after drain fails."""
+    release, drained = asyncio.Event(), asyncio.Event()
+    steps: list[tuple[str, str]] = []
+    provided = object()
+
+    async def setup(ctx: Context) -> None:
+        steps.append(("setup", ctx.plugin_id))
+        if ctx.plugin_id == "provider":
+            ctx.provide(SERVICE, provided)
+        else:
+
+            async def drain() -> None:
+                _ = await release.wait()
+                drained.set()
+
+            ctx.on_drain(drain)
+        ctx.effect(lambda: steps.append(("dispose", ctx.plugin_id)))
+
+    harness = KernelHarness()
+    kernel = await harness.start(
+        PluginSpec("provider", setup, provides=("service",)),
+        PluginSpec("consumer", setup, optional=("service",)),
+    )
+    scopes = {plugin_id: kernel.scope(plugin_id) for plugin_id in kernel.order()}
+    try:
+        with pytest.raises(KernelError) as aborted:
+            _ = await harness.reload("provider", timeout=0.01)
+
+        assert aborted.value.diagnostic.code == "drain_timeout"
+        assert aborted.value.plugin_ids == ("consumer",)
+        assert steps == [("setup", "provider"), ("setup", "consumer")]
+        assert kernel.get(SERVICE) is provided
+        for plugin_id, scope in scopes.items():
+            assert kernel.scope(plugin_id) is scope
+            status = kernel.status(plugin_id)
+            assert status is not None and status.state is KernelState.ACTIVE
+    finally:
+        release.set()
+        _ = await asyncio.wait_for(drained.wait(), timeout=1)
+        _ = await harness.stop()
 
 
 @pytest.mark.parametrize(
@@ -233,7 +276,10 @@ async def test_reload_refuses_a_plugin_that_is_not_active() -> None:
     assert refused.value.plugin_ids == ("missing",)
 
 
-async def test_stop_releases_instances_excluded_by_a_later_plan() -> None:
+@pytest.mark.parametrize("rebuild_harness", [False, True])
+async def test_stop_releases_instances_excluded_by_a_later_plan(
+    rebuild_harness: bool,
+) -> None:
     """Duplicate-provider replanning must not leak the previously active scope."""
     disposed: list[str] = []
 
@@ -246,6 +292,9 @@ async def test_stop_releases_instances_excluded_by_a_later_plan() -> None:
     _ = await harness.start(PluginSpec("second", provider, provides=("service",)))
     assert kernel.order() == ()
     assert kernel.get(SERVICE) is not None
+
+    if rebuild_harness:
+        harness = KernelHarness(kernel=kernel)
 
     assert await harness.stop() == []
     assert disposed == ["first"]
