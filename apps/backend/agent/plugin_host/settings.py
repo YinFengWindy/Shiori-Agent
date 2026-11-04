@@ -12,6 +12,8 @@ from agent.plugin_host.manifest import PluginManifest
 from agent.plugin_host.reload import ProcessResourceSource
 
 # The enable flag belongs to the host, in the plugin's existing config table.
+# Whole-table readers and writers must preserve this key, or configuration
+# updates and enable/disable operations will overwrite each other's values.
 PLUGIN_ENABLED_CONFIG_KEY = "enabled"
 
 

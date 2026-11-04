@@ -33,6 +33,7 @@ from agent.plugin_host.settings import PluginGenerationSettings
 from agent.plugin_host.state import PluginInstance
 from agent.plugin_host.trusted_imports import TrustedPluginImports
 
+# Keep the pre-split logger name so existing filters and diagnostics still match.
 logger = logging.getLogger("agent.plugin_host.kernel")
 
 

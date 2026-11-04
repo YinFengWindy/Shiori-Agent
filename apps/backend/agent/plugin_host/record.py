@@ -28,13 +28,16 @@ class PluginRecord:
         """Identify one directory candidate without collapsing duplicate manifest IDs."""
         return str(self.plugin_dir.absolute())
 
+    @property
+    def is_conflicting(self) -> bool:
+        """Whether discovery excluded this candidate from dependency lookup."""
+        return self.admission is not None and self.admission.state == "CONFLICT"
+
 
 def records_by_id(records: list[PluginRecord]) -> dict[str, PluginRecord]:
     """Select unambiguous candidates that may participate in dependencies."""
     return {
-        record.manifest.id: record
-        for record in records
-        if record.admission is None or record.admission.state != "CONFLICT"
+        record.manifest.id: record for record in records if not record.is_conflicting
     }
 
 

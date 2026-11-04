@@ -6,6 +6,8 @@ from shiori_sdk.kernel import Kernel, PluginDiagnostic, RendererActivationError
 from agent.plugin_host.record import PluginRecord
 from agent.plugin_host.state import PluginInstance
 
+# #262 AC1: ui/background readiness gates the fully ACTIVE presentation;
+# backend contributions are already live and this gate grants no resources.
 # Surface windows are opened on demand, so they do not gate initial readiness.
 # A surface failure still rolls back the plugin, like ui/background failures.
 _RENDERER_GATED_KINDS: tuple[str, ...] = ("ui", "background")

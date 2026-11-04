@@ -226,7 +226,7 @@ class RuntimePluginManagement:
         naming a plugin/kind the current generation's kernel is not tracking
         as ACTIVE is silently ignored (``changed: False``) rather than
         raising, since a renderer process cannot synchronously know the
-        backend's current view — see ``PluginKernel._find_active_instance``.
+        backend's current view — see ``renderer_gate.find_active_instance``.
         """
         plugin_id = str(payload.get("plugin_id") or "").strip()
         kind = str(payload.get("kind") or "").strip()

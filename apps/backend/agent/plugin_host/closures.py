@@ -40,11 +40,7 @@ def assert_hot_unloadable(
 
 
 def _views_by_id(views: Sequence[PluginView]) -> dict[str, PluginView]:
-    return {
-        view.plugin_id: view
-        for view in views
-        if view.record.admission is None or view.record.admission.state != "CONFLICT"
-    }
+    return {view.plugin_id: view for view in views if not view.record.is_conflicting}
 
 
 def enable_closure(
@@ -53,7 +49,7 @@ def enable_closure(
     active_plugin_ids: Collection[str],
     kernel: Kernel,
 ) -> list[PluginView]:
-    """Select the existing dependency closure for this enablement change."""
+    """Select blocked dependents and active optional consumers when enabling a target."""
     by_id = _views_by_id(views)
     for dependency in target.record.manifest.dependencies:
         provider = by_id.get(dependency)
@@ -84,7 +80,7 @@ def disable_closure(
     views: Sequence[PluginView],
     kernel: Kernel,
 ) -> list[PluginView] | None:
-    """Select the existing dependency closure for this enablement change."""
+    """Select running dependents for disablement, or an inactive target alone."""
     by_id = _views_by_id(views)
     if target.state == "ACTIVE":
         return [
