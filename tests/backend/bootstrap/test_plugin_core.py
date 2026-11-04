@@ -16,7 +16,6 @@ from agent.plugin_host import (
     PluginGenerationSettings,
     PluginKernel,
     PluginRpcRegistry,
-    PluginState,
 )
 from agent.core.turn_events import install_core_checks
 from bootstrap.plugin_core import PluginCoreInputs, plugin_core_modules
@@ -71,9 +70,9 @@ async def test_crash_reporting_hooks_session_and_frame(tmp_path: Path) -> None:
     kernel = make_kernel([tmp_path / "plugins"], event_bus=EventBus())
     try:
         await kernel.load_all()
-        handle = kernel._handles[str(package.absolute())]
-        assert handle.state is PluginState.ACTIVE, handle.error
-        hook, frame, seen = handle.instance
+        handle = kernel.view(str(package.absolute()))
+        assert handle.state == "ACTIVE", handle.error
+        hook, frame, seen = kernel._dependency_api("crash_probe")
         installed = (
             sys.excepthook,
             threading.excepthook,
@@ -119,7 +118,9 @@ async def test_avatars_capability_caches_into_the_host_role_store(
     )
     await kernel.load_all()
     try:
-        assert [state["state"] for state in kernel.states()] == ["ACTIVE"]
+        assert [
+            state["state"] for state in [view.describe() for view in kernel.views()]
+        ] == ["ACTIVE"]
         assert role_store.avatars.index().sender("qq", "42") is not None
     finally:
         await kernel.terminate_all(force=True)
@@ -159,7 +160,9 @@ async def test_scene_host_is_provided_with_the_role_store(tmp_path: Path) -> Non
     )
     await kernel.load_all()
     try:
-        assert [state["state"] for state in kernel.states()] == ["ACTIVE"]
+        assert [
+            state["state"] for state in [view.describe() for view in kernel.views()]
+        ] == ["ACTIVE"]
         assert sentinel.read_text(encoding="utf-8") == "Mira"
     finally:
         await kernel.terminate_all(force=True)

@@ -168,3 +168,16 @@ def before_turn_ctx(**overrides: object) -> BeforeTurnCtx:
     )
     defaults.update(overrides)
     return BeforeTurnCtx(**defaults)
+
+
+async def set_plugin_enabled(kernel: PluginKernel, name: str, enabled: bool):
+    """Exercise the public enablement transition while preserving plugin config."""
+    view = kernel.view(name)
+    if view is None:
+        raise LookupError(name)
+    plugin_id = view.plugin_id
+    values = {**kernel._settings.plugin_configs.get(plugin_id, {}), "enabled": enabled}
+    raw = {**kernel._settings.raw_plugin_configs.get(plugin_id, {}), "enabled": enabled}
+    return await kernel.set_enabled(
+        name, values=values, raw_values=raw, drain_timeout=5
+    )

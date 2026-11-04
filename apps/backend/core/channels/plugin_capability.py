@@ -24,11 +24,21 @@ from agent.plugin_host.core_keys import (
     PluginBinding,
     required_core_key,
 )
-from agent.plugin_host.diagnostics import ChannelDeclarationError
 from agent.plugin_host.manifest import matches_channel_instance
 from core.channel_avatars import AvatarKey, ChannelAvatarStore
 
 logger = logging.getLogger(__name__)
+
+
+class ChannelDeclarationError(Exception):
+    """A plugin contributed a channel its manifest did not declare."""
+
+    def __init__(self, plugin_id: str, channel: str, declared: frozenset[str]):
+        names = ", ".join(sorted(declared)) or "（无）"
+        super().__init__(
+            f"插件 {plugin_id} 贡献了未在 manifest channels 中声明的渠道 "
+            f"{channel}；已声明: {names}"
+        )
 
 
 def contribute_to_list[T](

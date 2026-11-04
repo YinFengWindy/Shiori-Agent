@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.support.plugin_kernel import set_plugin_enabled
+
 import asyncio
 import json
 from pathlib import Path
@@ -157,4 +159,4 @@ async def test_cg_reaches_the_bound_qq_chat_through_account_delivery(
         assert attempt.status == "sent"
     finally:
         await lease.release()
-        await kernel.unload("novelai")
+        await set_plugin_enabled(kernel, "novelai", False)

@@ -28,6 +28,7 @@ from agent.plugin_host.kernel import (
 )
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from agent.plugin_host.manifest import PluginManifest
+from agent.plugin_host.state import NOT_STARTED
 from bootstrap.app import AppRuntime
 from desktop_bridge.runtime.channel_listing import RuntimeChannelListing
 from desktop_bridge.runtime.plugin_trust import RuntimePluginTrust
@@ -83,17 +84,11 @@ class RuntimePluginManagement:
         kernel = self._plugin_kernel()
         if kernel is None:
             return {"plugins": []}
-        states = {entry["candidate_id"]: entry for entry in kernel.states()}
         plugins: list[dict[str, Any]] = []
-        for record in kernel.discover():
-            plugin_id = record.manifest.id
-            state = states.get(record.candidate_id)
-            admission = record.admission
-            runtime_state = (
-                state["state"]
-                if state
-                else (admission.state if admission else "DISCOVERED")
-            )
+        for view in kernel.views():
+            record = view.record
+            plugin_id = view.plugin_id
+            runtime_state = view.state
             plugins.append(
                 {
                     "id": plugin_id,
@@ -112,7 +107,10 @@ class RuntimePluginManagement:
                     "content_fingerprint": record.fingerprint,
                     "content_hashes": record.content_hashes,
                     "enabled": self._enabled(record.manifest),
-                    "can_toggle": runtime_state
+                    # A replacement has already passed admission. Its queued
+                    # toggle/uninstall must wait for the settings transaction.
+                    "can_toggle": view.diagnostic == NOT_STARTED
+                    or runtime_state
                     not in {"CONFLICT", "UNTRUSTED", "BLOCKED", "RESTART_REQUIRED"},
                     "supports_hot_unload": record.manifest.supports_hot_unload,
                     "dependencies": list(record.manifest.dependencies),
@@ -126,29 +124,19 @@ class RuntimePluginManagement:
                     # Settings › 插件 groups its rows by this (feature/channel/system).
                     "category": record.manifest.category,
                     "state": runtime_state,
-                    "error": (
-                        state["error"]
-                        if state
-                        else (admission.reason if admission else "")
-                    ),
+                    "error": str(view.error) if view.error else "",
                     "diagnostic": (
-                        state.get("diagnostic")
-                        if state
-                        else (admission.to_dict() if admission else None)
+                        view.diagnostic.to_dict() if view.diagnostic else None
                     ),
                     # Required renderer entries (ui/background) not yet
                     # confirmed ready by their owning window; non-empty only
                     # while ``state == "ACTIVE"`` (#262 AC1).
-                    "pending_renderer_kinds": (
-                        state.get("pending_renderer_kinds", []) if state else []
-                    ),
+                    "pending_renderer_kinds": sorted(view.pending_renderer_kinds),
                     # Opaque per-activation-attempt identity, echoed back in
                     # ``plugins.activation.report`` so a stale report from a
                     # disable/re-enable cycle's abandoned load cannot be
-                    # mistaken for the current handle (#262).
-                    "activation_token": (
-                        state.get("activation_token", "") if state else ""
-                    ),
+                    # mistaken for the current instance (#262).
+                    "activation_token": view.activation_token,
                     # Saved accounts the running plugin could not register
                     # (e.g. no owner role); the plugin itself stays up.
                     "account_errors": self._settings.roles.accounts.rejected(plugin_id),
@@ -241,7 +229,7 @@ class RuntimePluginManagement:
         naming a plugin/kind the current generation's kernel is not tracking
         as ACTIVE is silently ignored (``changed: False``) rather than
         raising, since a renderer process cannot synchronously know the
-        backend's current view — see ``PluginKernel._find_active_handle``.
+        backend's current view — see ``PluginKernel._find_active_instance``.
         """
         plugin_id = str(payload.get("plugin_id") or "").strip()
         kind = str(payload.get("kind") or "").strip()

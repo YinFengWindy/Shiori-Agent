@@ -351,7 +351,7 @@ class ReloadableDesktopService:
         other plugins) refreshes.
         """
         kernel = self.app.core.plugin_manager
-        states = {entry["id"]: entry["state"] for entry in kernel.states()}
+        states = {view.plugin_id: view.state for view in kernel.views()}
         # FAILED (including a failed restore) is not a user disable. Only
         # disabled roots and their blocked hard dependents have that cause.
         disabled_closure = {

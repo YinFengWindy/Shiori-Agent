@@ -152,7 +152,7 @@ async def test_failed_work_drain_still_stops_channel_and_disposes_scopes(
     )
     fail.assert_awaited_once()
     assert runtime_channels.events == ["stop"]
-    assert app.core.plugin_manager.loaded_count == 0
+    assert len(app.core.plugin_manager.active_plugin_ids) == 0
     assert app.core.event_bus._closed
     assert app.http_resources._closed
 
@@ -184,7 +184,7 @@ async def test_shutdown_preserves_drain_channel_and_retirement_errors(
     fail_drain.assert_awaited_once()
     assert runtime_channels.channels[0].stop_calls == 1
     assert app._generation_manager.current.references == 0
-    assert app.core.plugin_manager.loaded_count == 0
+    assert len(app.core.plugin_manager.active_plugin_ids) == 0
     assert app.core.event_bus._closed
     assert app.http_resources._closed
 

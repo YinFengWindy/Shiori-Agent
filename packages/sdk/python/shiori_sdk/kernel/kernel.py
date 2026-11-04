@@ -104,7 +104,7 @@ class Kernel:
     The host provides core keys with ``provide`` and adds post-chain checks
     with ``check`` before planning. Hosts compose ``activate``, ``deactivate``
     and ``drain`` with their own enablement, admission and rollback rules.
-    Plugin tests use ``shiori_sdk.testing.KernelHarness`` for orchestration.
+    Plugin tests use ``shiori_sdk.testing.kernel.KernelHarness`` for orchestration.
     """
 
     def __init__(self, *, watch_limit: int = WATCH_LIMIT) -> None:
@@ -163,6 +163,16 @@ class Kernel:
         plan = graph.plan(list(self._specs.values()), core)
         self._rank = {plugin_id: rank for rank, plugin_id in enumerate(plan.order)}
         self._owners = plan.owners
+        for plugin_id, status in list(self._status.items()):
+            if (
+                plugin_id not in self._scopes
+                and plugin_id not in plan.excluded
+                and status.state in {KernelState.BLOCKED, KernelState.REPLACED}
+                and status.diagnostic is not None
+                and status.diagnostic.code
+                in {"replaced", "conflict", "duplicate_provider", "dependency_cycle"}
+            ):
+                del self._status[plugin_id]
         for plugin_id, excluded in plan.excluded.items():
             status = self._status.get(plugin_id)
             # A conflict cannot erase a failed rollback's restart barrier.

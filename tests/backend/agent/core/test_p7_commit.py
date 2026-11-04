@@ -318,7 +318,7 @@ async def test_new_chain_after_reasoning_persists_meme_and_fires_turn_committed(
         event_bus=event_bus,
     )
     await kernel.load_all()
-    assert kernel.loaded_count == 1
+    assert len(kernel.active_plugin_ids) == 1
     context_store = SimpleNamespace(
         prepare=AsyncMock(
             return_value=ContextBundle(

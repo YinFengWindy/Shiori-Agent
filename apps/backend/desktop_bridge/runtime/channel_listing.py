@@ -57,23 +57,14 @@ class RuntimeChannelListing:
         kernel = self._plugin_kernel()
         if kernel is None:
             return []
-        states = {entry["candidate_id"]: entry for entry in kernel.states()}
         rows: list[dict[str, Any]] = []
         seen: set[str] = set()
-        for record in kernel.discover():
-            plugin_id = record.manifest.id
+        for view in kernel.views():
+            record = view.record
+            plugin_id = view.plugin_id
             enabled = self._enabled(record.manifest)
-            state = states.get(record.candidate_id)
-            plugin_state = (
-                state["state"]
-                if state
-                else (record.admission.state if record.admission else "DISCOVERED")
-            )
-            plugin_error = (
-                state["error"]
-                if state
-                else (record.admission.reason if record.admission else "")
-            )
+            plugin_state = view.state
+            plugin_error = str(view.error) if view.error else ""
             for declaration in record.manifest.channels:
                 # 同名声明只会出现在 CONFLICT 候选之间，第一条的诊断已列出全部声明方
                 if declaration.name in seen:

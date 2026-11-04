@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.support.plugin_kernel import set_plugin_enabled
 from shiori_sdk.core.conversation import TurnStarting
 from shiori_sdk.core.memory import MEMORY_ENGINE
 from shiori_sdk.core.tools import ToolCalled
@@ -64,7 +65,11 @@ def _kernel(
 
 
 def _state(kernel: PluginKernel) -> dict[str, Any]:
-    return next(row for row in kernel.states() if row["id"] == "default_memory")
+    return next(
+        row
+        for row in [view.describe() for view in kernel.views()]
+        if row["id"] == "default_memory"
+    )
 
 
 def _turn_starting() -> TurnStarting:
@@ -148,7 +153,7 @@ async def test_setup_provides_the_engine_tools_and_documents(tmp_path: Path) -> 
         "recall_memory",
     ]
 
-    await kernel.unload("default_memory")
+    await set_plugin_enabled(kernel, "default_memory", False)
     assert rpc.resolve(method) is None
     assert kernel.kernel.get(MEMORY_ENGINE) is None
     _ = await kernel.kernel.emit(_turn_starting())

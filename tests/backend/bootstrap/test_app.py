@@ -1,3 +1,4 @@
+import sys
 from unittest.mock import AsyncMock
 
 import pytest
@@ -107,7 +108,7 @@ async def test_initial_partial_core_failure_forces_unsafe_plugin_cleanup(
     with pytest.raises(asyncio.CancelledError if cancel else RuntimeError):
         await app.start()
     assert states == [["started", "closed"]]
-    assert app.core.plugin_manager.states() == []
+    assert app.core.plugin_manager.active_plugin_ids == []
     assert app.core.event_bus._closed
     assert app.http_resources._closed
 
@@ -129,6 +130,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
         "import asyncio\n"
         "from shiori_sdk.core.services import EVENTS\n"
         "async def setup(ctx):\n"
+        "    global state\n"
         "    state = ['started']\n"
         "    ctx.expose(state)\n"
         "    ctx.effect('close', lambda: state.append('closed'))\n"
@@ -156,9 +158,17 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     async def wait_for_setup():
         while True:
             if app.core is not None:
-                handle = app.core.plugin_manager._handles.get(str(package.absolute()))
-                if handle is not None and handle.instance is not None:
-                    return handle.instance
+                record = next(
+                    (
+                        record
+                        for record in app.core.plugin_manager.discover()
+                        if record.plugin_dir == package
+                    ),
+                    None,
+                )
+                module = sys.modules.get(record.import_path) if record else None
+                if module is not None and hasattr(module, "state"):
+                    return module.state
             if starting.done():
                 await starting
                 raise AssertionError("runtime finished without entering plugin setup")
@@ -172,7 +182,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
         with pytest.raises(asyncio.CancelledError):
             await starting
     assert state == ["started", "closed"]
-    assert app.core.plugin_manager.states() == []
+    assert app.core.plugin_manager.active_plugin_ids == []
     assert app.core.event_bus._closed
     assert app.http_resources._closed
 
@@ -310,7 +320,7 @@ async def test_external_package_approval_is_live_and_bound_to_application_sessio
         assert app.core is not None
         kernel = app.core.plugin_manager
         assert kernel._dependency_api("trusted_demo") == {"ready": True}
-        assert kernel.states()[0]["state"] == "ACTIVE"
+        assert [view.describe() for view in kernel.views()][0]["state"] == "ACTIVE"
         # One running generation must observe changes; caching approvals here
         # could silently reactivate code whose permission was withdrawn.
         store.revoke(package)

@@ -132,7 +132,9 @@ class CoreRuntime:
         self.memory_runtime.markdown.maintenance.listening_trigger.start()
         if self.plugin_manager is not None:
             await self.plugin_manager.load_all()
-            logger.info("插件加载完成: %d 个", self.plugin_manager.loaded_count)
+            logger.info(
+                "插件加载完成: %d 个", len(self.plugin_manager.active_plugin_ids)
+            )
             # 回合与工具事件经本代内核发出：代内卸载/加载的插件下一次
             # 回合或工具调用即按当前 ACTIVE 插件执行（#855）。
             kernel = self.plugin_manager
@@ -652,11 +654,7 @@ def build_core_runtime(
             process_resources=process_resources,
             is_reload=shared is not None,
             previously_active_plugins=(
-                frozenset(
-                    row["id"]
-                    for row in shared.plugin_manager.states()
-                    if row["state"] == "ACTIVE"
-                )
+                frozenset(shared.plugin_manager.active_plugin_ids)
                 if shared is not None and shared.plugin_manager is not None
                 else frozenset()
             ),

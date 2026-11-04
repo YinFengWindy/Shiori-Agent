@@ -326,7 +326,7 @@ async def test_generated_trust_operation_waits_for_publication_and_replay_is_qui
     monkeypatch.setattr(
         "bootstrap.tools._resolve_plugin_dirs", lambda _: [package.parent]
     )
-    text = "[llm]\nregistrations = []\n[plugins.trust_probe]\nenabled = false\n"
+    text = "[llm]\nregistrations = []\n"
     path = tmp_path / "config.toml"
     path.write_text(text, encoding="utf-8")
     app = AppRuntime(
@@ -347,7 +347,7 @@ async def test_generated_trust_operation_waits_for_publication_and_replay_is_qui
             payload = {
                 "candidate_id": candidate["candidate_id"],
                 "fingerprint": candidate["trust_fingerprint"],
-                "enable": True,
+                "enable": False,
             }
             notifications = []
             entered, deliver = asyncio.Event(), asyncio.Event()
@@ -685,3 +685,314 @@ async def test_plugin_wire_routes_events_and_reports_disabled_contexts(
             bridge, "wire_probe.append", {"text": "fresh"}
         )
         assert fresh.error is None and fresh.payload == {"items": ["fresh"]}
+
+
+@pytest.fixture
+async def first_trust_runtime(tmp_path, monkeypatch):
+    from agent.config import load_config_text
+    from bootstrap.app import AppRuntime, RuntimeFeatures
+
+    workspace = tmp_path / "workspace"
+    builtin = tmp_path / "builtin" / "resident"
+    target = workspace / "plugins" / "first_trust"
+    for directory, plugin_id, default_enabled in (
+        (builtin, "resident", False),
+        (target, "first_trust", True),
+    ):
+        (directory / "backend").mkdir(parents=True)
+        (directory / "manifest.yaml").write_text(
+            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\nversion: 1.0.0\n"
+            f"entry: backend/plugin.py\nsupports_hot_unload: false\ndefault_enabled: {str(default_enabled).lower()}\n",
+            encoding="utf-8",
+        )
+        (directory / "backend/plugin.py").write_text(
+            "async def setup(ctx): pass\n", encoding="utf-8"
+        )
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs",
+        lambda _: [builtin.parent, target.parent],
+    )
+    path = workspace / "config.toml"
+    text = "[llm]\nregistrations = []\n"
+    path.write_text(text, encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(text),
+        workspace,
+        features=RuntimeFeatures(enable_message_channels=False),
+    )
+    try:
+        await app.start()
+        bridge = ReloadableDesktopService(
+            app, path, app.core.role_runtime_registry.repository.store
+        )
+        try:
+            roster = (await plugin_bridge_request(bridge, "plugins.list")).payload[
+                "plugins"
+            ]
+            target_row = next(row for row in roster if row["id"] == "first_trust")
+            payload = {
+                "candidate_id": target_row["candidate_id"],
+                "fingerprint": target_row["trust_fingerprint"],
+                "enable": False,
+            }
+            yield bridge, app, payload
+        finally:
+            await bridge.aclose()
+    finally:
+        await app.shutdown()
+
+
+async def test_trusted_first_activation_failure_remains_visible(
+    first_trust_runtime, monkeypatch
+):
+    bridge, app, payload = first_trust_runtime
+
+    def fail_service(_core):
+        raise RuntimeError("new bridge service unavailable")
+
+    monkeypatch.setattr(bridge, "_prepare", fail_service)
+    result = await plugin_bridge_request(bridge, "plugins.trust", payload)
+    assert result.error is not None
+    assert result.error.code == "runtime_apply_failed"
+    roster = (await plugin_bridge_request(bridge, "plugins.list")).payload["plugins"]
+    target = next(row for row in roster if row["id"] == "first_trust")
+    assert target["trusted"] is True
+    assert target["state"] == "FAILED"
+    assert target["diagnostic"]["code"] == "activation_failed"
+    assert app.core.plugin_manager.kernel.status("first_trust") is None
+
+
+async def test_trusted_first_activation_requires_restart_with_an_unsafe_live_plugin(
+    first_trust_runtime,
+):
+    bridge, app, payload = first_trust_runtime
+    enabled = await plugin_bridge_request(
+        bridge,
+        "plugins.setEnabled",
+        {"plugin_id": "resident", "enabled": True, "operation_id": "activate-resident"},
+    )
+    assert enabled.error is None
+    result = await plugin_bridge_request(bridge, "plugins.trust", payload)
+    assert result.error is not None
+    assert result.error.code == "plugin_restart_required"
+    roster = (await plugin_bridge_request(bridge, "plugins.list")).payload["plugins"]
+    target = next(row for row in roster if row["id"] == "first_trust")
+    assert target["trusted"] is True
+    assert target["state"] == "RESTART_REQUIRED"
+    assert target["diagnostic"]["code"] == "plugin_restart_required"
+    assert "resident" in app.core.plugin_manager.active_plugin_ids
+
+
+async def test_activation_report_waiting_for_reload_does_not_block_chat_cancel(
+    rollback_runtime,
+):
+    bridge, _path, state = rollback_runtime
+    kernel = bridge.app.core.plugin_manager
+    token = kernel.view("rollback_bystander").activation_token
+    dispatcher = BridgeRequestDispatcher(
+        max_concurrency=1, policy_resolver=bridge.resolve_method_policy
+    )
+    call = asyncio.create_task(plugin_bridge_request(bridge, "rollback_target.block"))
+    await asyncio.wait_for(state.call_entered.wait(), 1)
+    saving = asyncio.create_task(_save_target(bridge, "new", "report-during-drain"))
+    async with asyncio.timeout(1):
+        while not kernel._transition_lock.locked():
+            await asyncio.sleep(0)
+    report_entered, report_done, cancelled = (
+        asyncio.Event(),
+        asyncio.Event(),
+        asyncio.Event(),
+    )
+    responses = {}
+
+    async def report():
+        report_entered.set()
+        responses["report"] = await plugin_bridge_request(
+            bridge,
+            "plugins.activation.report",
+            {
+                "plugin_id": "rollback_bystander",
+                "kind": "ui",
+                "ok": False,
+                "activation_token": token,
+                "reason": "renderer failed",
+            },
+        )
+        report_done.set()
+
+    async def cancel():
+        responses["cancel"] = await plugin_bridge_request(
+            bridge,
+            "chat.cancel",
+            {
+                "session_key": "role:waiting",
+                "turn_id": "completed-turn",
+            },
+        )
+        cancelled.set()
+
+    try:
+        dispatcher.submit({"method": "plugins.activation.report"}, report)
+        await asyncio.wait_for(report_entered.wait(), 1)
+        assert not report_done.is_set()
+        dispatcher.submit({"method": "chat.cancel"}, cancel)
+        await asyncio.wait_for(cancelled.wait(), 0.2)
+        assert responses["cancel"].error is None
+        assert responses["cancel"].payload["status"] == "idle"
+        assert not report_done.is_set() and not saving.done()
+    finally:
+        state.call_release.set()
+        await call
+        await saving
+        await dispatcher.aclose()
+    assert responses["report"].error is None and responses["report"].payload["changed"]
+    assert kernel.view("rollback_bystander").state == "FAILED"
+
+
+@pytest.fixture
+async def transitioning_workspace_plugin(tmp_path, monkeypatch):
+    from agent.config import load_config_text
+    from agent.plugin_host.package_fingerprint import inspect_package_content
+    from bootstrap.app import AppRuntime, RuntimeFeatures
+    from desktop_bridge.runtime.plugin_trust_store import PluginTrustStore
+
+    state = SimpleNamespace(entered=asyncio.Event(), release=asyncio.Event())
+    module = ModuleType("transitioning_workspace_probe")
+    vars(module)["state"] = state
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    package = tmp_path / "plugins" / "transitioning"
+    (package / "backend").mkdir(parents=True)
+    (package / "manifest.yaml").write_text(
+        "api: 4\nsdk: '>=4.0.0'\nid: transitioning\nversion: 1.0.0\n"
+        "entry: backend/plugin.py\ninject: [config, rpc]\nconfig_model: Config\n",
+        encoding="utf-8",
+    )
+    (package / "backend/plugin.py").write_text(
+        "from pydantic import BaseModel\n"
+        "from shiori_sdk.core.services import CONFIG, RPC\n"
+        "from transitioning_workspace_probe import state\n"
+        "class Config(BaseModel):\n    label: str = 'old'\n"
+        "async def setup(ctx):\n"
+        "    label = ctx.require(CONFIG).get('label')\n"
+        "    if label == 'slow':\n        state.entered.set()\n        await state.release.wait()\n"
+        "    async def echo(payload): return {'label': label}\n"
+        "    ctx.require(RPC).register('echo', echo)\n",
+        encoding="utf-8",
+    )
+    rejected = tmp_path / "plugins" / "rejected"
+    (rejected / "backend").mkdir(parents=True)
+    (rejected / "manifest.yaml").write_text("api: 2\nid: rejected\n", encoding="utf-8")
+    store = PluginTrustStore(tmp_path)
+    store.approve(
+        package, inspect_package_content(package).fingerprint, approved_session=""
+    )
+    monkeypatch.setattr(
+        "bootstrap.tools._resolve_plugin_dirs", lambda _: [package.parent]
+    )
+    path = tmp_path / "config.toml"
+    text = "[llm]\nregistrations = []\n[plugins.transitioning]\nlabel = 'old'\n"
+    path.write_text(text, encoding="utf-8")
+    app = AppRuntime(
+        load_config_text(text),
+        tmp_path,
+        features=RuntimeFeatures(enable_message_channels=False),
+    )
+    try:
+        await app.start()
+        bridge = ReloadableDesktopService(
+            app, path, app.core.role_runtime_registry.repository.store
+        )
+        try:
+            yield bridge, path, state
+        finally:
+            state.release.set()
+            await bridge.aclose()
+    finally:
+        await app.shutdown()
+
+
+@pytest.mark.parametrize("operation", ["toggle", "uninstall"])
+async def test_plugin_disable_waits_for_not_started_replacement(
+    transitioning_workspace_plugin, operation
+):
+    bridge, path, state = transitioning_workspace_plugin
+    dispatcher = BridgeRequestDispatcher(policy_resolver=bridge.resolve_method_policy)
+    results = {}
+    entered = asyncio.Event()
+    saving = asyncio.create_task(
+        plugin_bridge_request(
+            bridge,
+            "plugin.config.set",
+            {
+                "plugin_id": "transitioning",
+                "values": {"label": "slow"},
+                "operation_id": "slow-config",
+            },
+        )
+    )
+    await asyncio.wait_for(state.entered.wait(), 1)
+    roster = (await plugin_bridge_request(bridge, "plugins.list")).payload["plugins"]
+    target = next(row for row in roster if row["id"] == "transitioning")
+    assert (
+        target["state"] == "BLOCKED" and target["diagnostic"]["code"] == "not_started"
+    )
+    method = "plugins.setEnabled" if operation == "toggle" else "plugins.uninstall"
+    payload = (
+        {
+            "plugin_id": "transitioning",
+            "enabled": False,
+            "operation_id": "disable-transitioning",
+        }
+        if operation == "toggle"
+        else {
+            "candidate_id": target["candidate_id"],
+            "delete_data": False,
+            "operation_id": "remove-transitioning",
+        }
+    )
+
+    async def request_disable():
+        entered.set()
+        results["disable"] = await plugin_bridge_request(bridge, method, payload)
+
+    try:
+        dispatcher.submit({"method": method}, request_disable)
+        await asyncio.wait_for(entered.wait(), 1)
+        assert (
+            "disable" not in results
+        ), "replacement must finish before disable/uninstall returns"
+    finally:
+        state.release.set()
+        assert (await saving).error is None
+        await dispatcher.aclose()
+    assert results["disable"].error is None
+    kernel = bridge.app.core.plugin_manager
+    assert kernel.view("transitioning").state == "DISABLED"
+    assert (await plugin_bridge_request(bridge, "transitioning.echo")).error is not None
+    assert bridge.app.config.plugins["transitioning"] == {
+        "label": "slow",
+        "enabled": False,
+    }
+    from agent.config import load_config_text
+
+    assert load_config_text(path.read_text(encoding="utf-8")).plugins[
+        "transitioning"
+    ] == {"label": "slow", "enabled": False}
+    if operation == "uninstall":
+        operations = bridge.plugin_management.packages.store.list()
+        assert any(
+            item.plugin_id == "transitioning"
+            and item.action == "uninstall"
+            and item.status == "pending"
+            for item in operations
+        )
+    rejected = await plugin_bridge_request(
+        bridge,
+        "plugins.setEnabled",
+        {
+            "plugin_id": "rejected",
+            "enabled": True,
+            "operation_id": "reject-invalid",
+        },
+    )
+    assert rejected.error is not None and rejected.error.code == "plugin_not_admitted"

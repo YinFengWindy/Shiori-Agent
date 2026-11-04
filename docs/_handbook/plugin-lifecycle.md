@@ -12,13 +12,14 @@
 | `CONFLICT` | 多个候选声明同一个插件 ID 或同一个渠道名，一个都不选 |
 | `RESTART_REQUIRED` | 已执行过的代码目录变了，或回滚没能完全释放资源，要等下次启动 |
 | `REPLACED` | 被另一个插件的 `replaces` 取代（内核层） |
-| `DISCOVERED`、`DISABLED`、`LOADING`、`ACTIVE`、`UNLOADING`、`DISPOSED` | 普通运行周期 |
+| `DISABLED` / `ACTIVE` | 已停用 / 当前实例已启动 |
+| `BLOCKED`（`not_started`） | 已启用但尚未启动；重载替换期间也会短暂出现，设置页不显示问题文案 |
 
-启用 / 停用偏好与代码版本、重启状态分开保存；更新不会悄悄重新启用已停用的插件。
+启用 / 停用偏好与代码版本、重启状态分开保存；更新不会悄悄重新启用已停用的插件。宿主不保存另一份运行状态，`plugins.list` 只输出七种展示状态，由准入、启用标记、内核状态与首次信任激活失败共同派生；顺序见 [P8b 决策](../decisions/2026-11-04-kernel-primitives-host-single-state.md)。
 
 ## 规划
 
-每一轮启动（应用启动、代际替换、代内重载或启停）先把本轮 spec 交给内核 `plan`，内核重新规划所有已登记的 spec，再由宿主按计划顺序逐个 `activate` 本轮选中的插件。测试使用 `shiori_sdk.testing.KernelHarness` 组合启动、重载和停止。规划规则（`shiori_sdk/kernel/graph.py`）：
+每一轮启动（应用启动、代际替换、代内重载或启停）先把本轮 spec 交给内核 `plan`，内核重新规划所有已登记的 spec，再由宿主按计划顺序逐个 `activate` 本轮选中的插件。测试使用 `shiori_sdk.testing.kernel.KernelHarness` 组合启动、重载和停止。规划规则（`shiori_sdk/kernel/graph.py`）：
 
 - **顺序**：依赖深度，再按插件 ID。深度由 `inject` 和 `optional_inject` 指向的提供方算出。这个顺序就是 setup 顺序、`on` 链与 watcher 的顺序，也是工具钩子、渠道和命令的聚合顺序，代内重载后不变。只登记的 spec 也参与排序，好让排名稳定。
 - **重复提供**：两个可运行插件 `provides` 同一个 Key、又没有 `replaces` / `conflicts` 关系时，双方都 `BLOCKED`（`duplicate_provider`），谁也不赢。
@@ -39,7 +40,7 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 
 ## 预执行闸门
 
-外部包的信任与执行身份检查在**规划之前**、由宿主做，不在内核里：本轮要启动的每个工作区包都重新核对内容指纹和执行身份。被拒的包把宿主句柄设成 `UNTRUSTED` 或 `RESTART_REQUIRED`，并按只登记规划，所以它从不被导入，内核不给它记状态、不发 `PluginFailed`，也不排除别人（比如它的重复提供对手照常启动）。setup 导入的正是核对过的那份字节（保存在内存里，不重读）。作为兜底，宿主没准备过的启动（没有 `LOADING` 句柄、已停用、内容未核对）会被拒绝并成为内核的 `setup_failed`。
+外部包的信任与执行身份检查在**规划之前**、由宿主做，不在内核里：本轮要启动的每个工作区包都重新核对内容指纹和执行身份。被拒的包留下准入诊断，展示为 `UNTRUSTED` 或 `RESTART_REQUIRED`，并按只登记规划，所以它从不被导入，内核不给它记状态、不发 `PluginFailed`，也不排除别人（比如它的重复提供对手照常启动）。setup 导入的正是核对过的那份字节（保存在内存里，不重读）。作为兜底，宿主没准备过的启动（没有本次激活的实例、已停用、预检内容已消耗或未核对）会被拒绝并成为内核的 `setup_failed`。
 
 ## 启动与失败
 
@@ -47,8 +48,8 @@ spec 的 `runnable = False` 表示只登记：已停用、未信任或准入失�
 - setup 抛错：内核先释放它登记的一切（提供的 Key、订阅、任务、effect），状态 `FAILED`（`setup_failed`），发 `PluginFailed`；硬依赖它的插件随后 `BLOCKED`。
 - 若失败回滚还留有清理错误，宿主展示 `RESTART_REQUIRED`；后续冲突规划不得覆盖内核保存的清理错误，冲突解除也不能自动重试这个实例。
 - setup 成功：`ACTIVE`，发 `PluginStarted`，宿主为它铸一个新的 `activation_token`（见[前端契约](plugin-frontend.md#资源授权与加载)）。
-- 渲染入口随后失败：宿主调用 `Kernel.deactivate` 并传入失败诊断和原始错误；释放 scope 后内核记录 `FAILED`（`renderer_<kind>_failed`）并发 `PluginFailed`，清理错误仍触发上述重启屏障。普通停用不传失败诊断，仍记录 `STOPPED` 并发 `PluginStopped`。
-- 启动被取消：还没轮到的插件恢复原来的句柄状态，不会停在 `LOADING`。
+- 启动被取消：还没轮到的插件保留原内核状态。取消完成后，已取消的 setup 派生为 `FAILED`；清理再次被取消时，仍持有 scope 的实例保留到强制终止完成剩余释放。
+- 渲染入口随后失败：宿主调用 `Kernel.deactivate` 并传入失败诊断和原始错误；释放 scope 后内核记录 `FAILED`（`renderer_<kind>_failed`）并发 `PluginFailed`，清理错误仍触发上述重启屏障。普通停用不传失败诊断，仍记录 `STOPPED` 并发 `PluginStopped`。失败报告先等宿主转换锁，再核对当前激活令牌，过期报告不影响新实例。
 - `Kernel.activate` 拒绝已经持有 scope 的插件（包括 setup 尚未完成的实例），抛 `already_running`，不替换原 scope。
 
 ## 代内重载

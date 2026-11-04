@@ -390,3 +390,28 @@ async def test_closure_takes_optional_consumers_only_for_a_reload() -> None:
     }
     # Dependents first: the provider is disposed last and set up first.
     assert kernel.closure("provider", optional=False)[-1] == "provider"
+
+
+async def test_plan_clears_only_released_exclusions_and_preserves_running_instances() -> (
+    None
+):
+    harness = KernelHarness()
+    kernel = harness.kernel
+    first = PluginSpec("first", _idle, provides=("service",))
+    second = PluginSpec("second", _idle, provides=("service",))
+    from dataclasses import replace
+
+    await kernel.plan([first, second])
+    assert kernel.status("first").state is KernelState.BLOCKED
+    await kernel.plan([replace(second, runnable=False)])
+    assert kernel.status("first") is None
+    assert kernel.status("second") is None
+    await kernel.activate("first")
+    scope = kernel.scope("first")
+    await kernel.plan([second])
+    assert kernel.status("first").state is KernelState.ACTIVE
+    assert kernel.scope("first") is scope
+    await kernel.deactivate("first")
+    await kernel.plan([replace(second, runnable=False)])
+    assert kernel.status("first").state is KernelState.STOPPED
+    assert kernel.status("second") is None

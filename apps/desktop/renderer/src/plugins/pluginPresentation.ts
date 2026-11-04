@@ -100,6 +100,7 @@ export function pluginProblem(plugin: PluginSummary): string | null {
     case "CONFLICT":
       return "与另一个同 ID 的插件冲突，两者都已停用";
     case "BLOCKED":
+      if (plugin.diagnostic?.code === "not_started") return null;
       return `无法加载：${blockedReason(plugin.diagnostic?.code)}`;
     case "FAILED":
       return "启动失败";
