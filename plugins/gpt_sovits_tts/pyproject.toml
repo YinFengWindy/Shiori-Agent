@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shiori-plugin-gpt-sovits-tts"
-version = "0.2.0"
+version = "0.2.1"
 requires-python = ">=3.12"
 dependencies = ["shiori-sdk>=4.0.0,<5", "httpx>=0.28.1", "pydantic>=2.12.0"]
 
