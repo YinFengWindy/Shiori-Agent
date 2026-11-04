@@ -12,10 +12,9 @@ from shiori_sdk.core.mcp_tools import McpToolRegistration
 from shiori_sdk.mcp import McpSession, McpToolInfo, McpToolError
 from . import operations
 from shiori_sdk.processes import Processes
-from shiori_sdk.redaction import redact_secrets
 from shiori_sdk.tools import ToolResult
 from .api import SourceCall
-from .configuration import connection_edit, secret_values
+from .configuration import connection_edit
 from .models import (
     McpConfigError,
     McpHttpError,
@@ -23,6 +22,7 @@ from .models import (
     ToolSelection,
 )
 from .store import ServerStore
+from .redaction import LaunchRedactor
 from .tool import McpToolWrapper
 
 
@@ -291,6 +291,7 @@ class McpServerRegistry:
             or state.session is None
         ):
             raise McpConfigError("MCP 工具已失效，请重新选择工具")
+        redactor = LaunchRedactor(self.store.credentials(config))
         task = asyncio.create_task(
             state.session.call(tool, request.arguments, timeout=request.timeout)
         )
@@ -299,11 +300,11 @@ class McpServerRegistry:
             result = await task
             if isinstance(result, ToolResult):
                 return ToolResult(
-                    self._redact(server, result.text),
+                    redactor.text(result.text),
                     result.content_blocks,
-                    self._scrub(server, result.structured_content),
+                    redactor.data(result.structured_content),
                 )
-            return self._redact(server, result)
+            return redactor.text(result)
         except asyncio.CancelledError:
             if asyncio.current_task().cancelling():
                 raise
@@ -317,27 +318,34 @@ class McpServerRegistry:
                 error, (ConnectionError, BrokenPipeError, EOFError, OSError)
             ) and not isinstance(error, TimeoutError)
             if transport and state.epoch == epoch:
-                self._invalidate(server)
-                state.status, state.error = "error", self._safe_error(error)
-                self._changed()
                 if request.retry_on_transport and self._config(server).enabled:
+                    # A retry is the same finite connection operation as a UI
+                    # reconnect. Replacement cancels it and owns the new epoch.
+                    self.start_operation(server, "connect")
+                    retry_epoch = state.epoch
+                    reconnect = self._operations[server]
                     try:
-                        await operations.close_session(self, state)
-                        await operations.connect(self, server, state.epoch)
-                    except Exception as retry_error:
-                        state.status, state.error = "error", self._safe_error(
-                            retry_error
-                        )
-                        self._changed()
-                        raise McpConfigError(state.error) from None
+                        await asyncio.shield(reconnect)
+                    except asyncio.CancelledError:
+                        caller = asyncio.current_task()
+                        if caller is not None and caller.cancelling():
+                            raise
+                        raise McpConfigError("MCP 重连已被替换或取消") from None
+                    if state.epoch != retry_epoch:
+                        raise McpConfigError("MCP 重连已被替换")
+                    if state.status != "connected":
+                        raise McpConfigError(state.error or "MCP 重连失败")
                     return await self.call(
                         server, tool, request.arguments, timeout=request.timeout
                     )
+                self._invalidate(server)
+                state.status, state.error = "error", self._safe_error(error)
+                self._changed()
             if isinstance(error, McpToolError):
                 raise McpToolError(
                     server=server,
                     tool_name=tool,
-                    message=self._redact(server, error.message),
+                    message=redactor.text(error.message),
                     code=error.code,
                 ) from None
             if isinstance(error, TimeoutError):
@@ -349,30 +357,14 @@ class McpServerRegistry:
             state.calls.discard(task)
 
     def _redact(self, server: str, text: str) -> str:
-        credentials = self.store.credentials(self.store.servers[server])
-        for value in sorted(secret_values(credentials), key=len, reverse=True):
-            if value:
-                # Short non-secret env flags must not corrupt words/base64.
-                text = (
-                    text.replace(value, "[已隐藏]")
-                    if len(value) >= 8
-                    else re.sub(
-                        r"(?<![\w])" + re.escape(value) + r"(?![\w])", "[已隐藏]", text
-                    )
-                )
-        return redact_secrets(text)
+        return LaunchRedactor(self.store.credentials(self.store.servers[server])).text(
+            text
+        )
 
     def _scrub(self, server: str, value: Any) -> Any:
-        if isinstance(value, str):
-            return self._redact(server, value)
-        if isinstance(value, list):
-            return [self._scrub(server, item) for item in value]
-        if isinstance(value, dict):
-            return {
-                self._redact(server, key): self._scrub(server, item)
-                for key, item in value.items()
-            }
-        return value
+        return LaunchRedactor(self.store.credentials(self.store.servers[server])).data(
+            value
+        )
 
     @staticmethod
     def _safe_error(error: Exception) -> str:

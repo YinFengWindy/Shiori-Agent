@@ -138,7 +138,12 @@ class HttpPeer:
         if name == "rpc_error":
             return {"error": {"code": -32042, "message": "private-bearer"}}
         result = {
-            "content": [{"type": "text", "text": "hello"}],
+            "content": [
+                {
+                    "type": "text",
+                    "text": params.get("arguments", {}).get("text", "hello"),
+                }
+            ],
             "isError": name == "tool_error",
         }
         if name == "image":
@@ -146,10 +151,17 @@ class HttpPeer:
                 {"type": "image", "mimeType": "image/png", "data": "aGVsbG8="}
             ]
         if name == "structured":
-            result["structuredContent"] = {"records": [1, 2]}
+            result["structuredContent"] = params.get("arguments", {}).get(
+                "data", {"records": [1, 2]}
+            )
         if name == "tool_error":
             result["content"] = [
-                {"type": "text", "text": "private-bearer private-header query-canary"}
+                {
+                    "type": "text",
+                    "text": params.get("arguments", {}).get(
+                        "text", "private-bearer private-header query-canary"
+                    ),
+                }
             ]
         if name.startswith("json_"):
             value = {"json_list": [1, 2], "json_scalar": 42, "json_null": None}[name]
