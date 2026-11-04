@@ -37,7 +37,8 @@ for (const ui of [false, true]) {
     const options = { cwd: repository, env, timeout: 90_000, maxBuffer: 4 * 1024 * 1024 };
     await run(python, ["-m", "scripts.gen_plugin_rpc", "--plugin", plugin, "--check"], options);
     await run(python, ["-m", "pytest", "-q", "-c", join(plugin, "pyproject.toml"), join(plugin, "tests")], { ...options, cwd: root });
-    await run("uv", ["build", "--wheel", "--out-dir", join(root, "wheels"), plugin], options);
+    const uv = (await run(python, ["-c", "from scripts.commands import UV; print(UV)"], options)).stdout.trim();
+    await run(uv, ["build", "--wheel", "--out-dir", join(root, "wheels"), plugin], options);
     assert.equal((await readdir(join(root, "wheels"))).filter((name) => name.endsWith(".whl")).length, 1);
     const built = await buildPlugin({ plugin, output: join(root, "output") });
     const validate = "from pathlib import Path; import sys; from desktop_bridge.runtime.plugin_package_archive import validate_package_zip; print(validate_package_zip(Path(sys.argv[1])).manifest.id)";
