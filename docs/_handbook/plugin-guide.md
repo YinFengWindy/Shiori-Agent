@@ -65,7 +65,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 `ctx.require` 只取 `inject` 里的 Key，`ctx.get` 只取 `optional_inject`，`ctx.provide` 只发布 `provides`；没声明就抛内核的 `undeclared_key`。声明了但当前没有提供方时，`require` 抛 `provider_unavailable`。消费方每次用时再取，不要缓存跨代的引用。
 
-宿主在任何插件启动前 `provide` 它拥有的核心 Key。`config`、`kv`、`dependencies`、`runtime`、`services` 是逐插件现建的：宿主在内核里只放一个标记，`require` 时换成为这个插件建好的对象；`kv`、`services` 只在被声明时才建。宿主没能建出某个已声明的对象时抛 `HostServiceUnavailable`，setup 失败并留下 `PluginDiagnostic`。账号、渠道、工具等 Key 给每个插件一份按插件 ID 隔离的视图。
+宿主在任何插件启动前 `provide` 它拥有的核心 Key。`config`、`kv`、`dependencies`、`runtime` 是逐插件现建的：宿主在内核里只放一个标记，`require` 时换成为这个插件建好的对象；`kv` 只在被声明时才建。宿主没能建出某个已声明的对象时抛 `HostServiceUnavailable`，setup 失败并留下 `PluginDiagnostic`。账号、渠道、工具、RPC 和 `services` 等 Key 由 binder 给每个插件一份绑定其作用域与调用门的视图；释放该作用域就撤回对应注册。
 
 插件 `provides` 一个核心 Key 会让整代启动失败；两个插件 `provides` 同一个 Key 时双方都 `BLOCKED`。细节见[生命周期](plugin-lifecycle.md#规划)。
 

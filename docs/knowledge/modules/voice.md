@@ -81,7 +81,7 @@ SDK 3.1.1 的 `managed/` 只复用固定资源获取、校验、原子版本发�
 
 ## 分发
 
-两个 provider 是内置插件，要求 SDK / Runtime API 3.1.1，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`ui/index.tsx`，TTS 另有 `background/index.ts`）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
+两个 provider 是内置插件，要求 manifest API 4 / SDK >=4.0.0，manifest 声明 `default_enabled: false`：新配置下默认停用，在插件页启用后出现各自设置页并可供桌宠选择。它们不在默认停用升级迁移名单中，因为此前从未作为内置插件缺省启用。源码参与内置后端发现、前端 builtin registry（`frontend.ts` 的具名导出，TTS 同时导出 ui 与 background）和冻结运行时 staging；`runtime_assets/server.py` 与锁文件随插件目录作为数据打包，经 `Path(__file__)` 解析，只在插件托管环境中执行，不作为宿主 hidden import 收集。服务准备见 [ASR README](../../../plugins/sensevoice_asr/README.md) 和 [TTS README](../../../plugins/gpt_sovits_tts/README.md)。
 
 冻结宿主同时递归收集 SDK 运行时模块，包括没有 `__init__.py` 的 `files/`，排除 `shiori_sdk.testing` 与缓存；完整 SDK 不依赖当前已安装插件的静态引用。实际 PyInstaller 参数检查 SDK/宿主/内置插件模块是否全部进入 hidden imports。`test-sdk-runtime.mjs` 使用同一 collector 构建小型冻结探针，在仓库外清除 Python 源码路径后动态导入音频、暂存和 loopback HTTP 模块，并确认 testing 不存在。
 
@@ -93,7 +93,7 @@ SDK 3.1.1 的 `managed/` 只复用固定资源获取、校验、原子版本发�
 
 ## 兼容性与旧数据
 
-SDK/Runtime API **3.1.1** 移除了 3.1.0 已发布的 `SurfaceHandle.voice`。桌宠要求 3.1.1；宿主的范围检查不会拒绝仍使用该接口的 `>=3.1.0 <4.0.0` 外部包，外部作者须自行迁移并声明 `>=3.1.1 <4.0.0`。迁移说明见 [SDK README](../../../packages/sdk/README.md#compatibility)。
+历史上 SDK/Runtime API 3.1.1 移除了 3.1.0 的 `SurfaceHandle.voice`。当前源码统一使用 manifest API 4 / SDK 4，旧包在安装和加载边界直接拒绝，`runtime_api` 字段已删除；外部作者需基于 SDK 4 重新打包。4.0 尚未发布，使用仓库构建的 SDK 产物验证。历史迁移说明见 [SDK README](../../../packages/sdk/README.md#compatibility)。
 
 腾讯/MiniMax 实现、宿主语音配置与云音色生命周期已删除。升级不删除既有用户文件、密钥或远端音色；旧配置仅作为普通设置表单不拥有的 opaque 数据保留，不映射为本地参考素材。
 
