@@ -17,7 +17,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from bootstrap.config_text_editor import plugin_table_editor
+from core.common import plugin_config_text as editor
 from shiori_sdk.files.text import atomic_save_text
 
 # The only keys ``[agent.proactive_strategies]`` ever had.
@@ -62,7 +62,6 @@ def migrate_legacy_proactive_config(path: Path) -> None:
     _reject_unreadable_plugin_table(data, path)
     existing = _existing_plugin_values(data)
     values = {**_plugin_values(legacy), **existing}
-    editor = plugin_table_editor()
     updated = text
     if values != existing:
         try:

@@ -20,7 +20,7 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from bootstrap.config_text_editor import plugin_table_editor
+from core.common import plugin_config_text as editor
 from shiori_sdk.files.text import atomic_save_text
 
 MEMORY_OPTIMIZER_PLUGIN_ID = "memory_optimizer"
@@ -67,7 +67,6 @@ def migrate_legacy_memory_optimizer_config(path: Path) -> None:
     legacy = {key: maintenance.get(key, data.get(key)) for key in _LEGACY_KEYS}
     existing = _existing_plugin_values(data)
     values = {**_plugin_values(legacy), **existing}
-    editor = plugin_table_editor()
     updated = text
     if values != existing:
         try:
