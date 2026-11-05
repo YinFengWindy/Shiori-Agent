@@ -56,7 +56,7 @@ The Shiori app's interface is currently in Chinese.
 2. On first launch, follow the "Model → Character → Start" guide: enter your model service, API key and model parameters, create your first character, then start chatting.
 3. For more capabilities, enable the matching plugins under "Settings → Plugins"; external chat accounts are added under "Accounts" in the character's details.
 
-**Upgrading from 0.5.x:** Version 0.5.6 bundles SDK 4 and retains characters, conversations, memories, plugin data and enablement preferences. Legacy settings move into the corresponding plugin settings when needed. Old external plugin code is incompatible: packages without `api: 4` are blocked, with their files and data retained. Use an SDK 4 package rebuilt by its author; changing the manifest version alone is insufficient.
+**Upgrading from 0.5.x:** Version 0.5.7 bundles SDK 4.1 and retains characters, conversations, memories, plugin data and enablement preferences. Legacy settings move into the corresponding plugin settings when needed. Packages without `api: 4` are blocked, with their files and data retained. External plugin authors must check SDK 4.1 compatibility and rebuild; plugins using the removed MCP interfaces need code migration, not just a manifest version change.
 
 Shiori checks for updates on startup; you can also check manually under "Settings → About". Using the Agent's shell tool on Windows requires PowerShell 7, with `pwsh` on the PATH.
 
@@ -124,20 +124,20 @@ Desktop unit tests can take `--file` several times to combine filters, `--test-n
 
 ### Plugin SDK
 
-**SDK 4.0.0 is published on npm and PyPI.** The frontend package is [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk) and the backend package is [shiori-sdk](https://pypi.org/project/shiori-sdk/) (Python 3.12+). In-repo development uses the matching workspace package.
+**SDK 4.1.0 is published on npm and PyPI.** The frontend package is [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk) and the backend package is [shiori-sdk](https://pypi.org/project/shiori-sdk/) (Python 3.12+). In-repo development uses the matching workspace package.
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0"
-uv add "shiori-sdk>=4.0.0,<5"
+pnpm add -D "@yinfengwindy/shiori-sdk@>=4.1.0 <4.2.0"
+uv add "shiori-sdk>=4.1.0,<4.2.0"
 ```
 
-Plugins live in `plugins/<id>/`: `manifest.yaml` declares `api: 4` and `sdk: ">=4.0.0"`, `backend/` holds the Python backend, and `tests/` the plugin's tests. One `frontend.entry` provides named `ui`, `background` and/or `surface` exports. Keep the SDK, React and React DOM external; declare their ranges in `package.json` peerDependencies, which the builder writes to `frontend.peers`.
+Plugins live in `plugins/<id>/`: `manifest.yaml` declares `api: 4` and `sdk: ">=4.1.0 <4.2.0"`, `backend/` holds the Python backend, and `tests/` the plugin's tests. One `frontend.entry` provides named `ui`, `background` and/or `surface` exports. Keep the SDK, React and React DOM external; declare their ranges in `package.json` peerDependencies, which the builder writes to `frontend.peers`.
 
 From the repository root, `pnpm new-plugin example --ui` creates a plugin template. After backend RPC changes, run `pnpm rpc:generate` and `pnpm rpc:check`; `pnpm plugins:contract` checks plugin lifecycles in the real host.
 
-**SDK 4 is a breaking major.** Key services and typed events replace the old capability attributes and phases. The old `runtime_api`, `renderer` and `peer_dependencies` declarations are removed. External plugins need code migration, rebuilding and verification. Existing keys do not gain methods within 4.x; new capabilities use new keys or events. There is no Unreleased batch. See the [SDK compatibility notes](./packages/sdk/README.md#compatibility).
+**The SDK uses a custom A.B.C policy: A identifies the overall generation, B may introduce breaking API changes, and C contains compatible updates within A.B.** SDK 4.1 removes `PROCESSES.mcp()` and the MCP-specific types; external plugin authors must check callers, declare explicit compatible ranges and verify them. Required methods cannot be added to existing keys/protocols within one A.B line. Compatible extensions still obey the current extension freeze, and there is no Unreleased batch. See the [SDK compatibility notes](./packages/sdk/README.md#compatibility) for migration from the old capability and phase interfaces.
 
-The desktop version, the SDK version and each plugin's own version are independent. A plugin's `version` matches its Python package metadata. `sdk` in the manifest declares the minimum SDK.
+The desktop version, the SDK version and each plugin's own version are independent. A plugin's `version` matches its Python package metadata. `sdk` in the manifest declares its supported SDK range.
 
 - [SDK README](./packages/sdk/README.md): installation, React peers and standalone test setup.
 - [Plugin tutorial](./docs/_handbook/plugins-tutorial.md): from creating a plugin to building its interface.
