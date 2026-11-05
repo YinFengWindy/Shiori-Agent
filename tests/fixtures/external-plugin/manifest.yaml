@@ -1,5 +1,5 @@
 api: 4
-sdk: '>=4.0.0'
+sdk: '>=4.0.0 <4.2.0'
 id: external_demo
 version: 1.0.0
 entry: backend/plugin.py
@@ -21,4 +21,4 @@ frontend:
   peers:
     react: '>=19.2.0 <20.0.0'
     react-dom: '>=19.2.0 <20.0.0'
-    '@yinfengwindy/shiori-sdk': '>=4.0.0 <6.0.0'
+    '@yinfengwindy/shiori-sdk': '>=4.0.0 <4.2.0'

@@ -141,4 +141,4 @@ cmd 解析；如果程序路径或参数含 `& | < > ^ % !`、双引号、括号
 任务文件与 worktree 位于插件私有数据目录，完整需求保存在 UTF-8 文件中。
 
 此插件依赖 SDK 4.0 的 `background_results` / `process_resources` / `host.openExternal`。
-支持范围见本插件的 `pyproject.toml`（`shiori-sdk>=4.0.0,<6`）。
+支持范围见本插件的 `pyproject.toml`（`shiori-sdk>=4.0.0,<4.2.0`）。

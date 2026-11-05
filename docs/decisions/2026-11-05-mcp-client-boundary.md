@@ -1,10 +1,10 @@
-# SDK 5：MCP 客户端归属
+# SDK 4.1：MCP 客户端归属
 
-状态：2026-11-05 用户确认移除 PROCESSES.mcp，作为一次 SDK 大版本迁移。承接 #994 / #996 和现有 Draft PR #999；OAuth #997 / #1000 随后迁移。未授权合并或发布 SDK。
+状态：2026-11-05 用户确认移除 PROCESSES.mcp，按用户新确认的 A.B.C 规则作为 SDK 4.1 兼容线迁移。承接 #994 / #996 和现有 Draft PR #999；OAuth #997 / #1000 随后迁移。未授权合并或发布 SDK。
 
 ## 决策
 
-MCP 是普通进程内插件能力。删除已发布的 PROCESSES.mcp()，SDK 源版本升为 5.0.0。manifest API 仍为 4；SDK semver 与 manifest 格式版本分别管理。此轮不新增 capability、Key、phase 或运行时层。
+MCP 是普通进程内插件能力。删除已发布的 PROCESSES.mcp()，SDK 源版本升为 4.1.0。manifest API 仍为 4；SDK 自定义兼容线与 manifest 格式版本分别管理（见 [版本规则](2026-11-05-sdk-version-policy.md)）。此轮不新增 capability、Key、phase 或运行时层。
 
 packages/mcp-client 提供内部 Python 包 shiori-mcp-client：stdio/HTTP 会话、工具发现、协议错误、结果转换与取消/超时归于该库。它依赖固定的官方 MCP Python SDK，不要求公开 PyPI 发布；本地 wheelhouse 与冻结程序消费本次构建的确切产物。
 
@@ -12,7 +12,7 @@ MCP、Browser Use、Computer Use 直接构造库中的会话，并注入现有 P
 
 用户 MCP 插件继续独占服务器配置、凭据、OAuth 操作、工具筛选、RPC/UI 和执行准入。Browser/Computer 保留各自的角色、profile、driver 和回合生命周期，不进入用户服务器列表，不依赖用户 MCP 插件开关。proactive 每次解析当前 MCP 插件导出并共用其配置与授权。
 
-工具注册已有 MCP_TOOLS 与调用门继续使用；这次不顺手重做工具注册接口。SDK 主版本迁移只改变已确认的 MCP 客户端/进程职责，不扩展其他业务范围。
+工具注册已有 MCP_TOOLS 与调用门继续使用；这次不顺手重做工具注册接口。SDK 兼容线迁移只改变已确认的 MCP 客户端/进程职责，不扩展其他业务范围。
 
 ## 会话接口与协议
 
@@ -24,7 +24,7 @@ stdio 管道通过现有 PROCESSES.spawn 创建，官方 Client 管协议协商�
 
 ## SDK 与依赖装配
 
-同步 SDK 5.0.0 的 Python/npm/宿主/host-testing 精确 pin；生成的 API 参考与迁移说明同步更新。实际消费 SDK 的插件依赖范围承认 5.x；不因 SDK 大版本给未变插件升 patch。现有 SDK 4 发布物与标签不可改写。此轮只准备源码与构建产物，不推发布标签。
+同步 SDK 4.1.0 的 Python/npm/宿主/host-testing 精确 pin；生成的 API 参考与迁移说明同步更新。三个 MCP 调用者与内部客户端声明 `>=4.1.0,<4.2.0`，其余已核对插件声明 `>=4.0.0,<4.2.0`；manifest 使用空格区间。SDK 变更兼容线不统一提升插件 patch。既有 SDK 4.0 发布物与标签不可改写。此轮只准备源码与构建产物，不推发布标签。
 
 三个客户端插件声明 shiori-mcp-client 依赖。根开发环境、私有 wheelhouse、独立插件验证、宿主分发验证、PyInstaller 收集闭包接入该本地包。不要从公共索引隐式取得同名内部包，不把整套 MCP 插件作为宿主 Python 依赖。
 

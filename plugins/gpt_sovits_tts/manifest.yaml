@@ -1,5 +1,5 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: gpt_sovits_tts
 display_name: GPT-SoVITS 语音合成
 version: 0.2.1

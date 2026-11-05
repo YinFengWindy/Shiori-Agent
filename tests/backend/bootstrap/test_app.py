@@ -127,7 +127,7 @@ async def test_initial_setup_cancellation_releases_plugin_and_runtime(
     package = tmp_path / "host_plugins/waiting"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: waiting\ninject: [events]\nsupports_hot_unload: false\n",
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: waiting\ninject: [events]\nsupports_hot_unload: false\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -208,7 +208,7 @@ async def test_start_publishes_accounts_and_stop_drops_the_generation(
     package = tmp_path / "host_plugins" / "account_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: account_demo\ninject: [accounts]\n",
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: account_demo\ninject: [accounts]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -318,7 +318,8 @@ async def test_started_runtime_routes_renderer_calls_to_declared_plugin_peers(
         package = packages / plugin_id
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n{manifest}", encoding="utf-8"
+            f"api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: {plugin_id}\n{manifest}",
+            encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(source, encoding="utf-8")
     monkeypatch.setattr("bootstrap.tools._resolve_plugin_dirs", lambda _: [packages])
@@ -364,7 +365,7 @@ async def test_external_package_approval_is_live_and_bound_to_application_sessio
     package = tmp_path / "plugins" / "trusted_demo"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: trusted_demo\nversion: 1.0.0\n"
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: trusted_demo\nversion: 1.0.0\n"
         "entry: backend/plugin.py\n",
         encoding="utf-8",
     )
