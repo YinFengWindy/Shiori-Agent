@@ -232,6 +232,8 @@ def scan(root: Path) -> dict[str, dict[str, int]]:
     folders = [
         (root / "packages/sdk/python", False),
         (root / "packages/sdk/tests", False),
+        (root / "packages/mcp-client/src", False),
+        (root / "packages/mcp-client/tests", False),
     ]
     # Include arbitrary packaged support directories as well as backend/tests:
     # moving an import into a new Python package must not evade the guard.
@@ -243,12 +245,19 @@ def scan(root: Path) -> dict[str, dict[str, int]]:
         for path in _source_files(folder, package_root=package_root):
             source = path.read_text(encoding="utf-8")
             sdk = path.is_relative_to(root / "packages/sdk")
-            forbidden = HOST_ROOTS | {"plugins"} if sdk else HOST_ROOTS
+            client = path.is_relative_to(root / "packages/mcp-client")
+            forbidden = HOST_ROOTS | {"plugins"} if sdk or client else HOST_ROOTS
+            if sdk:
+                forbidden = forbidden | {"shiori_mcp_client"}
             imports = host_imports(source, forbidden)
             owner = (
                 root / "packages/sdk"
                 if sdk
-                else root / "plugins" / path.relative_to(root / "plugins").parts[0]
+                else (
+                    root / "packages/mcp-client"
+                    if client
+                    else root / "plugins" / path.relative_to(root / "plugins").parts[0]
+                )
             )
             imports.update(
                 resource_edges(ast.parse(source), path.resolve(), owner.resolve())
@@ -263,6 +272,7 @@ def dependency_violations(root: Path) -> list[str]:
     errors = []
     for path in (
         root / "packages/sdk/pyproject.toml",
+        root / "packages/mcp-client/pyproject.toml",
         *(root / "plugins").glob("*/pyproject.toml"),
     ):
         project = tomllib.loads(path.read_text(encoding="utf-8"))["project"]
@@ -272,8 +282,17 @@ def dependency_violations(root: Path) -> list[str]:
         for requirement in requirements:
             name = canonicalize_name(Requirement(requirement).name)
             if name in HOST_DISTRIBUTIONS or (
-                path.is_relative_to(root / "packages/sdk")
-                and name.startswith(PLUGIN_DISTRIBUTION_PREFIX)
+                (
+                    path.is_relative_to(root / "packages/sdk")
+                    or path.is_relative_to(root / "packages/mcp-client")
+                )
+                and (
+                    name.startswith(PLUGIN_DISTRIBUTION_PREFIX)
+                    or (
+                        path.is_relative_to(root / "packages/sdk")
+                        and name == "shiori-mcp-client"
+                    )
+                )
             ):
                 errors.append(
                     f"{path.relative_to(root).as_posix()}: forbidden dependency {requirement}"

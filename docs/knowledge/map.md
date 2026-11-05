@@ -40,7 +40,7 @@ related:
 | 渠道 | `apps/backend/infra/channels/`、`apps/backend/bootstrap/channels.py`、`apps/backend/bootstrap/channel_host.py`（`ChannelHost`）、`apps/backend/core/channels/hub.py`、`apps/backend/core/common/channel_directory.py`；合约在 `shiori_sdk.channels`；外部渠道全部是插件：`plugins/telegram/`、`plugins/qq/`、`plugins/qqbot/`、`plugins/feishu/`、`plugins/grok_bot/`（Grok Bot 双向私聊） | 消息总线、会话定位、媒体发送、角色绑定 |
 | 账号与身份 | `apps/backend/core/accounts/`、`apps/backend/agent/account_delivery/`、`apps/backend/core/identity/` | 渠道账号投递、用户身份配对 |
 | Agent 回合 | `apps/backend/agent/core/`、`apps/backend/agent/looping/`、`apps/backend/agent/turns/`、`apps/backend/agent/lifecycle/` | 上下文、推理、工具、输出、生命周期事件 |
-| 工具、MCP | `apps/backend/agent/tools/`、`apps/backend/infra/process/mcp_client.py`（stdio）、`plugins/mcp/`（登记与管理工具，默认关）、`apps/backend/bootstrap/toolsets/` | ToolRegistry、ToolExecutor、远端工具连接 |
+| 工具、MCP | `apps/backend/agent/tools/`、`packages/mcp-client/src/shiori_mcp_client/`（stdio/HTTP 客户端）、`plugins/mcp/`（配置、授权与工具管理，默认关）、`apps/backend/bootstrap/toolsets/` | ToolRegistry、ToolExecutor、远端工具连接 |
 | 插件宿主与 SDK | `apps/backend/agent/plugin_host/`（`PluginKernel`）、`packages/sdk/`（`shiori_sdk`，版本源 `packages/sdk/python/shiori_sdk/_version.py`）、`packages/shiori-host-testing/` | 插件发现/加载/卸载、回合与工具事件、渠道、RPC、服务注册 |
 | 插件包管理 | `apps/backend/desktop_bridge/runtime/plugin_*.py`、`scripts/build-plugin.mjs`、`scripts/plugin-distribution.mjs` | 外部插件安装/卸载事务、信任、`workspace/plugins/` 与 `workspace/plugin-data/` |
 | 调度任务 | `plugins/schedule/`（系统插件：调度器、工具、`SCHEDULER`、任务面板区块）、`apps/backend/agent/schedule_host.py`（`SCHEDULE_HOST`）、`apps/backend/desktop_bridge/role_task_service.py`（面板里的后台任务与读 `MEMORY_OPTIMIZER` 的记忆维护） | 定时触发、角色任务、桌面展示 |

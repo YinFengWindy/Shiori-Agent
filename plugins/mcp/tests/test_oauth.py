@@ -248,7 +248,7 @@ async def test_refresh_during_call_and_disposed_binding_keep_reply_private(
     tmp_path, monkeypatch, outcome, fail_cleanup
 ):
     """A late result/error keeps both admission-time and rotated OAuth secrets hidden."""
-    from shiori_sdk.mcp import McpToolError
+    from shiori_mcp_client import McpToolError
 
     async with OAuthPeer() as peer:
         owner = await configured(tmp_path / "mcp_servers.json", peer)

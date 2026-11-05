@@ -5,7 +5,7 @@ import asyncio
 import sys
 from typing import TYPE_CHECKING
 from uuid import uuid4
-from shiori_sdk.mcp import McpSession, McpToolInfo
+from shiori_mcp_client import McpSession, McpToolInfo, HttpMcpSession, StdioMcpSession
 from .models import HttpTransport, McpConfigError
 
 if TYPE_CHECKING:
@@ -142,25 +142,27 @@ def new_session(registry: "McpServerRegistry", server: str) -> McpSession:
     config = registry.store.servers[server]
     credentials = registry.store.credentials(config)
     if isinstance(config.transport, HttpTransport):
-        from .http_session import HttpMcpSession
-
+        headers = dict(credentials.headers)
+        if config.transport.auth == "bearer":
+            headers["Authorization"] = f"Bearer {credentials.bearer}"
         binding = (
             registry.oauth_binding(server) if config.transport.auth == "oauth" else None
         )
         return HttpMcpSession(
             server,
-            config.transport,
-            credentials,
+            credentials.url or "",
+            headers=headers,
             auth=binding.provider if binding else None,
-            interactive=bool(binding and binding.operation),
+            connect_timeout=195.0 if binding and binding.operation else 15.0,
         )
-    return registry._processes.mcp(
+    return StdioMcpSession(
         server,
         list(credentials.command),
         dict(credentials.env),
         config.transport.cwd,
+        processes=registry._processes,
         # Windows Job ownership is platform-specific. Other platforms retain
-        # McpClient's existing terminate/wait/kill lifecycle for the child.
+        # the client's terminate/wait/kill lifecycle for the child.
         own_process_tree=sys.platform == "win32",
     )
 

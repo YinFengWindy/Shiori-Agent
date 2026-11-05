@@ -2,6 +2,7 @@
 
 from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field
+from shiori_mcp_client import McpAuthenticationRequired
 
 
 class Record(BaseModel):
@@ -80,11 +81,7 @@ class McpConfigError(ValueError):
     """A safe validation message, without Pydantic input values."""
 
 
-class McpHttpError(McpConfigError):
-    """Safe HTTP status failure; the connection needs explicit attention."""
-
-
-class LoginRequired(McpHttpError):
+class LoginRequired(McpAuthenticationRequired):
     """OAuth needs an explicit user login; never carries remote error text."""
 
     def __init__(self):

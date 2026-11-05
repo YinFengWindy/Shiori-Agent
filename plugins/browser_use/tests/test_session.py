@@ -33,8 +33,8 @@ async def test_cleanup_releases_profile_even_when_job_fails(tmp_path):
 async def test_mcp_startup_errors_release_profile_and_native_resources(
     tmp_path, monkeypatch, phase
 ):
-    from shiori_sdk.testing.processes import FakeMcpSession
-    from shiori_sdk.mcp import McpToolError
+    from shiori_mcp_client.testing import FakeMcpSession
+    from shiori_mcp_client import McpToolError
     from plugins.browser_use.backend.daemon import BrowserDaemon
     from plugins.browser_use.backend.profile import ProfileLease
 
@@ -71,8 +71,8 @@ async def test_mcp_startup_errors_release_profile_and_native_resources(
 async def test_completed_tool_error_keeps_established_page_and_profile(
     tmp_path, monkeypatch
 ):
-    from shiori_sdk.testing.processes import FakeMcpSession
-    from shiori_sdk.mcp import McpToolError
+    from shiori_mcp_client.testing import FakeMcpSession
+    from shiori_mcp_client import McpToolError
     from plugins.browser_use.backend.daemon import BrowserDaemon
 
     daemon_close = AsyncMock()

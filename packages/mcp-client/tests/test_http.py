@@ -5,23 +5,21 @@ import json
 import logging
 
 import pytest
-from shiori_sdk.mcp import McpToolError
+from shiori_mcp_client import McpToolError
 from shiori_sdk.tools import ToolResult
 
-from plugins.mcp.backend.http_session import HttpMcpSession
-from plugins.mcp.backend.models import HttpTransport, LaunchCredentials, McpHttpError
-from .http_peer import HttpPeer
+from shiori_mcp_client import HttpMcpSession, McpHttpError
+from shiori_mcp_client.testing_http import HttpPeer
 
 
 def session(peer):
     return HttpMcpSession(
         "fixture",
-        HttpTransport(auth="bearer"),
-        LaunchCredentials(
-            url=peer.url,
-            bearer="private-bearer",
-            headers={"X-API-Key": "private-header"},
-        ),
+        peer.url,
+        headers={
+            "Authorization": "Bearer private-bearer",
+            "X-API-Key": "private-header",
+        },
     )
 
 
@@ -108,7 +106,9 @@ async def test_call_cancellation_timeout_and_disconnect_never_replay():
             assert peer.calls["wait"] == 2
             peer.release.set()
             assert await client.call("echo", {}) == "hello"
-            with pytest.raises((ConnectionError, McpHttpError)):
+            with pytest.raises((McpToolError, McpHttpError)):
+                # The official HTTP SDK synthesizes an error response here.
+                # Its origin is ambiguous, so it cannot authorize a retry.
                 await client.call("drop", {})
             assert peer.calls["drop"] == 1
         finally:
@@ -182,3 +182,101 @@ async def test_call_deadline_includes_queued_send_and_prevents_late_dispatch():
                 await asyncio.gather(following, return_exceptions=True)
             await asyncio.wait_for(client.disconnect(), 3)
         assert client._owner.done()
+
+
+async def test_auth_provider_intent_survives_sdk_groups_and_http_rejection(caplog):
+    import httpx2
+    from shiori_mcp_client import McpAuthenticationRequired
+
+    class LoginRequired(McpAuthenticationRequired):
+        pass
+
+    class Provider(httpx2.Auth):
+        async def async_auth_flow(self, request):
+            response = yield request
+            assert response.status_code == 401
+            raise ExceptionGroup(
+                "unsafe OAuth failure",
+                [ConnectionError("unsafe token response"), LoginRequired("需要登录")],
+            )
+
+    caplog.set_level(logging.DEBUG)
+    async with HttpPeer() as peer:
+        peer.status = 401
+        provider = Provider()
+        client = HttpMcpSession("auth", peer.url, auth=provider)
+        with pytest.raises(LoginRequired, match="需要登录"):
+            await client.connect()
+        assert client._owner.done()
+        assert not any(
+            value in caplog.text
+            for value in (
+                "unsafe OAuth failure",
+                "unsafe token response",
+                "query-canary",
+            )
+        )
+
+
+@pytest.mark.parametrize("code", [-32000, -32001])
+async def test_http_remote_reserved_codes_preserve_message_data_without_replay(code):
+    class ErrorPeer(HttpPeer):
+        async def _rpc(self, request):
+            if request["method"] == "tools/call":
+                self.calls["rpc_error"] += 1
+                return {
+                    "error": {
+                        "code": code,
+                        "message": "remote business failure",
+                        "data": {"detail": 42},
+                    }
+                }
+            return await super()._rpc(request)
+
+    async with ErrorPeer() as peer:
+        client = session(peer)
+        try:
+            await client.connect()
+            with pytest.raises(McpToolError) as caught:
+                await client.call("rpc_error", {})
+            assert (caught.value.code, caught.value.message, caught.value.data) == (
+                code,
+                "remote business failure",
+                {"detail": 42},
+            )
+            assert peer.calls["rpc_error"] == 1
+            assert client._observation.calls == {}
+        finally:
+            await client.disconnect()
+
+
+async def test_truncated_http_reply_is_not_assumed_to_be_a_retryable_disconnect():
+    class TruncatedPeer(HttpPeer):
+        truncate = False
+
+        async def _rpc(self, request):
+            if request["method"] == "tools/call":
+                self.truncate = True
+            return await super()._rpc(request)
+
+        async def _reply(self, writer, status, body, *, sse=False):
+            if self.truncate and status == 200:
+                writer.write(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 999\r\nConnection: close\r\n\r\n{"
+                )
+                await writer.drain()
+                return
+            await super()._reply(writer, status, body, sse=sse)
+
+    async with TruncatedPeer() as peer:
+        client = session(peer)
+        try:
+            await client.connect()
+            with pytest.raises(McpToolError) as caught:
+                await client.call("echo", {})
+            assert caught.value.code == -32000
+            assert peer.calls["echo"] == 1
+            assert client._observation.calls == {}
+        finally:
+            peer.truncate = False
+            await client.disconnect()

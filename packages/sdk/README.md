@@ -2,10 +2,11 @@
 
 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)
 and [shiori-sdk](https://pypi.org/project/shiori-sdk/) are the TypeScript and Python distributions of the
-same plugin contract. This README documents **4.1.0** and manifest **API 4**.
-The installation commands below target SDK 4. Before its registry release,
-use the workspace package or verified 4.1.0 wheel/tarball artifacts instead.
-In-repo plugins depend on `shiori-sdk>=4.0.0,<5`.
+same plugin contract. This README documents **5.0.0** and manifest **API 4**.
+The installation commands below target SDK 5. This source update does not publish
+a release; use the workspace package or verified 5.0.0 wheel/tarball artifacts
+until registry publication is confirmed. MCP client plugins require
+`shiori-sdk>=5.0.0,<6`; unchanged consumers may retain `>=4.0.0,<6`.
 
 Start with the [plugin guide](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-guide.md)
 and the [generated API reference](https://github.com/YinFengWindy/Shiori-Agent/blob/main/docs/_handbook/plugin-api.md)
@@ -13,12 +14,49 @@ for plugin layout, `inject` service declarations and packaging.
 
 ## Compatibility
 
-### 4.1.0
+### 5.0.0 migration
 
-Adds the pure `shiori_sdk.mcp_result.decode_tool_result` helper for MCP transports.
-It preserves text, image bytes and object structured content, and raises `McpToolError`
-for remote errors. Existing keys, protocols and `ToolResult` retain their 4.0 contracts.
-Plugins using this helper declare `sdk: ">=4.1.0"` and `shiori-sdk>=4.1.0,<5`.
+Breaking major; the manifest format remains **API 4**. Remove calls to
+`ctx.require(PROCESSES).mcp(...)`: the host now provides only generic process
+creation and ownership through the existing `spawn` / `popen` methods.
+
+MCP sessions, `McpSession`, `McpToolInfo`, `McpToolError`, result decoding and
+`FakeMcpSession` move from `shiori_sdk` to the internal `shiori-mcp-client`
+distribution (`shiori_mcp_client`; test doubles live with that library). Its
+source is `packages/mcp-client/src/shiori_mcp_client`, with independent version
+0.1.0. Declare that dependency and construct its sessions with the injected
+`Processes`; update imports and test doubles instead of retaining a host factory.
+For example, replace the old factory with the library's public stdio session:
+
+```python
+import sys
+from shiori_mcp_client import StdioMcpSession
+from shiori_sdk.core.services import PROCESSES
+
+session = StdioMcpSession(
+    "example", command, processes=ctx.require(PROCESSES),
+    own_process_tree=sys.platform == "win32",
+)
+ctx.effect("example.mcp", session.disconnect)
+```
+
+Connect after publication or when the owning tool turn starts, not during inert
+setup. HTTP consumers use the library's public `HttpMcpSession`.
+The earlier 4.1 decoder proposal was not published; its implementation moves
+into this client library as part of the 5.0 migration.
+The shared library owns stdio/HTTP protocol handling; user server configuration,
+credentials and OAuth policy remain in the MCP plugin. Browser Use and Computer
+Use retain their independent session ownership. `ToolResult` and `MCP_TOOLS`
+remain SDK contracts with their existing behavior. No new key or runtime layer
+is introduced.
+
+Migrated consumers declare `sdk: ">=5.0.0"` and `shiori-sdk>=5.0.0,<6`.
+Consumers using only unchanged APIs can admit both majors with `>=4.0.0,<6`
+after checking their callers. The internal client is built into the private
+wheelhouse and frozen desktop; it does not require a new public PyPI release.
+Frozen dependency updates still require rebuilding the desktop, and installing
+a plugin ZIP does not install Python dependencies. Existing SDK 4 artifacts
+and tags are immutable. The notes below describe historical releases.
 
 ### 4.0.0
 
@@ -93,7 +131,7 @@ reused for different source.
 Install the SDK and its React peers as development dependencies:
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0" "react@^19.2.5" "react-dom@^19.2.5"
+pnpm add -D "@yinfengwindy/shiori-sdk@^5.0.0" "react@^19.2.5" "react-dom@^19.2.5"
 ```
 
 Build the plugin UI as ESM, externalizing `@yinfengwindy/shiori-sdk`, `react`,
@@ -108,7 +146,7 @@ in the plugin's `package.json`:
   "peerDependencies": {
     "react": ">=19.2.0 <20.0.0",
     "react-dom": ">=19.2.0 <20.0.0",
-    "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0"
+    "@yinfengwindy/shiori-sdk": ">=5.0.0 <6.0.0"
   }
 }
 ```
@@ -156,13 +194,13 @@ other unavailable services and must not be silently classified as local disposal
 Requires Python **3.12+**. Install in your plugin project:
 
 ```sh
-uv add "shiori-sdk>=4.0.0,<5"
+uv add "shiori-sdk>=5.0.0,<6"
 ```
 
 For independent plugin tests, add the optional testing support and run your suite:
 
 ```sh
-uv add --dev "shiori-sdk[testing]>=4.0.0,<5"
+uv add --dev "shiori-sdk[testing]>=5.0.0,<6"
 uv run pytest tests
 ```
 
@@ -424,7 +462,7 @@ provider blocks the plugin before `setup`.
 | `external_turns` / `EXTERNAL_TURNS` | (3.1.1) `await ctx.require(EXTERNAL_TURNS).submit(ExternalTurnMessage(...))` runs one message from a non-channel source (platform, conversation id/title, sender id/name, message id, text) as an external-context group turn of a role and returns `ExternalTurnResult` (`replied` with the reply text, `busy`, `duplicate`). It never waits for the role, never dispatches to a channel, and cancelling the call cancels the turn. `testing.external_turns.FakeExternalTurns` answers with queued results. |
 | `http` / `HTTP` | `HttpClient` uses the injected external transport and its default retry/budget policy. Memory's bounded `HttpRequester` remains separate. |
 | `background` / `BACKGROUND` | `spawn` owns scoped tasks; `spawn_runtime` additionally retains the calling runtime generation until task completion. Both cancel and join outstanding work on unload. |
-| `processes` / `PROCESSES` | Creates explicit MCP sessions and owned child processes through the host's existing McpClient/owned_spawn/WindowsJob implementations. The SDK contains no process implementation. |
+| `processes` / `PROCESSES` | Starts owned child processes through the host's owned_spawn/WindowsJob implementations. MCP sessions belong to shiori-mcp-client; the SDK contains no MCP protocol or process implementation. |
 | `resources` / `RESOURCES` | Supplies source/frozen resource roots and shared emoji paths; plugins do not guess checkout depth. |
 | `tool_turn` / `TOOL_TURN` | Returns the current host turn identity and awaited ownership finalizers. Model arguments cannot forge it. |
 | `runtime` / `RUNTIME` | `was_active` and `on_drain` preserve accepted work during generation replacement. |

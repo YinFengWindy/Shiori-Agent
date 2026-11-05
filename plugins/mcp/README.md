@@ -8,9 +8,9 @@
 
 启动命令使用 JSON 字符串数组，例如 `["python", "/path/to/server.py"]`；环境变量使用 JSON 字符串对象。已保存的 argv/env 不回显，修改时明确选择保留、替换或清空。工作目录可选。
 
-HTTP 服务器填写完整 http(s) 地址，支持匿名、Bearer 或自定义请求头认证。请求头使用 JSON 字符串对象。完整地址（包括 query）、token 和请求头值均不从读取接口回显，编辑时选择保留或替换；请求头可清空。地址不接受 userinfo/fragment，请求头拒绝换行、重复名称及协议保留头；自定义 Authorization 只能选择「自定义请求头」认证，不能与 Bearer 混用。连接失败保留配置，401/403 显示对应状态码。
+HTTP 服务器填写完整 http(s) 地址，支持匿名、Bearer、自定义请求头和 OAuth 认证。请求头使用 JSON 字符串对象。完整地址（包括 query）、token 和请求头值均不从读取接口回显，编辑时选择保留或替换；请求头可清空。地址不接受 userinfo/fragment，请求头拒绝换行、重复名称及协议保留头；自定义 Authorization 只能选择「自定义请求头」认证，不能与 Bearer 混用。连接失败保留配置，401/403 显示对应状态码。
 
-HTTP 使用官方 `mcp==2.3.0`，支持分页发现、JSON/SSE、文本、图片和对象 structuredContent，并与 stdio 共用 SDK 结果转换。现代协议的数组、标量或显式 null structuredContent 以 JSON 文本呈现，已有等价文本不重复追加；`ToolResult.structured_content` 仍只保存对象。工具调用不自动处理 elicitation、扩展结果或重发，OAuth 尚未交付。
+stdio 与 HTTP 由内部 `shiori-mcp-client` 使用官方 `mcp==2.3.0`，支持分页发现、JSON/SSE、文本、图片和对象 structuredContent，共用内部库的结果转换。现代协议的数组、标量或显式 null structuredContent 以 JSON 文本呈现，已有等价文本不重复追加；`ToolResult.structured_content` 仍只保存对象。工具调用不自动处理 elicitation、扩展结果或重发。OAuth 授权、账户状态与私有存储由 MCP 插件管理，并通过库的标准 auth 参数注入。
 
 OAuth 在服务器行提供登录、取消、刷新授权和退出登录。只有当前页面点击登录才通过宿主打开系统浏览器；启动或后台刷新需要交互时显示「需要登录」。支持自动客户端注册（DCR）和预注册 Client ID，客户端认证可选 none、client_secret_basic、client_secret_post。预注册配置输入 Client secret 与固定回调端口，默认回调地址为 `http://127.0.0.1:43819/callback`；端口被占用时登录失败，可在「配置客户端」里修改并同步更新授权服务器注册。回调只绑定本机 loopback，登录最长等待 180 秒。退出只清除本地令牌，不退出浏览器中的第三方账号。
 

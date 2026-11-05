@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 from weakref import WeakSet
 
-from shiori_sdk.mcp import McpToolError
+from shiori_mcp_client import McpToolError
 from shiori_sdk.tools import ToolResult
 from shiori_sdk.processes import ToolTurn, Processes
 from collections.abc import Callable

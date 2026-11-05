@@ -16,6 +16,7 @@ pyinstaller>=6.18.0
 
 # Local host/SDK testing distributions are private and resolved from this checkout.
 -e ./packages/sdk
+-e ./packages/mcp-client[test]
 -e .
 -e ./plugins/default_memory
 -e ./packages/shiori-host-testing

@@ -8,7 +8,7 @@ from contextlib import suppress
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx2
-from .http_peer import HttpPeer
+from shiori_mcp_client.testing_http import HttpPeer
 
 
 class OAuthPeer(HttpPeer):
