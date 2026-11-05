@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { compactGhostButtonClass, settingsInputClass, settingsGroupStackClass, SettingsGroup, SettingsField, Select } from "@yinfengwindy/shiori-sdk";
+import { OAuthClientEditor, type OAuthClientEdit } from "./OAuthClientEditor";
 import type { McpServer } from "./types";
 
 type Edit = "keep" | "replace" | "delete";
@@ -15,7 +16,8 @@ export function ServerEditor({ server, busy, save, cancel }: {
   const [label, setLabel] = useState(server?.label ?? "");
   const [kind, setKind] = useState<"stdio" | "streamable_http">(server?.transport.kind ?? "stdio");
   const [cwd, setCwd] = useState(server?.transport.kind === "stdio" ? server.transport.cwd ?? "" : "");
-  const [auth, setAuth] = useState<"none" | "bearer" | "headers">(server?.transport.kind === "streamable_http" ? server.transport.auth : "none");
+  const [auth, setAuth] = useState<"none" | "bearer" | "headers" | "oauth">(server?.transport.kind === "streamable_http" ? server.transport.auth : "none");
+  const [oauthEdit, setOAuthEdit] = useState<OAuthClientEdit>({ op: "keep" });
   const [urlEdit, setUrlEdit] = useState<Edit>(server?.url_configured ? "keep" : "replace");
   const [url, setUrl] = useState("");
   const [bearerEdit, setBearerEdit] = useState<Edit>(server?.bearer_configured ? "keep" : "replace");
@@ -62,6 +64,7 @@ export function ServerEditor({ server, busy, save, cancel }: {
         command: commandEdit === "replace" ? { op: "replace", value: commandValue } : { op: commandEdit },
         env: envEdit === "replace" ? { op: "replace", value: envValue } : { op: envEdit },
       } : {
+        oauth: auth === "oauth" ? oauthEdit : { op: "delete" },
         url: urlEdit === "replace" ? { op: "replace", value: url } : { op: urlEdit },
         bearer: auth !== "bearer" ? { op: "delete" } : bearerEdit === "replace" ? { op: "replace", value: bearer } : { op: bearerEdit },
         headers: headersEdit === "replace" ? { op: "replace", value: headersValue } : { op: headersEdit },
@@ -87,7 +90,8 @@ export function ServerEditor({ server, busy, save, cancel }: {
           {server?.url_configured ? <Select aria-label="服务器地址编辑方式" value={urlEdit} options={edits.filter((item) => item.value !== "delete")} onValueChange={(value) => setUrlEdit(value === "replace" ? "replace" : "keep")} /> : null}
           {urlEdit === "replace" ? <input type="password" autoComplete="new-password" aria-label="服务器地址" className={settingsInputClass} value={url} required placeholder="https://example.com/mcp" onChange={(event) => setUrl(event.target.value)} /> : <span className="text-body-sm text-ink-muted">已保存</span>}
         </div></SettingsField>
-        <SettingsField label="认证方式"><Select aria-label="认证方式" value={auth} options={[{ value: "none", label: "无认证" }, { value: "bearer", label: "Bearer" }, { value: "headers", label: "自定义请求头" }]} onValueChange={(value) => setAuth(value === "bearer" || value === "headers" ? value : "none")} /></SettingsField>
+        <SettingsField label="认证方式"><Select aria-label="认证方式" value={auth} options={[{ value: "none", label: "无认证" }, { value: "bearer", label: "Bearer" }, { value: "headers", label: "自定义请求头" }, { value: "oauth", label: "OAuth" }]} onValueChange={(value) => setAuth(value === "bearer" || value === "headers" || value === "oauth" ? value : "none")} /></SettingsField>
+        {auth === "oauth" ? <OAuthClientEditor configured={!!server?.oauth?.client_configured} onChange={setOAuthEdit} /> : null}
         {auth === "bearer" ? <SettingsField label="Bearer token"><div className="grid gap-2">
           {server?.bearer_configured ? <Select aria-label="Bearer token 编辑方式" value={bearerEdit} options={edits.filter((item) => item.value !== "delete")} onValueChange={(value) => setBearerEdit(value === "replace" ? "replace" : "keep")} /> : null}
           {bearerEdit === "replace" ? <input type="password" autoComplete="new-password" aria-label="Bearer token" className={settingsInputClass} value={bearer} required onChange={(event) => setBearer(event.target.value)} /> : <span className="text-body-sm text-ink-muted">已保存</span>}

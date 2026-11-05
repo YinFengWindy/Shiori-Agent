@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable, Iterable
 from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
@@ -58,6 +59,8 @@ def _credential_values(launch: LaunchCredentials) -> tuple[str, ...]:
         if _credential_name(name)
         or name.lower() in {"key", "sig", "signature", "credential", "auth"}
     )
+    if launch.oauth and launch.oauth.client_secret:
+        values.add(launch.oauth.client_secret)
     arguments = launch.command[1:]
     for index, argument in enumerate(arguments):
         name, separator, value = argument.partition("=")
@@ -80,10 +83,34 @@ def _credential_values(launch: LaunchCredentials) -> tuple[str, ...]:
 class LaunchRedactor:
     """Snapshot the credentials used by a call, even if settings change meanwhile."""
 
-    def __init__(self, launch: LaunchCredentials):
+    def __init__(
+        self,
+        launch: LaunchCredentials,
+        *,
+        additional_values: Callable[[], Iterable[str]] | None = None,
+    ):
         self._values = _credential_values(launch)
+        self._additional_values = additional_values
+        self._capture_additional()
+
+    def _capture_additional(self) -> None:
+        # The supplier belongs to the binding used at admission, never to a
+        # server lookup. Include tokens minted during a call without losing its
+        # earlier credentials when that binding is revoked or replaced.
+        if self._additional_values:
+            self._values = tuple(
+                sorted(
+                    {
+                        *self._values,
+                        *(value for value in self._additional_values() if value),
+                    },
+                    key=len,
+                    reverse=True,
+                )
+            )
 
     def _plain(self, text: str) -> str:
+        self._capture_additional()
         for value in self._values:
             # ToolResult.text can contain prose followed by a serialized object.
             # Scrub escaped copies too; pure JSON takes the typed path below.

@@ -19,7 +19,16 @@ class McpManagement:
         """Declare finite names for generated RPC contracts."""
         rpc = ctx.require(RPC)
         rpc.register("servers.list", self.list, concurrency=Concurrency.READ_ONLY)
-        for method in ("save", "delete", "set_enabled", "test", "reconnect"):
+        for method in (
+            "save",
+            "delete",
+            "set_enabled",
+            "test",
+            "reconnect",
+            "login",
+            "logout",
+            "refresh",
+        ):
             rpc.register(f"servers.{method}", partial(self.mutate, method))
         rpc.register(
             "operations.cancel", partial(self.mutate, "cancel"), admission_exempt=True
@@ -45,7 +54,12 @@ class McpManagement:
             if method == "cancel":
                 return self.registry.cancel_operation(server)
             return self.registry.start_operation(
-                server, "test" if method == "test" else "connect"
+                server,
+                (
+                    method
+                    if method in {"test", "login", "logout", "refresh"}
+                    else "connect"
+                ),
             )
         except McpConfigError as error:
             raise PluginRpcError("mcp_invalid_operation", str(error)) from None

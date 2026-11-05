@@ -101,3 +101,7 @@ class ServerStore:
         for path in self.private.glob("*.json"):
             if path.stem not in used:
                 path.unlink()
+
+        for path in (self.private / "oauth").glob("*.json"):
+            if path.stem not in used:
+                path.unlink()

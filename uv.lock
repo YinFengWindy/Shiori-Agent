@@ -2172,6 +2172,8 @@ name = "shiori-plugin-mcp"
 version = "0.1.0"
 source = { editable = "plugins/mcp" }
 dependencies = [
+    { name = "httpx2" },
+    { name = "mcp" },
     { name = "pydantic" },
     { name = "shiori-mcp-client" },
     { name = "shiori-sdk" },
@@ -2184,6 +2186,8 @@ test = [
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx2", specifier = ">=2.3.0,<3" },
+    { name = "mcp", specifier = "==2.3.0" },
     { name = "pydantic", specifier = ">=2.12.0" },
     { name = "shiori-mcp-client", specifier = "==0.1.0" },
     { name = "shiori-sdk", specifier = ">=4.1.0,<4.2.0" },

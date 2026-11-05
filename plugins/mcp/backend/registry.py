@@ -17,6 +17,8 @@ from shiori_mcp_client import (
     McpToolError,
 )
 from . import operations
+from .oauth import OAuthBinding
+from .models import HttpTransport
 from shiori_sdk.processes import Processes
 from shiori_sdk.redaction import redact_secrets
 from shiori_sdk.tools import ToolResult
@@ -59,6 +61,7 @@ class McpServerRegistry:
         active: Callable[[], bool] = lambda: True,
     ):
         self.store = ServerStore(config_path)
+        self._oauth: dict[str, tuple[str, OAuthBinding]] = {}
         self._processes, self._registration = processes, registration
         self._changed, self._active = changed, active
         self._states: dict[str, ServerState] = {}
@@ -123,6 +126,12 @@ class McpServerRegistry:
                     "url_configured": bool(credentials.url),
                     "bearer_configured": bool(credentials.bearer),
                     "header_names": sorted(credentials.headers),
+                    "oauth": (
+                        self.oauth_binding(server).snapshot()
+                        if isinstance(config.transport, HttpTransport)
+                        and config.transport.auth == "oauth"
+                        else None
+                    ),
                     "selection": config.tools.model_dump(),
                     "status": state.status,
                     "error": state.error,
@@ -197,7 +206,21 @@ class McpServerRegistry:
             or previous.enabled != config.enabled
         )
         if reconnect:
-            self.start_operation(server, "connect" if config.enabled else "disable")
+            retired_auth = None
+            if (
+                server in self._oauth
+                and previous
+                and (
+                    previous.transport != config.transport
+                    or previous.credential_ref != config.credential_ref
+                )
+            ):
+                retired_auth = self._oauth[server][1]
+            self.start_operation(
+                server,
+                "connect" if config.enabled else "disable",
+                retired_auth=retired_auth,
+            )
         else:
             self._register(server, state)
             self._changed()
@@ -226,6 +249,24 @@ class McpServerRegistry:
         self.start_operation(server, "delete")
         return self.snapshot()
 
+    def oauth_binding(self, server: str) -> OAuthBinding:
+        """Return the same provider for connects, tests and admitted tool calls."""
+        config = self.store.servers[server]
+        if (
+            not isinstance(config.transport, HttpTransport)
+            or config.transport.auth != "oauth"
+        ):
+            raise McpConfigError("服务器未配置 OAuth")
+        cached = self._oauth.get(server)
+        if cached is None or cached[0] != config.credential_ref:
+            binding = OAuthBinding(
+                self.store.private / "oauth" / f"{config.credential_ref}.json",
+                self.store.credentials(config),
+                self._changed,
+            )
+            self._oauth[server] = (config.credential_ref, binding)
+        return self._oauth[server][1]
+
     def _invalidate(self, server: str) -> int:
         state = self._states.setdefault(server, ServerState())
         state.epoch += 1
@@ -234,9 +275,11 @@ class McpServerRegistry:
             task.cancel()
         return state.epoch
 
-    def start_operation(self, server: str, kind: str) -> dict[str, object]:
+    def start_operation(
+        self, server: str, kind: str, *, retired_auth: OAuthBinding | None = None
+    ) -> dict[str, object]:
         """Start one finite management operation without blocking its RPC."""
-        return operations.start_operation(self, server, kind)
+        return operations.start_operation(self, server, kind, retired_auth=retired_auth)
 
     def cancel_operation(self, server: str) -> dict[str, object]:
         """Cancel owned work while keeping its persisted configuration."""
@@ -297,7 +340,7 @@ class McpServerRegistry:
             or state.session is None
         ):
             raise McpConfigError("MCP 工具已失效，请重新选择工具")
-        redactor = LaunchRedactor(self.store.credentials(config))
+        redactor = self._redactor(server)
         task = asyncio.create_task(
             state.session.call(tool, request.arguments, timeout=request.timeout)
         )
@@ -364,15 +407,19 @@ class McpServerRegistry:
         finally:
             state.calls.discard(task)
 
-    def _redact(self, server: str, text: str) -> str:
-        return LaunchRedactor(self.store.credentials(self.store.servers[server])).text(
-            text
+    def _redactor(self, server: str) -> LaunchRedactor:
+        """Capture launch material and the existing OAuth binding, without opening one."""
+        oauth = self._oauth.get(server)
+        return LaunchRedactor(
+            self.store.credentials(self.store.servers[server]),
+            additional_values=oauth[1].secrets if oauth else None,
         )
 
+    def _redact(self, server: str, text: str) -> str:
+        return self._redactor(server).text(text)
+
     def _scrub(self, server: str, value: Any) -> Any:
-        return LaunchRedactor(self.store.credentials(self.store.servers[server])).data(
-            value
-        )
+        return self._redactor(server).data(value)
 
     @staticmethod
     def _safe_error(error: Exception) -> str:
@@ -389,6 +436,8 @@ class McpServerRegistry:
     async def shutdown(self) -> None:
         """Close admission before cancelling operations and owned connections."""
         self._closed = True
+        for _, binding in self._oauth.values():
+            binding.invalidate()
         for server in self._states:
             self._invalidate(server)
         for task in self._operations.values():
@@ -397,6 +446,8 @@ class McpServerRegistry:
         await asyncio.gather(
             *(operations.close_session(self, state) for state in self._states.values())
         )
+        for _, binding in self._oauth.values():
+            await binding.finish()
         if self._loaded:
             self.store.prune_credentials()
 

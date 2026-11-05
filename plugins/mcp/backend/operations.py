@@ -10,30 +10,62 @@ from .models import HttpTransport, McpConfigError
 
 if TYPE_CHECKING:
     from .registry import McpServerRegistry, ServerState
+    from .oauth import OAuthBinding
 
 
 def start_operation(
-    registry: "McpServerRegistry", server: str, kind: str
+    registry: "McpServerRegistry",
+    server: str,
+    kind: str,
+    *,
+    retired_auth: OAuthBinding | None = None,
 ) -> dict[str, object]:
     """Return immediately; cancellation and connections never occupy RPC lanes."""
     registry._ready()
     state = registry._states[server]
     if kind not in {"disable", "delete"}:
         registry._config(server)
-    if kind == "connect" and not registry.store.servers[server].enabled:
+    if (
+        kind in {"connect", "login", "refresh"}
+        and not registry.store.servers[server].enabled
+    ):
         raise McpConfigError("请先启用服务器")
+    binding = (
+        registry.oauth_binding(server)
+        if kind in {"login", "logout", "refresh"}
+        else None
+    )
     previous = registry._operations.get(server)
     if kind == "test" and previous and not previous.done():
         raise McpConfigError("服务器操作仍在进行")
-    if previous and state.operation and state.operation["kind"] in {"connect", "test"}:
+    if (
+        previous
+        and state.operation
+        and state.operation["kind"] in {"connect", "test", "login", "refresh"}
+    ):
         if not previous.cancelling():
             previous.cancel()
     epoch = state.epoch if kind == "test" else registry._invalidate(server)
     op = {"id": uuid4().hex, "kind": kind, "status": "running", "error": None}
     state.operation = op
     if kind != "test":
-        state.status = "connecting" if kind == "connect" else "disabling"
+        state.status = (
+            "connecting" if kind in {"connect", "login", "refresh"} else "disabling"
+        )
     state.error = None
+    auth_error: str | None = None
+    # Config is already committed for save/delete. Revoke admission before any
+    # credential I/O, and always schedule session cleanup even when that I/O fails.
+    try:
+        if retired_auth:
+            retired_auth.invalidate(clear=True)
+        elif (
+            kind in {"logout", "cancel", "delete", "disable"}
+            and server in registry._oauth
+        ):
+            registry._oauth[server][1].invalidate(clear=kind != "disable")
+    except Exception:
+        auth_error = "OAuth 凭据更新失败，连接已停止"
 
     async def run():
         try:
@@ -43,10 +75,18 @@ def start_operation(
                 await test_connection(registry, server)
             else:
                 await close_session(registry, state)
-                if kind == "connect":
+                if auth_error:
+                    raise McpConfigError(auth_error)
+                if kind == "login" and binding:
+                    await binding.begin(op)
+                if kind == "refresh" and binding:
+                    binding.refresh()
+                if kind in {"connect", "login", "refresh"}:
                     await connect(registry, server, epoch)
                 elif state.epoch == epoch:
-                    state.status = "disconnected" if kind == "cancel" else "disabled"
+                    state.status = (
+                        "disconnected" if kind in {"cancel", "logout"} else "disabled"
+                    )
             op["status"] = "succeeded"
         except asyncio.CancelledError:
             op["status"] = "cancelled"
@@ -58,6 +98,8 @@ def start_operation(
             if state.epoch == epoch and kind != "test":
                 state.status, state.error = "error", op["error"]
         finally:
+            if binding and kind == "login":
+                await binding.finish()
             registry._changed()
 
     registry._operations[server] = asyncio.create_task(
@@ -73,7 +115,7 @@ def cancel_operation(registry: "McpServerRegistry", server: str) -> dict[str, ob
     task = registry._operations.get(server)
     state = registry._states[server]
     if task and not task.done() and state.operation:
-        if state.operation["kind"] == "connect":
+        if state.operation["kind"] in {"connect", "login", "refresh"}:
             return start_operation(registry, server, "cancel")
         if state.operation["kind"] == "test":
             state.operation["status"] = "cancelled"
@@ -103,7 +145,16 @@ def new_session(registry: "McpServerRegistry", server: str) -> McpSession:
         headers = dict(credentials.headers)
         if config.transport.auth == "bearer":
             headers["Authorization"] = f"Bearer {credentials.bearer}"
-        return HttpMcpSession(server, credentials.url or "", headers=headers)
+        binding = (
+            registry.oauth_binding(server) if config.transport.auth == "oauth" else None
+        )
+        return HttpMcpSession(
+            server,
+            credentials.url or "",
+            headers=headers,
+            auth=binding.provider if binding else None,
+            connect_timeout=195.0 if binding and binding.operation else 15.0,
+        )
     return StdioMcpSession(
         server,
         list(credentials.command),
