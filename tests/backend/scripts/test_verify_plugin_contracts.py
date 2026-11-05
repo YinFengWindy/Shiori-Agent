@@ -127,16 +127,31 @@ async def test_database_leak_is_detected_before_fixture_teardown(tmp_path):
         await verify_contract("natural_chat", tmp_path / "workspace", directory=package)
 
 
-async def test_swallowed_external_io_still_fails_the_contract(tmp_path):
+async def test_subprocess_type_annotation_is_not_mistaken_for_process_io(tmp_path):
     package = _package(
         tmp_path,
-        "import socket, subprocess\n"
-        "async def setup(ctx):\n"
+        "import subprocess\n"
+        "def identity(process: subprocess.Popen[bytes]) -> subprocess.Popen[bytes]:\n"
+        "    return process\n"
+        "async def setup(ctx): pass\n",
+    )
+    await verify_contract("natural_chat", tmp_path / "workspace", directory=package)
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
         "    with socket.socket() as connection:\n"
         "        try: connection.connect(('127.0.0.1', 1))\n"
-        "        except Exception: pass\n"
+        "        except Exception: pass\n",
         "    try: subprocess.Popen(['never-executed'])\n"
         "    except Exception: pass\n",
+    ],
+)
+async def test_swallowed_external_io_still_fails_the_contract(tmp_path, operation):
+    package = _package(
+        tmp_path,
+        "import socket, subprocess\nasync def setup(ctx):\n" + operation,
     )
     with pytest.raises(AssertionError, match="Unexpected network/process"):
         await verify_contract("natural_chat", tmp_path / "workspace", directory=package)
