@@ -1,5 +1,5 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: schedule
 display_name: 定时任务
 version: '0.1.0'

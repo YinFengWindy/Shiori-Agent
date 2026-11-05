@@ -1,13 +1,13 @@
 # 插件变更
 
-SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破坏性变更。这里只记已经定版的变更，不设 Unreleased 批次。
+SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。现行自定义 A.B.C 规则中，A 是代际、B 可破坏、C 是同一 A.B 线内的兼容更新；详见 [版本规则](../decisions/2026-11-05-sdk-version-policy.md)。这里只记定版变更，不设 Unreleased 批次。4.0 及更早条目保留其发布时的历史约定。
 
-## 5.0.0
+## 4.1.0
 
 - **breaking**：删除 `Processes.mcp` / `PROCESSES.mcp` 及宿主 MCP 工厂，不保留转发兼容壳。MCP、Browser Use、Computer Use 直接使用内部 `shiori-mcp-client` 包，注入已有 `PROCESSES.spawn` 取得宿主进程与 Windows Job 所有权。
-- `shiori_sdk.mcp` 的 `McpSession`、`McpToolInfo`、`McpToolError`，`shiori_sdk.mcp_result.decode_tool_result` 和 `FakeMcpSession` 迁到 `shiori_mcp_client` 及其测试支持；通用 `ToolResult`、`MCP_TOOLS` 和进程原语保持原契约。客户端库独立版本为 0.1.0，源码位于 `packages/mcp-client/src/shiori_mcp_client`。
-- manifest 仍是 `api: 4`。迁移后的三个客户端插件要求 `sdk: ">=5.0.0"`、Python 依赖 `shiori-sdk>=5.0.0,<6`；未使用移除接口的插件可保留最低 4.0 并显式允许 5.x。不因 SDK 大版本统一提升插件 patch。
-- 未发布的 4.1 decoder 提案合并进本次客户端归属迁移，不作为已发布版本记录。本次准备 SDK 5.0.0 源码与构建产物，不代表已发布注册表或标签。已发布的 SDK 4 产物与历史记录不改写。内部客户端由私有 wheelhouse 和冻结构建交付；不新增 worker 或通用 ZIP 依赖安装器。
+- `shiori_sdk.mcp` 的 `McpSession`、`McpToolInfo`、`McpToolError`，`shiori_sdk.mcp_result.decode_tool_result` 和 `FakeMcpSession` 迁到 `shiori_mcp_client` 及其测试支持；通用 `ToolResult`、`MCP_TOOLS` 和进程原语保持原契约。客户端库版本仍为 0.1.0。
+- 按用户确认的新规则提升 B，本次使用 4.1.0。manifest 仍为 `api: 4`。三个客户端插件与内部库要求 `>=4.1.0,<4.2.0`，manifest 为 `>=4.1.0 <4.2.0`；其他已核对插件可覆盖 `>=4.0.0,<4.2.0`。没有给旧外部声明添加隐式上限，也不批量提升插件版本。
+- 本次准备源码与构建产物，不代表已发布注册表或标签。已发布 4.0 和更早产物与历史记录不改写；此前未合入的 5.0 方案从未发布。内部客户端仍由私有 wheelhouse 和冻结构建交付，不新增 worker 或通用 ZIP 依赖安装器。
 
 ## 4.0.0
 

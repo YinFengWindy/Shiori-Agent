@@ -16,7 +16,7 @@ def _package(tmp_path: Path, source: str, fields: str = "") -> Path:
     package = tmp_path / "natural_chat"
     package.mkdir()
     (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: natural_chat\nentry: plugin.py\n" + fields,
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: natural_chat\nentry: plugin.py\n" + fields,
         encoding="utf-8",
     )
     (package / "plugin.py").write_text(source, encoding="utf-8")

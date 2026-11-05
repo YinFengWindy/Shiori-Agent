@@ -14,7 +14,7 @@ await mkdir(resolve(packageRoot, "backend"), { recursive: true });
 await mkdir(resolve(packageRoot, "ui", "dist"), { recursive: true });
 await writeFile(resolve(workspace, "config.toml"), "[llm]\nregistrations = []\n[plugins.memory_optimizer]\nenabled = false\n[plugins.desktop_pet]\nenabled = false\n", "utf8");
 await writeFile(resolve(packageRoot, "manifest.yaml"), `api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: manual_trust_qa
 version: 1.0.0
 entry: backend/plugin.py
@@ -23,7 +23,7 @@ frontend:
   entry: ui/dist/index.mjs
   exports: [ui]
   css: [ui/dist/style.css]
-  peers: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0', '@yinfengwindy/shiori-sdk': '>=4.0.0 <6.0.0'}
+  peers: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0', '@yinfengwindy/shiori-sdk': '>=4.0.0 <4.2.0'}
 `, "utf8");
 await writeFile(resolve(packageRoot, "backend", "plugin.py"), "from pathlib import Path\nwith (Path(__file__).parents[3] / 'backend-executions.txt').open('a', encoding='utf-8') as marker: marker.write('executed\\n')\nasync def ping(payload): return {'pong': payload.get('value')}\nfrom shiori_sdk.core.services import RPC\nasync def setup(ctx): ctx.require(RPC).register('ping', ping)\n", "utf8");
 const entryPath = resolve(packageRoot, "ui", "dist", "index.mjs");

@@ -9,7 +9,7 @@ import test from "node:test";
 import { buildPlugin } from "./build-plugin.mjs";
 import { pathToFileURL } from "node:url";
 
-const peers = { react: ">=19.2.0 <20.0.0", "react-dom": ">=19.2.0 <20.0.0", "@yinfengwindy/shiori-sdk": ">=4.0.0 <6.0.0" };
+const peers = { react: ">=19.2.0 <20.0.0", "react-dom": ">=19.2.0 <20.0.0", "@yinfengwindy/shiori-sdk": ">=4.0.0 <4.2.0" };
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("one frontend artifact carries named contributions without starting their effects", async (t) => {
@@ -18,7 +18,7 @@ test("one frontend artifact carries named contributions without starting their e
   const source = join(root, "source");
   await mkdir(join(source, "backend"), { recursive: true });
   await writeFile(join(source, "backend/plugin.py"), "async def setup(ctx):\n    pass\n", "utf8");
-  await writeFile(join(source, "manifest.yaml"), "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: frontend_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: entry.ts}\n", "utf8");
+  await writeFile(join(source, "manifest.yaml"), "api: 4\nsdk: '>=4.0.0 <4.2.0'\ndistribution: external\nid: frontend_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: entry.ts}\n", "utf8");
   await writeFile(join(source, "package.json"), JSON.stringify({peerDependencies: peers}), "utf8");
   await writeFile(join(source, "entry.ts"), "import './style.css'; export const ui={pluginId:'frontend_demo'}; export const background={pluginId:'frontend_demo',setup(){throw Error('explicit start only')}}; export const surface={pluginId:'frontend_demo',surface:{component(){return null}}};", "utf8");
   await writeFile(join(source, "style.css"), ".frontend-demo { display: flex; }", "utf8");
@@ -43,7 +43,7 @@ test("independent ZIP builds preserve peers and pass the actual host package val
   const source = join(root, "source"), output = join(root, "output");
   const files = {
     "package.json": JSON.stringify({peerDependencies: peers}),
-    "manifest.yaml": "api: 4\nsdk: '>=4.0.0'\ndistribution: external\nid: independent_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: ui/index.tsx}\nassets: [assets/label.txt]\n",
+    "manifest.yaml": "api: 4\nsdk: '>=4.0.0 <4.2.0'\ndistribution: external\nid: independent_demo\nversion: '1.0.0'\nentry: backend/plugin.py\nfrontend: {entry: ui/index.tsx}\nassets: [assets/label.txt]\n",
     "backend/plugin.py": "from .helper import LABEL\nasync def setup(ctx):\n    pass\n",
     "backend/helper.py": "LABEL = 'self contained'\n",
     "backend/__pycache__/helper.pyc": "not shipped",

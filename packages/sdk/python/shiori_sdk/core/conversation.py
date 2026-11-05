@@ -411,8 +411,8 @@ class RoleReplyState:
 class Conversation(Protocol):
     """Deliver a reply the host initiated, outside a user turn.
 
-    The host provides this key for the generation it belongs to. 4.x cannot
-    add methods to this protocol later (D19).
+    The host provides this key for the generation it belongs to. Required methods
+    cannot be added within one A.B compatibility line; incompatible changes advance B.
     """
 
     async def deliver_initiated_reply(self, reply: InitiatedReply) -> InitiatedDelivery:

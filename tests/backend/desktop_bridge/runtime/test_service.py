@@ -76,7 +76,8 @@ async def setup(ctx):
         package = tmp_path / "source" / plugin_id
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n{manifest}", encoding="utf-8"
+            f"api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: {plugin_id}\n{manifest}",
+            encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(
             common + setup + rpc, encoding="utf-8"
@@ -310,7 +311,7 @@ async def test_generated_trust_operation_waits_for_publication_and_replay_is_qui
     package = tmp_path / "plugins" / "trust_probe"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: trust_probe\nversion: 1.0.0\nentry: backend/plugin.py\ninject: [rpc]\n",
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: trust_probe\nversion: 1.0.0\nentry: backend/plugin.py\ninject: [rpc]\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(
@@ -548,7 +549,7 @@ async def test_plugin_wire_routes_events_and_reports_disabled_contexts(
         package = tmp_path / "source" / plugin_id
         (package / "backend").mkdir(parents=True)
         (package / "manifest.yaml").write_text(
-            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\ninject: [rpc]\n"
+            f"api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: {plugin_id}\ninject: [rpc]\n"
             "config_model: Config\n",
             encoding="utf-8",
         )
@@ -701,7 +702,7 @@ async def first_trust_runtime(tmp_path, monkeypatch):
     ):
         (directory / "backend").mkdir(parents=True)
         (directory / "manifest.yaml").write_text(
-            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\nversion: 1.0.0\n"
+            f"api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: {plugin_id}\nversion: 1.0.0\n"
             f"entry: backend/plugin.py\nsupports_hot_unload: false\ndefault_enabled: {str(default_enabled).lower()}\n",
             encoding="utf-8",
         )
@@ -863,7 +864,7 @@ async def transitioning_workspace_plugin(tmp_path, monkeypatch):
     package = tmp_path / "plugins" / "transitioning"
     (package / "backend").mkdir(parents=True)
     (package / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: transitioning\nversion: 1.0.0\n"
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: transitioning\nversion: 1.0.0\n"
         "entry: backend/plugin.py\ninject: [config, rpc]\nconfig_model: Config\n",
         encoding="utf-8",
     )
@@ -1024,7 +1025,7 @@ async def test_graph_excluded_plugins_can_be_disabled_to_restore_the_provider(
                 declarations += f"{relation}: [first]\n"
             source = f"from shiori_sdk.kernel import Key\nasync def setup(ctx): ctx.provide(Key('shared.engine'), {plugin_id!r})\n"
         (package / "manifest.yaml").write_text(
-            f"api: 4\nsdk: '>=4.0.0'\nid: {plugin_id}\n" + declarations,
+            f"api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: {plugin_id}\n" + declarations,
             encoding="utf-8",
         )
         (package / "backend/plugin.py").write_text(source, encoding="utf-8")
