@@ -113,7 +113,7 @@ class HttpPeer:
             }
         if method == "tools/list":
             names = self.names[2:] if params.get("cursor") else self.names[:2]
-            result = {
+            result: dict[str, object] = {
                 "tools": [
                     {
                         "name": name,

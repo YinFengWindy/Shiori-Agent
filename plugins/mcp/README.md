@@ -10,7 +10,7 @@
 
 HTTP 服务器填写完整 http(s) 地址，支持匿名、Bearer 或自定义请求头认证。请求头使用 JSON 字符串对象。完整地址（包括 query）、token 和请求头值均不从读取接口回显，编辑时选择保留或替换；请求头可清空。地址不接受 userinfo/fragment，请求头拒绝换行、重复名称及协议保留头；自定义 Authorization 只能选择「自定义请求头」认证，不能与 Bearer 混用。连接失败保留配置，401/403 显示对应状态码。
 
-HTTP 使用官方 `mcp==2.3.0`，支持分页发现、JSON/SSE、文本、图片和对象 structuredContent，并与 stdio 共用 SDK 结果转换。现代协议的数组、标量或显式 null structuredContent 以 JSON 文本呈现，已有等价文本不重复追加；`ToolResult.structured_content` 仍只保存对象。工具调用不自动处理 elicitation、扩展结果或重发，OAuth 尚未交付。
+stdio 与 HTTP 由内部 `shiori-mcp-client` 使用官方 `mcp==2.3.0`，支持分页发现、JSON/SSE、文本、图片和对象 structuredContent，共用内部库的结果转换。现代协议的数组、标量或显式 null structuredContent 以 JSON 文本呈现，已有等价文本不重复追加；`ToolResult.structured_content` 仍只保存对象。工具调用不自动处理 elicitation、扩展结果或重发，OAuth 尚未交付。
 
 工具默认全部允许，也可勾选指定工具；空选择表示全部禁止。停用、删除或取消工具选择立即阻止后续调用，包括旧工具引用。取消不会撤销远端已经发生的副作用。
 

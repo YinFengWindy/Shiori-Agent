@@ -5,4 +5,4 @@ The npm package, the host pin and host-testing use this same number.
 runtime_api version and no Unreleased batch.
 """
 
-__version__ = "4.1.0"
+__version__ = "5.0.0"

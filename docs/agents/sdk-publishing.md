@@ -29,6 +29,14 @@ npm 包、宿主和 host-testing 的精确 pin 必须一致。桌面包内置的
 - npm 与 PyPI 各有独立发布 job，只有它们拥有 `id-token: write`。它们按 build job
   输出的 artifact ID 下载同一批文件、复核校验和，再通过 OIDC 发布；发布时不重建。
 
+## SDK 5 与内部 MCP 客户端
+
+5.0.0 源码迁移删除 `Processes.mcp`，并把 MCP 会话、类型、结果转换和专用 fake 移到内部 `shiori-mcp-client` 0.1.0。manifest 仍为 `api: 4`；`MCP_TOOLS` 不变。本次源码与依赖准备不授权发布 SDK 标签或注册表，实际发布仍走上面的独立流程，不能改写 SDK 4 的既有标签。
+
+客户端库源码位于 `packages/mcp-client/src/shiori_mcp_client`，有独立版本。私有 wheelhouse 必须包含本次构建的确切客户端 wheel；冻结构建收集其官方 MCP SDK 依赖和元数据。它不随 SDK 发布工作流自动发布到 PyPI，后续客户端实现更新也不要求同步提高 Shiori SDK 版本。三个客户端插件的 Python 依赖要求 SDK 5，其余已核对未变接口的消费者可允许 4.x 与 5.x。插件 patch 按实际包内容变更处理，不因这次 SDK 主版本统一升号。
+
+这不是通用插件依赖安装器：当前 ZIP 仍只交付源码和显式资源；更换冻结程序里的依赖需要重新构建桌面。
+
 ## 契约定版检查
 
 `node scripts/check_sdk_release.mjs` 要求完整 Git 历史与标签，以及 SDK/npm/宿主/host-testing

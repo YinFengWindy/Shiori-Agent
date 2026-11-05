@@ -14,9 +14,9 @@ HTTP 支持匿名、Bearer、自定义请求头和 OAuth。授权在重启后保
 
 ## 归属与接口
 
-两个独立设计候选都选择 MCP 插件作为服务器配置、认证、连接和执行准入的唯一 owner。继续复用宿主 `PROCESSES.mcp()` 管理 stdio 进程；HTTP/OAuth adapter 在插件中使用固定稳定版官方 Python MCP SDK。不要手写另一套 HTTP JSON-RPC、SSE 和 OAuth 协议。
+MCP 插件是服务器配置、认证、连接和执行准入的唯一 owner。用户确认按 [SDK 5 客户端归属修订](2026-11-05-mcp-sdk5-boundary.md) 删除 PROCESSES.mcp，协议客户端进入共享内部库，宿主只托管通用进程；普通插件在进程内运行，不新增 worker。
 
-`McpSession` 的 connect/call/disconnect 契约保持。HTTP 和 stdio 共用现有 MCP 结果转换：将纯 decoder 移入 SDK 纯 helper，不复制文本、图片、structuredContent 与错误转换。不得给已有 SDK Key/Protocol 加方法，不新增宿主 capability、phase 或层。
+connect/call/disconnect 的调用行为保持，MCP 专用类型、stdio/HTTP 和结果转换统一归内部客户端库。SDK 5 移除这批协议专用接口及实现，通用 ToolResult、进程启动与工具注册保留；不新增宿主 capability、phase 或层。
 
 UI 通过现有插件 RPC 和状态变化事件操作 registry；管理工具也进入同一 registry。异步连接、测试和登录不占据全局 RPC mutation lane 等待网络，写操作返回可跟踪的 operation。页面保存携带配置修订，防止旧表单覆盖新配置。
 

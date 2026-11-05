@@ -38,10 +38,10 @@ from threading import Thread
 
 assert getattr(sys, "frozen", False)
 root = Path(sys._MEIPASS).resolve()
-for name in ("plugins.mcp.backend.plugin", "plugins.mcp.backend.http_session", "mcp.client.streamable_http", "mcp_types"):
+for name in ("plugins.mcp.backend.plugin", "shiori_mcp_client", "mcp.client.streamable_http", "mcp_types"):
     module = importlib.import_module(name)
     assert Path(module.__file__).resolve().is_relative_to(root), name
-versions = {name: version(name) for name in ("shiori-plugin-mcp", "mcp", "mcp-types", "httpx2", "httpcore2")}
+versions = {name: version(name) for name in ("shiori-mcp-client", "mcp", "mcp-types", "httpx2", "httpcore2")}
 assert versions["mcp"] == "2.3.0", versions
 
 class Peer(BaseHTTPRequestHandler):
@@ -67,11 +67,11 @@ class Peer(BaseHTTPRequestHandler):
         self.end_headers(); self.wfile.write(body)
 
 async def probe():
-    from plugins.mcp.backend.http_session import HttpMcpSession
-    from plugins.mcp.backend.models import HttpTransport, LaunchCredentials
+    from shiori_mcp_client import HttpMcpSession, StdioMcpSession
+    from infra.process.plugin_capability import HostProcesses
     server = ThreadingHTTPServer(("127.0.0.1", 0), Peer)
     thread = Thread(target=server.serve_forever, daemon=True); thread.start()
-    session = HttpMcpSession("frozen", HttpTransport(), LaunchCredentials(url=f"http://127.0.0.1:{server.server_port}/mcp"))
+    session = HttpMcpSession("frozen", f"http://127.0.0.1:{server.server_port}/mcp")
     try:
         assert [tool.name for tool in await session.connect()] == ["echo"]
         assert await session.call("echo", {}) == "frozen-http-ok"
@@ -79,8 +79,31 @@ async def probe():
         await session.disconnect()
         server.shutdown(); server.server_close(); thread.join()
 
-asyncio.run(probe())
-print(json.dumps({"frozen": True, "http_call": "passed", "versions": versions}))
+    stdio = StdioMcpSession("frozen-stdio", [sys.executable, "--stdio-peer"], processes=HostProcesses(), own_process_tree=sys.platform == "win32")
+    try:
+        assert [tool.name for tool in await stdio.connect()] == ["echo"]
+        assert await stdio.call("echo", {}) == "frozen-stdio-ok"
+    finally:
+        await stdio.disconnect()
+
+if "--stdio-peer" in sys.argv:
+    for line in sys.stdin:
+        request = json.loads(line)
+        if "id" not in request:
+            continue
+        method = request["method"]
+        if method == "server/discover":
+            result = {"error": {"code": -32601, "message": "legacy"}}
+        elif method == "initialize":
+            result = {"result": {"protocolVersion": "2025-11-25", "capabilities": {"tools": {}}, "serverInfo": {"name": "frozen-stdio", "version": "1"}}}
+        elif method == "tools/list":
+            result = {"result": {"tools": [{"name": "echo", "inputSchema": {"type": "object"}}]}}
+        else:
+            result = {"result": {"content": [{"type": "text", "text": "frozen-stdio-ok"}]}}
+        print(json.dumps({"jsonrpc": "2.0", "id": request["id"], **result}), flush=True)
+else:
+    asyncio.run(probe())
+    print(json.dumps({"frozen": True, "http_call": "passed", "stdio_call": "passed", "versions": versions}))
 `, "utf8");
 const pluginModules = await collectPluginBackendModules(stagedPluginsDir);
 const args = createRuntimePyinstallerArgs({

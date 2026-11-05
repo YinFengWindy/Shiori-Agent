@@ -80,7 +80,7 @@ async def test_stop_prevents_queued_input_and_retains_lease_until_disconnect(
 async def test_startup_protocol_failure_releases_native_resources(
     native_boundary, tmp_path
 ):
-    from shiori_sdk.mcp import McpToolError
+    from shiori_mcp_client import McpToolError
 
     _session, client, lease = native_boundary
     client.connect.side_effect = McpToolError(

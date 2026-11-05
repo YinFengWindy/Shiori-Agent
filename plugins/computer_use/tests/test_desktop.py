@@ -6,7 +6,7 @@ import asyncio
 
 import pytest
 
-from shiori_sdk.mcp import McpToolError
+from shiori_mcp_client import McpToolError
 from shiori_sdk.testing.processes import current_tool_turn, tool_turn
 from plugins.computer_use.backend.config import ComputerUseConfig
 from plugins.computer_use.backend.desktop import ComputerDesktop

@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -2028,6 +2028,7 @@ dev = [
     { name = "rich" },
     { name = "ruff" },
     { name = "shiori-host-testing" },
+    { name = "shiori-mcp-client", extra = ["test"] },
     { name = "shiori-plugin-herdr", extra = ["test"] },
     { name = "shiori-plugin-mcp", extra = ["test"] },
 ]
@@ -2075,6 +2076,7 @@ dev = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "ruff", specifier = ">=0.15" },
     { name = "shiori-host-testing", editable = "packages/shiori-host-testing" },
+    { name = "shiori-mcp-client", extras = ["test"], editable = "packages/mcp-client" },
     { name = "shiori-plugin-herdr", extras = ["test"], editable = "plugins/herdr" },
     { name = "shiori-plugin-mcp", extras = ["test"], editable = "plugins/mcp" },
 ]
@@ -2091,8 +2093,30 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "shiori-agent", specifier = "==0.1.0" },
-    { name = "shiori-sdk", extras = ["testing"], specifier = "==4.1.0" },
+    { name = "shiori-sdk", extras = ["testing"], specifier = "==5.0.0" },
 ]
+
+[[package]]
+name = "shiori-mcp-client"
+version = "0.1.0"
+source = { editable = "packages/mcp-client" }
+dependencies = [
+    { name = "mcp" },
+    { name = "shiori-sdk" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "shiori-sdk", extra = ["testing"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "mcp", specifier = "==2.3.0" },
+    { name = "shiori-sdk", specifier = ">=5.0.0,<6" },
+    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=5.0.0,<6" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "shiori-plugin-default-memory"
@@ -2114,8 +2138,8 @@ requires-dist = [
     { name = "json-repair", specifier = ">=0.40.0" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "pydantic", specifier = ">=2.12.0" },
-    { name = "shiori-sdk", specifier = ">=4.0.0,<5" },
-    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=4.0.0,<5" },
+    { name = "shiori-sdk", specifier = ">=4.0.0,<6" },
+    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=4.0.0,<6" },
     { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "tzdata", marker = "sys_platform == 'win32'", specifier = ">=2025.2" },
 ]
@@ -2138,8 +2162,8 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "shiori-sdk", specifier = ">=4.0.0,<5" },
-    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=4.0.0,<5" },
+    { name = "shiori-sdk", specifier = ">=4.0.0,<6" },
+    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=4.0.0,<6" },
 ]
 provides-extras = ["test"]
 
@@ -2148,8 +2172,8 @@ name = "shiori-plugin-mcp"
 version = "0.1.0"
 source = { editable = "plugins/mcp" }
 dependencies = [
-    { name = "mcp" },
     { name = "pydantic" },
+    { name = "shiori-mcp-client" },
     { name = "shiori-sdk" },
 ]
 
@@ -2160,10 +2184,10 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "mcp", specifier = "==2.3.0" },
     { name = "pydantic", specifier = ">=2.12.0" },
-    { name = "shiori-sdk", specifier = ">=4.1.0,<5" },
-    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=4.1.0,<5" },
+    { name = "shiori-mcp-client", specifier = "==0.1.0" },
+    { name = "shiori-sdk", specifier = ">=5.0.0,<6" },
+    { name = "shiori-sdk", extras = ["testing"], marker = "extra == 'test'", specifier = ">=5.0.0,<6" },
 ]
 provides-extras = ["test"]
 

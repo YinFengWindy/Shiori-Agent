@@ -25,6 +25,7 @@ dev = [
     "qrcode>=8.2",
     "rich>=15.0.0",
     "shiori-host-testing==0.1.0",
+    "shiori-mcp-client[test]==0.1.0",
     "shiori-plugin-herdr[test]==0.1.2",
     "shiori-plugin-mcp[test]==0.1.0",
     "black>=26.0.0",
@@ -38,6 +39,7 @@ dev = [
 
 
 [tool.uv.sources]
+shiori-mcp-client = { path = "packages/mcp-client", editable = true }
 shiori-host-testing = { path = "packages/shiori-host-testing", editable = true }
 shiori-sdk = { path = "packages/sdk", editable = true }
 shiori-plugin-default-memory = { path = "plugins/default_memory", editable = true }
@@ -66,6 +68,7 @@ root_packages = [
     "utils",
     "plugins",
     "shiori_sdk",
+    "shiori_mcp_client",
     "shiori_host_testing",
     "tests",
 ]
@@ -120,7 +123,7 @@ allow_indirect_imports = true
 [[tool.importlinter.contracts]]
 name = "SDK 和插件不 import 宿主"
 type = "forbidden"
-source_modules = ["shiori_sdk", "plugins"]
+source_modules = ["shiori_sdk", "shiori_mcp_client", "plugins"]
 forbidden_modules = [
     "shiori_host_testing",
     "tests",
@@ -141,6 +144,13 @@ allow_indirect_imports = true
 name = "SDK 不 import 插件"
 type = "forbidden"
 source_modules = ["shiori_sdk"]
+forbidden_modules = ["plugins", "shiori_mcp_client"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "MCP client 不 import 插件"
+type = "forbidden"
+source_modules = ["shiori_mcp_client"]
 forbidden_modules = ["plugins"]
 allow_indirect_imports = true
 

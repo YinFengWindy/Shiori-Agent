@@ -43,7 +43,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 ### `sdk` 与 `frontend.peers` 的比较语法
 
-两者用同一套小语法（`agent/plugin_host/versions.py`）：空格分隔的 `=`、`>`、`>=`、`<`、`<=` 比较，逻辑与；不带运算符的 SemVer 表示相等。例如 `>=4.0.0`、`>=4.0.0 <5.0.0`。**不支持** caret（`^`）、tilde（`~`）、通配、逗号、`||` 和连字符范围，`4` 这种不完整版本也不行。build 元数据不参与比较。宿主是预发布版本时，必须有一条比较项写的是同一 `主.次.补丁` 的预发布版本才算满足。
+两者用同一套小语法（`agent/plugin_host/versions.py`）：空格分隔的 `=`、`>`、`>=`、`<`、`<=` 比较，逻辑与；不带运算符的 SemVer 表示相等。例如 `>=5.0.0`、`>=4.0.0 <6.0.0`。**不支持** caret（`^`）、tilde（`~`）、通配、逗号、`||` 和连字符范围，`4` 这种不完整版本也不行。build 元数据不参与比较。宿主是预发布版本时，必须有一条比较项写的是同一 `主.次.补丁` 的预发布版本才算满足。
 
 `sdk` 写错语法：安装和发现都是 `invalid_manifest`。语法对但不包含当前 SDK：安装被拒（`incompatible_sdk`），已装的包和内置包在名册里是 `BLOCKED` / `incompatible_sdk`，不中断启动。`frontend.peers` 写错语法是 `invalid_version_range`，宿主的 React 不满足是 `incompatible_runtime`，缺少 `react`、`react-dom` 或 `@yinfengwindy/shiori-sdk` 是 `missing_dependency`。
 
@@ -99,7 +99,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `conversation` | `CONVERSATION` | 宿主（P6b），每个代一份。`deliver_initiated_reply(InitiatedReply) -> InitiatedDelivery` 以会话所属角色投递一条主动回复，可带目标、媒体、心情、自然回复序列和工具事实，返回已落库的消息 id 与是否完整发出；`reply_state(role_id)` 读该代角色会话的心情目录和已存心情时间 |
 | `memory_optimizer` | `MEMORY_OPTIMIZER` | 系统插件 `memory_optimizer`（P6b）。只有 `active_run()`：正在整理的角色与开始时间。核心 `get` 它在任务面板列出记忆维护，`None` 时不列 |
 
-旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是外部插件，新装默认关闭，没启用时没有 `mcp_add`；`plugin-data/mcp/mcp_servers.json` 里已有服务器的工作区（旧根目录文件先由 bootstrap 迁入）会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
+旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是内置功能插件，新装默认关闭，没启用时没有 `mcp_add`；`plugin-data/mcp/mcp_servers.json` 里已有服务器的工作区（旧根目录文件先由 bootstrap 迁入）会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
 
 即时聊天的选用：插件在提供，并且角色 `runtime_config.natural_chat_enabled` 是布尔 `True`。插件关闭时不选用，回复是单条。`natural_chat_enabled` 仍在角色 JSON，不进 `config.toml`。
 
@@ -175,7 +175,13 @@ SDK 独立 semver，源只在 `packages/sdk/python/shiori_sdk/_version.py`。大
 
 npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版本。`node scripts/check_sdk_release.mjs --align` 只核对这三处。正式 tag 再跑完整检查：`plugin-changelog.md` 要有当前版本的 `## X.Y.Z` 条目，拒绝回退，也拒绝已发布 tag 上的同版本源码被改掉。没有 Unreleased 批次，也没有 `sync_sdk_version.mjs`。
 
-插件自己的 `version` 独立。SDK 升大版本不因此给每个插件升 patch。插件的 `shiori-sdk` 依赖要承认它实际要跑的 SDK；本仓库插件是 `>=4.0.0,<5`。
+插件自己的 `version` 独立。SDK 升大版本不因此给每个插件升 patch。插件的 `shiori-sdk` 依赖要承认它实际要跑的 SDK；MCP、Browser Use、Computer Use 使用 `>=5.0.0,<6`，其余只用未变接口的插件保留最低 4.0 并允许 `>=4.0.0,<6`。
+
+## SDK 5 的 MCP 迁移
+
+SDK 5.0.0 仍使用 manifest `api: 4`，不是 API 5。`PROCESSES` 只负责通用进程与管道所有权；`mcp(...)` 已删除。调用方声明内部 `shiori-mcp-client` 依赖，直接构造该库的 stdio/HTTP 会话，并把 `ctx.require(PROCESSES)` 注入 stdio 会话。`McpSession`、`McpToolInfo`、`McpToolError`、结果 decoder 与 `FakeMcpSession` 从 SDK 移到 `shiori_mcp_client`；测试支持随客户端库维护。
+
+客户端源码在 `packages/mcp-client/src/shiori_mcp_client`，由私有 wheelhouse 和冻结程序装配，不要求公开 PyPI 发布。MCP 插件继续拥有服务器配置、凭据、OAuth、工具筛选与管理界面；Browser Use 和 Computer Use 的会话不依赖 MCP 插件是否启用。proactive 每次解析 MCP 插件当前导出，共用其配置与准入。`MCP_TOOLS` 和通用 `ToolResult` 不变。现有 ZIP 安装不会解析 Python 依赖，冻结桌面的依赖更新仍需桌面构建。详见 [SDK 5 决策](../decisions/2026-11-05-mcp-sdk5-boundary.md)。
 
 ## 4.0 基线里的插座
 

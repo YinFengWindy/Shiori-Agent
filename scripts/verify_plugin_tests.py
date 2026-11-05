@@ -15,6 +15,7 @@ from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name, parse_wheel_filename
 from shiori_sdk.testing.packages import stage_plugin_package
 
@@ -136,7 +137,16 @@ def verify_plugin(
         {
             f"plugins.{name}.backend.plugin": str(sources[name] / "backend/plugin.py")
             for name in sorted(ids)
-        },
+        }
+        | (
+            {
+                "shiori_mcp_client": str(
+                    REPOSITORY / "packages/mcp-client/src/shiori_mcp_client/__init__.py"
+                )
+            }
+            if local_libraries(ids)
+            else {}
+        ),
         allowed,
         # Other targets also coexist in the artifact's staging directory. No
         # test may execute their uninstalled implementations through an alias.
@@ -240,6 +250,26 @@ def plugin_dependencies(
                 f"dependency: {requirement}"
             )
     return {directory for name in local if (directory := plugin_id_of(name))}
+
+
+def local_libraries(plugin_ids: Iterable[str]) -> dict[str, Path]:
+    """Build the declared internal client locally; never resolve its name on PyPI."""
+    for plugin_id in plugin_ids:
+        project = tomllib.loads(
+            (REPOSITORY / "plugins" / plugin_id / "pyproject.toml").read_text(
+                encoding="utf-8"
+            )
+        )["project"]
+        requirements = [
+            *project.get("dependencies", []),
+            *project.get("optional-dependencies", {}).get("test", []),
+        ]
+        if any(
+            canonicalize_name(Requirement(item).name) == "shiori-mcp-client"
+            for item in requirements
+        ):
+            return {"mcp-client": REPOSITORY / "packages/mcp-client"}
+    return {}
 
 
 def schedule(plugin_ids: Iterable[str]) -> list[str]:
@@ -366,6 +396,7 @@ def main(argv: list[str] | None = None) -> None:
         {
             **copies,
             "sdk": REPOSITORY / "packages/sdk",
+            **local_libraries(dependencies),
         },
         wheelhouse,
         artifact_root,

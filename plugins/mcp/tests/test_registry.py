@@ -8,8 +8,9 @@ import logging
 from pathlib import Path
 
 import pytest
-from shiori_sdk.mcp import McpToolInfo
-from shiori_sdk.testing.processes import FakeMcpSession, FakeProcesses
+from shiori_mcp_client import McpToolInfo
+from shiori_mcp_client.testing import FakeMcpSession
+from shiori_sdk.testing.processes import FakeProcesses
 
 from plugins.mcp.backend.registry import McpServerRegistry
 
@@ -38,9 +39,17 @@ class _Session(FakeMcpSession):
         self.disconnected = True
 
 
-class _Processes(FakeProcesses):
-    def mcp(self, name, command, env=None, cwd=None, **_kwargs):
-        return _Session(name, command, env, cwd)
+@pytest.fixture(autouse=True)
+def session_factory(monkeypatch):
+    monkeypatch.setattr(
+        "plugins.mcp.backend.operations.StdioMcpSession",
+        lambda name, command, env=None, cwd=None, **kwargs: _Session(
+            name, command, env, cwd
+        ),
+    )
+
+
+_Processes = FakeProcesses
 
 
 class _Registration:
@@ -353,8 +362,8 @@ async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
     tmp_path,
     caplog,
 ):
-    from .http_peer import HttpPeer
-    from shiori_sdk.mcp import McpToolError
+    from shiori_mcp_client.testing_http import HttpPeer
+    from shiori_mcp_client import McpToolError
 
     path = tmp_path / "mcp_servers.json"
     caplog.set_level(logging.DEBUG)
@@ -452,7 +461,7 @@ async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
 
 
 async def test_http_call_auth_failure_removes_tools_and_retains_configuration(tmp_path):
-    from .http_peer import HttpPeer
+    from shiori_mcp_client.testing_http import HttpPeer
 
     async with HttpPeer() as peer:
         registry = McpServerRegistry(
@@ -484,13 +493,17 @@ async def test_http_call_auth_failure_removes_tools_and_retains_configuration(tm
 async def test_http_metadata_headers_preserve_discovered_schema_and_call_result(
     tmp_path,
 ):
-    from .http_peer import HttpPeer
+    from shiori_mcp_client.testing_http import HttpPeer
 
     class MetadataPeer(HttpPeer):
         async def _rpc(self, request):
             response = await super()._rpc(request)
             if request["method"] == "tools/list":
-                for tool in response["result"]["tools"]:
+                assert response is not None
+                tools = response["result"]["tools"]
+                assert isinstance(tools, list)
+                for tool in tools:
+                    assert isinstance(tool, dict)
                     tool["inputSchema"] = {
                         "type": "object",
                         "properties": {"content": {"type": "string"}},
@@ -556,7 +569,7 @@ async def test_manual_reconnect_supersedes_pending_source_retry(tmp_path, monkey
     sessions = []
     calls = []
 
-    def session_factory(_self, name, command, env=None, cwd=None, **_kwargs):
+    def session_factory(name, command, env=None, cwd=None, **_kwargs):
         session = _Session(name, command, env, cwd)
         sessions.append(session)
         return session
@@ -574,7 +587,9 @@ async def test_manual_reconnect_supersedes_pending_source_retry(tmp_path, monkey
             raise ConnectionError("lost connection")
         return f"session {number}"
 
-    monkeypatch.setattr(_Processes, "mcp", session_factory)
+    monkeypatch.setattr(
+        "plugins.mcp.backend.operations.StdioMcpSession", session_factory
+    )
     monkeypatch.setattr(_Session, "connect", connect)
     monkeypatch.setattr(_Session, "call", call)
     registration = _Registration()

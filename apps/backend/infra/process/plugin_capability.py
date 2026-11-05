@@ -2,7 +2,7 @@
 
 ``HostProcesses`` is the ``host.processes`` core service, one per kernel
 generation and shared by every plugin: plugins supply the commands and own
-their policy, the host owns spawning (owned spawn, Windows Job) and MCP clients.
+their policy, the host owns spawning (owned spawn, Windows Job) and process ownership.
 """
 
 import sys
@@ -10,32 +10,11 @@ from pathlib import Path
 from typing import BinaryIO
 
 
-from infra.process.mcp_client import McpClient
 from infra.process.owned_spawn import popen_owned, spawn_owned
 
 
 class HostProcesses:
-    """Use existing MCP, owned spawn and Windows Job implementations."""
-
-    def mcp(
-        self,
-        name: str,
-        command: list[str],
-        env: dict[str, str] | None = None,
-        cwd: str | None = None,
-        *,
-        own_process_tree: bool = False,
-        inherit_env: bool = True,
-    ):
-        """Build one explicitly owned connection without starting it."""
-        return McpClient(
-            name,
-            command,
-            env,
-            cwd,
-            own_process_tree=own_process_tree,
-            inherit_env=inherit_env,
-        )
+    """Use owned spawn and Windows Job implementations."""
 
     async def spawn(
         self,

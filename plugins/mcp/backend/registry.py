@@ -9,7 +9,13 @@ from typing import Any, Callable
 from uuid import uuid4
 from pydantic import ValidationError
 from shiori_sdk.core.mcp_tools import McpToolRegistration
-from shiori_sdk.mcp import McpSession, McpToolInfo, McpToolError
+from shiori_mcp_client import (
+    McpProtocolError,
+    McpHttpError,
+    McpSession,
+    McpToolInfo,
+    McpToolError,
+)
 from . import operations
 from shiori_sdk.processes import Processes
 from shiori_sdk.redaction import redact_secrets
@@ -18,7 +24,6 @@ from .api import SourceCall
 from .configuration import connection_edit
 from .models import (
     McpConfigError,
-    McpHttpError,
     ServerConfig,
     ToolSelection,
 )
@@ -371,7 +376,7 @@ class McpServerRegistry:
 
     @staticmethod
     def _safe_error(error: Exception) -> str:
-        if isinstance(error, McpConfigError):
+        if isinstance(error, (McpConfigError, McpProtocolError)):
             return str(error)
         if isinstance(error, FileNotFoundError):
             return "找不到 MCP 启动程序或工作目录"

@@ -68,7 +68,3 @@ class LaunchCredentials(Record):
 
 class McpConfigError(ValueError):
     """A safe validation message, without Pydantic input values."""
-
-
-class McpHttpError(McpConfigError):
-    """Safe HTTP status failure; the connection needs explicit attention."""
