@@ -302,13 +302,18 @@ async def verify_contract(
                         resources._resources == retained
                     ), "process resources were not retained across reload"
                     assert all(not task.done() for task in persistent_tasks)
-                    assert [
+                    reload_tasks = [
                         (owner, name) for owner, name, _ in observation.spawned
-                    ] == [
+                    ]
+                    expected_tasks = [
                         (owner, name)
                         for owner, name, task in cold_tasks
                         if owner in result.plugin_ids and task not in persistent_tasks
-                    ], "task creation order differs from cold setup (retained tasks are unchanged)"
+                    ]
+                    assert reload_tasks == expected_tasks, (
+                        "task creation order differs from cold setup (retained tasks are unchanged)",
+                        {"cold": expected_tasks, "reload": reload_tasks},
+                    )
                     replacement = manager.kernel.get(consumer_key)
                     assert (
                         replacement is not None

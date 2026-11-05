@@ -277,3 +277,22 @@ async def test_registry_context_is_task_local() -> None:
 
     assert first == {"channel": "telegram", "chat_id": "123"}
     assert second == {"channel": "discord", "chat_id": "999"}
+
+
+async def test_mcp_open_schema_preserves_explicit_arguments_without_host_context():
+    class RemoteTool(_NoTargetTool):
+        parameters = {"type": "object", "additionalProperties": True}
+
+        async def execute(self, **kwargs):
+            return json.dumps(kwargs)
+
+    tools = ToolRegistry()
+    tool = RemoteTool()
+    tools.register(tool, source_type="mcp", source_name="remote")
+    tools.set_context(
+        channel="desktop", role_id="private-role", account_full_tools="true"
+    )
+    result = await tools.execute(
+        tool.name, {"channel": "remote-room", "custom": {"nested": 1}}
+    )
+    assert json.loads(result) == {"channel": "remote-room", "custom": {"nested": 1}}

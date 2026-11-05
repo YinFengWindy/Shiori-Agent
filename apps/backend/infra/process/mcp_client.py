@@ -212,7 +212,7 @@ class McpClient:
                 try:
                     response = json.loads(text)
                 except json.JSONDecodeError:
-                    self._recent_stdout.append(text[:500])
+                    self._recent_stdout.append("non-JSON stdout omitted")
                     continue
                 if not isinstance(response, dict):
                     continue
@@ -305,13 +305,14 @@ class McpClient:
                 line = await stderr.readline()
                 if not line:
                     break
-                text = line.decode(errors="replace").rstrip()
-                self._recent_stderr.append(text[:500])
-                logger.debug("[mcp:%s] stderr: %s", self.name, text)
+                self._recent_stderr.append(f"stderr line ({len(line)} bytes)")
+                logger.debug(
+                    "[mcp:%s] stderr received (%d bytes)", self.name, len(line)
+                )
         except Exception as e:
             # 排空失败不影响 stdio 主协议通道，因此在这里就地记录并结束，
             # 而不是把异常留给一个无人 await 的 task 在 GC 时才暴露。
-            logger.warning("[mcp:%s] stderr 排空中止: %s", self.name, e)
+            logger.warning("[mcp:%s] stderr 排空中止 (%s)", self.name, type(e).__name__)
 
     def _build_timeout_message(
         self,
@@ -324,10 +325,6 @@ class McpClient:
         ]
         if expected_id is not None:
             details.append(f"expected_id={expected_id}")
-        if self.command:
-            details.append(f"command={self.command!r}")
-        if self.cwd:
-            details.append(f"cwd={self.cwd}")
         if self._recent_stdout:
             details.append("recent_stdout=" + " | ".join(self._recent_stdout))
         if self._recent_stderr:

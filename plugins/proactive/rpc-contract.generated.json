@@ -1,6 +1,8 @@
 {
   "plugin_id": "proactive",
-  "dependencies": [],
+  "dependencies": [
+    "mcp"
+  ],
   "methods": [
     "settings_set"
   ],

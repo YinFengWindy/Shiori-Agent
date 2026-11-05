@@ -19,46 +19,41 @@ class _Sessions:
 
 
 def _bare_run_loop(tmp_path: Path) -> ProactiveLoop:
-    """A constructed loop whose run only prepares; MCP and state are fakes."""
+    """A constructed loop whose run only prepares its state and first poll."""
     loop = ProactiveLoop.__new__(ProactiveLoop)
     loop._cfg = SimpleNamespace(role_id="mira", enabled=True)
     loop._state = None
     loop._sessions = _Sessions(tmp_path)
     loop._init_runtime_state()
-    loop._mcp_pool = SimpleNamespace(
-        connect_all=AsyncMock(return_value=None),
-        disconnect_all=AsyncMock(return_value=None),
-    )
     loop._state_path = tmp_path / "proactive.db"
     loop._init_runtime_components = lambda: None
     return loop
 
 
 @pytest.mark.asyncio
-async def test_run_disconnects_mcp_when_cancelled_while_connecting(tmp_path: Path):
+async def test_run_closes_state_when_cancelled_during_first_poll(tmp_path: Path):
     loop = _bare_run_loop(tmp_path)
-    connecting = asyncio.Event()
+    polling = asyncio.Event()
 
-    async def connect_all():
-        connecting.set()
+    async def first_poll():
+        polling.set()
         await asyncio.Event().wait()
 
     async def run_loop():
         await loop._prepare()
 
-    loop._mcp_pool.connect_all = connect_all
+    loop._poll_feeds_once = first_poll
     loop._run_loop = run_loop
     run = asyncio.create_task(loop.run())
-    await connecting.wait()
+    await polling.wait()
     run.cancel()
     with pytest.raises(asyncio.CancelledError):
         await run
-    loop._mcp_pool.disconnect_all.assert_awaited_once()
     assert loop._state is None
 
 
 @pytest.mark.asyncio
-async def test_run_disconnects_mcp_and_reports_a_failed_feed_poll(tmp_path: Path):
+async def test_run_reports_a_failed_feed_poll(tmp_path: Path):
     loop = _bare_run_loop(tmp_path)
 
     async def failing_poll():
@@ -72,7 +67,6 @@ async def test_run_disconnects_mcp_and_reports_a_failed_feed_poll(tmp_path: Path
     loop._run_loop = run_loop
     with pytest.raises(OSError, match="poll failed"):
         await loop.run()
-    loop._mcp_pool.disconnect_all.assert_awaited_once()
 
 
 def test_next_interval_falls_back_to_configured_interval_without_presence():

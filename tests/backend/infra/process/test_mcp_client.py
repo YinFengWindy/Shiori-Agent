@@ -167,12 +167,13 @@ async def test_stderr_invalid_bytes_and_failure_are_visible(caplog):
     reader.feed_eof()
     client = McpClient("test", [sys.executable])
     await client._drain_stderr(reader)
-    assert list(client._recent_stderr)[-1] == "after"
+    assert list(client._recent_stderr)[-1] == "stderr line (6 bytes)"
     reader = asyncio.StreamReader()
     reader.set_exception(OSError("stream closed"))
     with caplog.at_level(logging.WARNING):
         await client._drain_stderr(reader)
-    assert "stream closed" in caplog.text
+    assert "OSError" in caplog.text
+    assert "stream closed" not in caplog.text
 
 
 def test_inferred_cwd(tmp_path):

@@ -329,7 +329,14 @@ class ToolRegistry:
         if tool is None:
             return f"工具 '{name}' 不存在"
         try:
-            execution_context = context if context is not None else self.get_context()
+            # MCP arguments are an external protocol payload, not host tool
+            # kwargs. Preserve explicit caller arguments, including open schemas,
+            # without leaking role/channel/account context into the remote call.
+            execution_context = (
+                {}
+                if self._documents[name].source_type == "mcp"
+                else (context if context is not None else self.get_context())
+            )
             # 将会话上下文（channel、chat_id）作为低优先级默认值合并进 kwargs，
             # 工具可按需读取，不感知此机制的工具会直接忽略多余的 key。
             merged: dict[str, Any] = {

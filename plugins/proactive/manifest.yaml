@@ -6,10 +6,12 @@ version: '0.1.0'
 desc: 按角色的主动开关定时发起主动消息与空闲活动
 category: system
 config_model: plugin_config:ProactivePluginConfig
+optional_dependencies:
+  - mcp
 inject:
   - proactive_host
   - process_resources
-  - processes
+  - dependencies
   - roles
   - rpc
   - conversation

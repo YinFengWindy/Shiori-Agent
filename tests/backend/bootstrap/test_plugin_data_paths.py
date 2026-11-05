@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from bootstrap.plugin_data_paths import migrate_plugin_data_paths
-from plugins.proactive.backend.mcp_sources import _get_server_cfg
+from plugins.mcp.backend.store import ServerStore
+from shiori_sdk.storage import plugin_data_dir
 from plugins.proactive.backend.traces import append_loop_trace
 from plugins.scene.backend.state import SceneStateStore
 from plugins.schedule.backend.scheduler import SchedulerService
@@ -57,8 +58,20 @@ def test_upgrade_preserves_data_for_the_actual_consumers(tmp_path: Path):
     assert SceneStateStore(tmp_path).current("role:mira")["scene_key"] == "书房"
     scheduler = SchedulerService(tmp_path / "plugin-data/schedule/schedules.json")
     assert scheduler.store.load()[0].id == job.id
-    cfg = _get_server_cfg("docs", tmp_path)
-    assert cfg == servers["servers"]["docs"]
+    mcp_path = plugin_data_dir(tmp_path, "mcp") / "mcp_servers.json"
+    mcp = ServerStore(mcp_path)
+    mcp.load()
+    config = mcp.servers["docs"]
+    credentials = mcp.credentials(config)
+    assert credentials.command == servers["servers"]["docs"]["command"]
+    assert credentials.env == servers["servers"]["docs"]["env"]
+    assert config.enabled and config.tools.mode == "all"
+    persisted = json.loads(mcp_path.read_text(encoding="utf-8"))
+    assert persisted["schema_version"] == 2
+    assert "env" not in persisted["servers"]["docs"]
+    reloaded = ServerStore(mcp_path)
+    reloaded.load()
+    assert reloaded.credentials(reloaded.servers["docs"]) == credentials
     append_loop_trace(
         tmp_path, "proactive_rate_trace.jsonl", {"interval": 30}, role_id="mira"
     )
