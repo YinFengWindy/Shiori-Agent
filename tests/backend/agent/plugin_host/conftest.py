@@ -35,7 +35,7 @@ def contract_package(tmp_path: Path) -> Path:
         "api: 4\nsdk: '>=4.0.0'\nid: external_demo\nversion: 1.2.3\n"
         "entry: backend/plugin.py\n"
         "frontend:\n  entry: renderer/frontend.mjs\n  exports: [ui, background, surface]\n  css: [renderer/style.css]\n"
-        "  peers: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0', '@yinfengwindy/shiori-sdk': '>=4.0.0 <5.0.0'}\n",
+        "  peers: {react: '>=19.2.0 <20.0.0', react-dom: '>=19.2.0 <20.0.0', '@yinfengwindy/shiori-sdk': '>=4.0.0 <6.0.0'}\n",
         encoding="utf-8",
     )
     (package / "backend/plugin.py").write_text(

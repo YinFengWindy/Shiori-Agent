@@ -80,7 +80,7 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
                     "peers": {
                         "react": "20.0.0",
                         "react-dom": "19.2.0",
-                        "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0",
+                        "@yinfengwindy/shiori-sdk": ">=4.0.0 <6.0.0",
                     }
                 }
             },

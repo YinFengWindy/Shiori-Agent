@@ -1148,7 +1148,10 @@ for line in sys.stdin:
     message = json.loads(line)
     if 'id' not in message: continue
     method = message['method']
-    if method == 'initialize': result = {}
+    if method not in {'initialize', 'tools/list', 'tools/call'}:
+        print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'error': {'code': -32601, 'message': 'Method not found'}}), flush=True)
+        continue
+    if method == 'initialize': result = {'protocolVersion': '2025-11-25', 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'reasoning-image-fixture', 'version': '1'}}
     elif method == 'tools/list': result = {'tools': [{'name': 'image', 'description': 'Screenshot', 'inputSchema': {'type': 'object', 'properties': {}}}]}
     else: result = {'content': [{'type': 'text', 'text': 'screenshot'}, {'type': 'image', 'mimeType': 'image/png', 'data': """
         + repr(image_data)
