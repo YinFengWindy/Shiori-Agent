@@ -9,7 +9,7 @@ import test from "node:test";
 import { buildPlugin } from "./build-plugin.mjs";
 import { pathToFileURL } from "node:url";
 
-const peers = { react: ">=19.2.0 <20.0.0", "react-dom": ">=19.2.0 <20.0.0", "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0" };
+const peers = { react: ">=19.2.0 <20.0.0", "react-dom": ">=19.2.0 <20.0.0", "@yinfengwindy/shiori-sdk": ">=4.0.0 <6.0.0" };
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 test("one frontend artifact carries named contributions without starting their effects", async (t) => {
