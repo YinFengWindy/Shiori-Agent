@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0 <4.2.0"
 id: desktop_pet
 display_name: 桌宠
-version: 0.1.2
+version: 0.1.3
 desc: 桌宠：角色绑定解析、动作工具与透明置顶窗口
 inject:
   - workspace

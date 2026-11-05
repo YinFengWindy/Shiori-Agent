@@ -2120,7 +2120,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "shiori-plugin-default-memory"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "plugins/default_memory" }
 dependencies = [
     { name = "httpx" },
@@ -2147,7 +2147,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "shiori-plugin-herdr"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "plugins/herdr" }
 dependencies = [
     { name = "pydantic" },
@@ -2169,7 +2169,7 @@ provides-extras = ["test"]
 
 [[package]]
 name = "shiori-plugin-mcp"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "plugins/mcp" }
 dependencies = [
     { name = "httpx2" },

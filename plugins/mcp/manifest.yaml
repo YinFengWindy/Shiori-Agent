@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.1.0 <4.2.0"
 id: mcp
 display_name: MCP
-version: '0.1.0'
+version: '0.1.1'
 desc: 工作区 MCP 服务器，支持 stdio 与 Streamable HTTP；默认关闭。
 category: feature
 default_enabled: false
