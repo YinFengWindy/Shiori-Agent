@@ -218,7 +218,9 @@ def observe_lifecycle() -> Iterator[LifecycleObservation]:
             patch.object(sqlite3, "connect", connect),
             patch.object(socket.socket, "connect", denied_io),
             patch.object(socket.socket, "connect_ex", denied_io),
-            patch.object(subprocess, "Popen", denied_io),
+            # Keep the class intact for dependency annotations such as
+            # Popen[bytes]; block construction before any process can start.
+            patch.object(subprocess.Popen, "__init__", denied_io),
             patch.object(httpx.AsyncClient, "send", denied_http),
         ):
             yield observation

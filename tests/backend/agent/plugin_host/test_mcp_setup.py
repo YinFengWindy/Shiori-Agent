@@ -21,14 +21,21 @@ def send(value):
     with lock: print(json.dumps(value), flush=True)
 def respond(req):
     method = req['method']; ident = req['id']
+    if method == 'server/discover':
+        send({'jsonrpc': '2.0', 'id': ident, 'error': {'code': -32601, 'message': 'legacy'}}); return
     if method == 'initialize':
-        result = {}
+        result = {'protocolVersion': '2025-11-25', 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'peer', 'version': '1'}}
     elif method == 'tools/list':
         result = {'tools': [{'name': 'echo', 'description': 'Echo', 'inputSchema': {'type': 'object'}}]}
     else:
         args = req['params']['arguments']
-        if set(args) - {'value', 'delay'}:
+        if set(args) - {'value', 'delay', 'rpc_code', 'close'}:
             send({'jsonrpc': '2.0', 'id': ident, 'error': {'code': -32602, 'message': 'unexpected arguments'}}); return
+        if 'rpc_code' in args:
+            with open(os.environ['MARKER'], 'a') as marker: marker.write('called\\n')
+            send({'jsonrpc':'2.0','id':ident,'error':{'code':args['rpc_code'],'message':'remote business failure','data':{'detail':42}}})
+            if args.get('close'): os._exit(0)
+            return
         if args.get('delay'):
             Path(os.environ['MARKER']).write_text('accepted')
             time.sleep(args['delay'])
@@ -199,7 +206,9 @@ options=args.parse_args()
 for line in sys.stdin:
     request=json.loads(line)
     if 'id' not in request: continue
-    if request['method']=='initialize': result={}
+    if request['method']=='server/discover':
+        print(json.dumps({'jsonrpc':'2.0','id':request['id'],'error':{'code':-32601,'message':'legacy'}}),flush=True); continue
+    if request['method']=='initialize': result={'protocolVersion':'2025-11-25','capabilities':{'tools':{}},'serverInfo':{'name':'peer','version':'1'}}
     elif request['method']=='tools/list': result={'tools':[{'name':'context','description':'JSON context','inputSchema':{'type':'object','properties':{'format':{'type':'string','enum':['json']}}}}]}
     elif request['params']['arguments'].get('error'):
         result={'isError':True,'content':[{'type':'text','text':'Credential rejected: '+options.token+' '+options.client_secret+' '+os.environ['MCP_API_KEY']}]}
@@ -282,14 +291,16 @@ embedded=json.dumps({'token':'opaque-operation-token'})
 for line in sys.stdin:
     req=json.loads(line)
     if 'id' not in req: continue
-    if req['method']=='initialize': result={}
+    if req['method']=='server/discover':
+        print(json.dumps({'jsonrpc':'2.0','id':req['id'],'error':{'code':-32601,'message':'legacy'}}),flush=True); continue
+    if req['method']=='initialize': result={'protocolVersion':'2025-11-25','capabilities':{'tools':{}},'serverInfo':{'name':'peer','version':'1'}}
     elif req['method']=='tools/list':
         result={'tools':[{'name':name,'description':name,'inputSchema':{'type':'object'}} for name in ['page','state','click']]}
     else:
         name=req['params']['name']; args=req['params']['arguments']
         if name=='page':
-            if not args: result={'structuredContent':{'items':['first'],'next_page_token':cursor}}
-            elif args.get('page_token')==cursor: result={'structuredContent':{'items':['second']}}
+            if not args: result={'content':[],'structuredContent':{'items':['first'],'next_page_token':cursor}}
+            elif args.get('page_token')==cursor: result={'content':[],'structuredContent':{'items':['second']}}
             else: result={'isError':True,'content':[{'type':'text','text':'Invalid page cursor'}]}
         elif name=='state':
             result={'content':[{'type':'text','text':json.dumps({'elements':[{'element_token':element}],'embedded':embedded,'token':'opaque-operation-token'})}]}
@@ -342,3 +353,93 @@ for line in sys.stdin:
     finally:
         await registry.shutdown()
         assert await scope.close() == []
+
+
+@pytest.mark.parametrize("transport", ["stdio", "http"])
+async def test_source_get_does_not_retry_remote_codes_that_overlap_sdk_transport_errors(
+    tmp_path, transport
+):
+    from contextlib import AsyncExitStack
+    from infra.process.plugin_capability import HostProcesses
+    from plugins.mcp.backend.registry import McpServerRegistry
+    from shiori_mcp_client import McpToolError
+    from shiori_mcp_client.testing_http import HttpPeer
+    from shiori_sdk.testing.extensions import FakeDependencies
+
+    class Registration:
+        def add(self, tool, *, server, risk="external-side-effect"):
+            pass
+
+        def remove(self, name):
+            pass
+
+    class ErrorPeer(HttpPeer):
+        async def _rpc(self, request):
+            if request["method"] == "tools/call":
+                self.calls["echo"] += 1
+                return {
+                    "error": {
+                        "code": request["params"]["arguments"]["rpc_code"],
+                        "message": "remote business failure",
+                        "data": {"detail": 42},
+                    }
+                }
+            return await super()._rpc(request)
+
+    registry = McpServerRegistry(
+        tmp_path / "servers.json",
+        processes=HostProcesses(),
+        registration=Registration(),
+    )
+    marker = tmp_path / "calls"
+    async with AsyncExitStack() as stack:
+        peer = await stack.enter_async_context(ErrorPeer())
+        try:
+            if transport == "stdio":
+                script = tmp_path / "peer.py"
+                script.write_text(PEER, encoding="utf-8")
+                await registry.add(
+                    "errors", [sys.executable, str(script)], env={"MARKER": str(marker)}
+                )
+            else:
+                await registry.load_and_connect_all()
+                registry.save(
+                    {
+                        "server_id": "errors",
+                        "config": {"transport": {"kind": "streamable_http"}},
+                        "credentials": {"url": {"op": "replace", "value": peer.url}},
+                    }
+                )
+                await registry.wait_operations()
+            original = registry._states["errors"].session
+            assert original is not None
+            source = McpClientPool(
+                dependencies=lambda: FakeDependencies({"mcp": registry})
+            )
+            for code in (-32000, -32001):
+                with pytest.raises(McpToolError) as caught:
+                    await source.call(
+                        "errors", "echo", {"rpc_code": code}, retry_on_transport=True
+                    )
+                assert (caught.value.code, caught.value.message) == (
+                    code,
+                    "remote business failure",
+                )
+                # The existing plugin boundary deliberately omits error data;
+                # transport-level data preservation is covered in library tests.
+                assert caught.value.data is None
+                assert registry._states["errors"].session is original
+            if transport == "stdio":
+                with pytest.raises(McpToolError):
+                    await source.call(
+                        "errors",
+                        "echo",
+                        {"rpc_code": -32000, "close": True},
+                        retry_on_transport=True,
+                    )
+                assert registry._states["errors"].session is original
+                assert marker.read_text(encoding="utf-8").count("called") == 3
+            else:
+                assert peer.calls["echo"] == 2
+        finally:
+            await registry.shutdown()

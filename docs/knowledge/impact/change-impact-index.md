@@ -50,7 +50,7 @@ related:
 | Channel 合约 | 所有渠道插件、hub、bootstrap、bus、会话解析、附件 | `Channel ChannelContext supports_stream_events CHANNELS` |
 | Tool 契约 / 执行 | registry、search、工具事件与核心校验、插件、MCP、提示词 | `ToolRegistry ToolExecutor ToolCalling ToolCalled check_tool_call McpServerRegistry` |
 | 生命周期 phase | 各 phase 的固定步骤顺序、回合事件的插件处理器、记忆、自动 CG、观测 | `BeforeTurnPhase AfterTurnPhase TurnStarting TurnFinished` |
-| MCP | registry、client pool、工具同步、配置、断线清理 | `McpServerRegistry McpClient ToolRegistry` |
+| MCP | 共享客户端库、三插件会话、proactive 来源、工具同步、配置与断线清理 | `shiori_mcp_client McpServerRegistry McpClientPool ToolRegistry` |
 | Bridge API | dispatcher、service、presenter、Electron client、renderer hook | `DesktopBridgeService request_dispatcher DesktopBridgeClient` |
 | 桌宠语音 / ASR / TTS | 桌宠 background/voice 输入、轮次匹配与队列，私有 preferences RPC/文件，通用 services，原生设备资源与停用清理 | `PetVoiceController PetVoiceInput PetReplyAudio VoicePreferencesStore PluginServiceRegistry` |
 | 本地 ASR / TTS provider | SenseVoice CPU 协议与文件转写，GPT-SoVITS 独立导入身份、跨代 pin/回收、实例租约、未知完成隔离，试听迟到结果，共享 WAV/loopback 工具 | `SenseVoiceClient SynthesisEngine References InstanceState VoiceStore usePreview` |

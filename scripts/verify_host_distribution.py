@@ -52,6 +52,11 @@ for name in ("agent.provider", "core.roles.store", "bus.event_bus", "bootstrap.p
     assert path.is_relative_to(site), (name, path)
     paths[name] = str(path)
 assert importlib.util.find_spec("shiori_host_testing") is None
+assert importlib.util.find_spec("shiori_mcp_client") is None
+assert importlib.util.find_spec("infra.process.mcp_client") is None
+assert importlib.util.find_spec("shiori_sdk.mcp") is None
+from infra.process.plugin_capability import HostProcesses
+assert not hasattr(HostProcesses, "mcp")
 assert importlib.util.find_spec("tests") is None
 installed = {dist.metadata["Name"] for dist in distributions()}
 assert {name for name in installed if name.startswith("shiori-plugin-")} == {"shiori-plugin-default-memory"}

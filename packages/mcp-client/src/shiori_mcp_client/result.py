@@ -1,14 +1,15 @@
-"""Translate MCP results without losing images or reporting remote failures as success."""
+"""Pure MCP result conversion shared by the library transports."""
 
 import base64
 import binascii
 import json
 from typing import Any
+from mcp_types import CallToolResult
 
 from shiori_sdk.tools import ToolResult
 
 
-from shiori_sdk.mcp import McpToolError
+from .contracts import McpToolError
 
 
 def decode_tool_result(
@@ -67,3 +68,35 @@ def decode_tool_result(
             text=text, content_blocks=images, structured_content=structured
         )
     return text
+
+
+def result_payload(result: CallToolResult) -> dict[str, Any]:
+    """Preserve modern JSON values as text without changing ToolResult's object contract."""
+    payload = result.model_dump(mode="json", by_alias=True, exclude_none=True)
+    if "structured_content" in result.model_fields_set and not isinstance(
+        result.structured_content, dict
+    ):
+        value = result.structured_content
+        text = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+        content = payload.setdefault("content", [])
+        equivalent = False
+        for block in content:
+            if block.get("type") == "text":
+                try:
+                    # Compare JSON representations, so True and 1 remain different.
+                    equivalent = (
+                        json.dumps(
+                            json.loads(block["text"]),
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        )
+                        == text
+                    )
+                except (ValueError, TypeError, KeyError):
+                    continue
+                if equivalent:
+                    break
+        if not equivalent:
+            content.append({"type": "text", "text": text})
+        payload.pop("structuredContent", None)
+    return payload

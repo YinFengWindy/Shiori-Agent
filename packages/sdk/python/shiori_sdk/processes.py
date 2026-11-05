@@ -5,7 +5,6 @@ import subprocess
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import BinaryIO, Protocol
-from .mcp import McpSession
 
 
 class ProcessOwner(Protocol):
@@ -24,17 +23,6 @@ class ToolTurn(Protocol):
 
 class Processes(Protocol):
     """Host process services shared by browser, computer and channel adapters."""
-
-    def mcp(
-        self,
-        name: str,
-        command: list[str],
-        env: dict[str, str] | None = None,
-        cwd: str | None = None,
-        *,
-        own_process_tree: bool = False,
-        inherit_env: bool = True,
-    ) -> McpSession: ...
 
     async def spawn(
         self,

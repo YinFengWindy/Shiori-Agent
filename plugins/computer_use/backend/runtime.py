@@ -6,7 +6,7 @@ import platform
 import sys
 
 from shiori_sdk.processes import Processes
-from shiori_sdk.mcp import McpSession
+from shiori_mcp_client import StdioMcpSession, McpSession
 
 
 def resolve_driver(resources: Path) -> Path:
@@ -39,11 +39,12 @@ def driver_client(root: Path, executable: Path, processes: Processes) -> McpSess
         CUA_DRIVER_TELEMETRY_HOME=str(root / "telemetry"),
         CUA_DRIVER_RS_UPDATE_CHECK="0",
     )
-    return processes.mcp(
+    return StdioMcpSession(
         "computer_use",
         [str(executable), "mcp", "--direct"],
         env=env,
         cwd=str(root),
+        processes=processes,
         own_process_tree=True,
         inherit_env=False,
     )

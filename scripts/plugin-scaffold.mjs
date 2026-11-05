@@ -3,7 +3,7 @@ export function pluginFiles(id, ui) {
   const distribution = `shiori-plugin-${id.replaceAll("_", "-")}`;
   const files = {
     "manifest.yaml": `api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.1.0 <4.2.0"
 id: ${JSON.stringify(id)}
 display_name: ${JSON.stringify(id)}
 version: '0.1.0'
@@ -38,10 +38,10 @@ build-backend = "setuptools.build_meta"
 name = "${distribution}"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-sdk>=4.0.0,<5"]
+dependencies = ["shiori-sdk>=4.1.0,<4.2.0"]
 
 [project.optional-dependencies]
-test = ["shiori-sdk[testing]>=4.0.0,<5"]
+test = ["shiori-sdk[testing]>=4.1.0,<4.2.0"]
 
 [tool.setuptools]
 include-package-data = false
@@ -96,7 +96,7 @@ gains resources, providers or background work.
 `,
     "README.md": `# ${id}
 
-API 4 plugin using Shiori SDK 4. The initial RPC is \`ping\`.
+API 4 plugin using the Shiori SDK 4.1 compatibility line. The initial RPC is \`ping\`.
 
 After editing backend registrations, run \`pnpm rpc:generate\` and \`pnpm rpc:check\`.
 ${ui ? "The frontend imports the generated RPC constants and exports an inert UI contribution.\n" : ""}
@@ -112,7 +112,7 @@ See TESTING.md for isolated tests.
 `,
   };
   if (ui) Object.assign(files, {
-    "package.json": JSON.stringify({ name: `@shiori-plugin/${id}`, version: "0.1.0", private: true, type: "module", peerDependencies: { react: ">=19.2.0 <20.0.0", "react-dom": ">=19.2.0 <20.0.0", "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0" } }, null, 2) + "\n",
+    "package.json": JSON.stringify({ name: `@shiori-plugin/${id}`, version: "0.1.0", private: true, type: "module", peerDependencies: { react: ">=19.2.0 <20.0.0", "react-dom": ">=19.2.0 <20.0.0", "@yinfengwindy/shiori-sdk": ">=4.1.0 <4.2.0" } }, null, 2) + "\n",
     "frontend.ts": '/** Contributions are loaded only when the owning renderer activates them. */\nexport { default as ui } from "./ui/index";\n',
     "ui/index.tsx": `import { useState } from "react";
 import { ghostButtonClass, type PluginSettingsSectionComponentProps, type PluginUiModule } from "@yinfengwindy/shiori-sdk";

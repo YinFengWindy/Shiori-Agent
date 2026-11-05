@@ -43,7 +43,7 @@ plugins/demo_chat/
 
 ```yaml
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.1.0 <4.2.0"
 id: demo_chat
 display_name: Demo Chat
 version: '0.1.0'
@@ -247,7 +247,7 @@ async def stop(self):
 - **账号与 setup**：用 `shiori_sdk.testing.channel_context.FakeChannelSetupContext` 执行公开 `setup`（直接把它传给 `setup`）；它按包的 manifest 声明 `inject`，并已把 `ctx.fake_accounts`、`ctx.fake_channels`、`ctx.fake_kv`、`ctx.fake_rpc` 等假对象 serve 给对应 Key。断言真实 manifest 声明、插件存储恢复、孤立账号处理和这些假对象记录的调用。真实 PluginKernel/AppRuntime 重载与角色删除放在宿主集成测试。
 - **渠道行为**：平台 REST 用 `httpx.MockTransport` 替代，长连接用假连接；`ChannelContext` 直接构造，`channel_hub` 可用简单替身（参考 `plugins/feishu/tests/conftest.py`）。至少覆盖：未登记、离线或无所属角色的接收账号被拒绝，响应规则准入、入站去重、`pause_intake` 期间缓冲、`stop` 对未启动实例安全、流式收尾与失败回退。
 - **真实运行时**：宿主测试侧的 `shiori_host_testing` 提供 `plugin_runtime` fixture，验证设置保存、热换代、账号删除和 runtime drain；插件单测不加载它。
-- `pyproject.toml` 声明 `dependencies = ["shiori-sdk>=4.0.0,<5"]`、`test = ["shiori-sdk[testing]>=4.0.0,<5"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
+- `pyproject.toml` 声明 `dependencies = ["shiori-sdk>=4.1.0,<4.2.0"]`、`test = ["shiori-sdk[testing]>=4.1.0,<4.2.0"]` extra 和 pytest 配置（`-W error`、`asyncio_mode = "auto"`），`TESTING.md` 写明仓库外运行方式和真机验收清单。
 
 仓库内运行 `uv run pytest -c pytest.ini plugins/<id>/tests`；合并前用隔离环境验收：
 

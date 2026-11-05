@@ -54,7 +54,7 @@ class PluginSettings(Protocol):
 
     ``proactive`` is the namespace that exists today. The host preserves its
     object without interpreting it; the plugin validates its own schema.
-    4.x cannot add methods here later (D19, D22).
+    Required methods cannot be added within one A.B compatibility line.
     """
 
     def read(self) -> Mapping[str, object]:

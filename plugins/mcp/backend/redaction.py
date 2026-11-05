@@ -1,15 +1,29 @@
-"""MCP launch credential detection and JSON-preserving output redaction."""
+"""MCP connection credential detection and JSON-preserving output redaction."""
 
 from __future__ import annotations
 
 import json
 import re
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit
 
 from shiori_sdk.redaction import redact_secrets
 from .models import LaunchCredentials
 
 _HIDDEN = "[已隐藏]"
+# Standard negotiation, cache directives and client identification are metadata,
+# not authentication. Unknown/custom headers remain private credential values.
+_METADATA_HEADERS = frozenset(
+    {
+        "accept-charset",
+        "accept-encoding",
+        "accept-language",
+        "content-language",
+        "cache-control",
+        "pragma",
+        "user-agent",
+    }
+)
 
 
 def _credential_name(name: str) -> bool:
@@ -29,6 +43,21 @@ def _credential_values(launch: LaunchCredentials) -> tuple[str, ...]:
     values = {
         value for name, value in launch.env.items() if _credential_name(name) and value
     }
+    # All headers stay private in storage/DTOs, but ordinary HTTP metadata must
+    # not rewrite matching schema keys or result text (e.g. language "en").
+    # URL filters are not credentials: retain ordinary format/filter values.
+    values.update(
+        value
+        for name, value in launch.headers.items()
+        if name.lower() not in _METADATA_HEADERS
+    )
+    values.update(value for value in (launch.url, launch.bearer) if value)
+    values.update(
+        value
+        for name, value in parse_qsl(urlsplit(launch.url or "").query)
+        if _credential_name(name)
+        or name.lower() in {"key", "sig", "signature", "credential", "auth"}
+    )
     arguments = launch.command[1:]
     for index, argument in enumerate(arguments):
         name, separator, value = argument.partition("=")
@@ -56,6 +85,9 @@ class LaunchRedactor:
 
     def _plain(self, text: str) -> str:
         for value in self._values:
+            # ToolResult.text can contain prose followed by a serialized object.
+            # Scrub escaped copies too; pure JSON takes the typed path below.
+            text = text.replace(json.dumps(value, ensure_ascii=False)[1:-1], _HIDDEN)
             text = text.replace(value, _HIDDEN)
         # Payload text can contain opaque handles named token. Only the
         # values selected from this call's launch configuration are secrets.

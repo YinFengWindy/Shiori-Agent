@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from pathlib import Path
 
 import pytest
-from shiori_sdk.mcp import McpToolInfo
-from shiori_sdk.testing.processes import FakeMcpSession, FakeProcesses
+from shiori_mcp_client import McpToolInfo
+from shiori_mcp_client.testing import FakeMcpSession
+from shiori_sdk.testing.processes import FakeProcesses
 
 from plugins.mcp.backend.registry import McpServerRegistry
 
@@ -37,9 +39,17 @@ class _Session(FakeMcpSession):
         self.disconnected = True
 
 
-class _Processes(FakeProcesses):
-    def mcp(self, name, command, env=None, cwd=None, **_kwargs):
-        return _Session(name, command, env, cwd)
+@pytest.fixture(autouse=True)
+def session_factory(monkeypatch):
+    monkeypatch.setattr(
+        "plugins.mcp.backend.operations.StdioMcpSession",
+        lambda name, command, env=None, cwd=None, **kwargs: _Session(
+            name, command, env, cwd
+        ),
+    )
+
+
+_Processes = FakeProcesses
 
 
 class _Registration:
@@ -348,13 +358,218 @@ async def test_private_value_redaction_preserves_binary_tool_content(
     await registry.shutdown()
 
 
+async def test_http_private_settings_survive_restart_and_gate_the_shared_source(
+    tmp_path,
+    caplog,
+):
+    from shiori_mcp_client.testing_http import HttpPeer
+    from shiori_mcp_client import McpToolError
+
+    path = tmp_path / "mcp_servers.json"
+    caplog.set_level(logging.DEBUG)
+    quoted_header = 'quoted"header\\canary'
+    async with HttpPeer() as peer:
+        registry = McpServerRegistry(
+            path, processes=_Processes(), registration=_Registration()
+        )
+        await registry.load_and_connect_all()
+        registry.save(
+            {
+                "server_id": "http",
+                "config": {"transport": {"kind": "streamable_http", "auth": "bearer"}},
+                "credentials": {
+                    "url": {"op": "replace", "value": peer.url},
+                    "bearer": {"op": "replace", "value": "private-bearer"},
+                    "headers": {
+                        "op": "replace",
+                        "value": {
+                            "X-API-Key": "private-header",
+                            "X-Custom": quoted_header,
+                        },
+                    },
+                },
+            }
+        )
+        await registry.wait_operations()
+        assert _only_server(registry.snapshot())["status"] == "connected"
+        assert await registry.call("http", "echo", {}, timeout=180) == "hello"
+        private_values = (
+            peer.url,
+            "private-bearer",
+            "private-header",
+            "query-canary",
+            quoted_header,
+        )
+        payload = {
+            "n": 1,
+            "format": "json",
+            "filter": "read",
+            "nested": [1, "json"],
+            "values": list(private_values),
+        }
+        expected = {**payload, "values": ["[已隐藏]"] * len(private_values)}
+        text_result = await registry.call("http", "echo", {"text": json.dumps(payload)})
+        assert isinstance(text_result, str)
+        assert json.loads(text_result) == expected
+        structured_result = await registry.call("http", "structured", {"data": payload})
+        from shiori_sdk.tools import ToolResult
+
+        assert isinstance(structured_result, ToolResult)
+        assert structured_result.structured_content == expected
+        with pytest.raises(McpToolError) as error:
+            await registry.call("http", "tool_error", {"text": json.dumps(payload)})
+        assert json.loads(error.value.message) == expected
+        for secret in private_values:
+            assert secret not in str(error.value)
+            assert secret not in json.dumps(registry.snapshot())
+            assert secret not in path.read_text(encoding="utf-8")
+            assert secret not in caplog.text
+            assert (
+                json.dumps(secret, ensure_ascii=False)[1:-1]
+                not in structured_result.text
+            )
+        captured = registry._states["http"].wrappers["echo"]
+        registry.save(
+            {
+                "server_id": "http",
+                "expected_revision": 1,
+                "config": {"tools": {"mode": "selected", "names": ["structured"]}},
+            }
+        )
+        with pytest.raises(ValueError):
+            await captured.execute()
+        await registry.shutdown()
+        fresh = McpServerRegistry(
+            path, processes=_Processes(), registration=_Registration()
+        )
+        await fresh.load_and_connect_all()
+        await fresh.wait_operations()
+        try:
+            assert _only_server(fresh.snapshot())["transport"] == {
+                "kind": "streamable_http",
+                "auth": "bearer",
+            }
+            assert (await fresh.call("http", "structured", {})).structured_content == {
+                "records": [1, 2]
+            }
+            fresh.set_enabled("http", False, 2)
+            with pytest.raises(ValueError):
+                await fresh.call("http", "structured", {})
+            await fresh.wait_operations()
+        finally:
+            await fresh.shutdown()
+
+
+async def test_http_call_auth_failure_removes_tools_and_retains_configuration(tmp_path):
+    from shiori_mcp_client.testing_http import HttpPeer
+
+    async with HttpPeer() as peer:
+        registry = McpServerRegistry(
+            tmp_path / "servers.json",
+            processes=_Processes(),
+            registration=_Registration(),
+        )
+        await registry.load_and_connect_all()
+        registry.save(
+            {
+                "server_id": "http",
+                "config": {"transport": {"kind": "streamable_http"}},
+                "credentials": {"url": {"op": "replace", "value": peer.url}},
+            }
+        )
+        await registry.wait_operations()
+        peer.status = 403
+        with pytest.raises(ValueError, match="403"):
+            await registry.call("http", "echo", {})
+        row = _only_server(registry.snapshot())
+        error_message = row["error"]
+        assert isinstance(error_message, str)
+        assert row["enabled"] and row["status"] == "error" and "403" in error_message
+        assert registry._states["http"].wrappers == {}
+        assert peer.calls["echo"] == 0
+        await registry.shutdown()
+
+
+async def test_http_metadata_headers_preserve_discovered_schema_and_call_result(
+    tmp_path,
+):
+    from shiori_mcp_client.testing_http import HttpPeer
+
+    class MetadataPeer(HttpPeer):
+        async def _rpc(self, request):
+            response = await super()._rpc(request)
+            if request["method"] == "tools/list":
+                assert response is not None
+                tools = response["result"]["tools"]
+                assert isinstance(tools, list)
+                for tool in tools:
+                    assert isinstance(tool, dict)
+                    tool["inputSchema"] = {
+                        "type": "object",
+                        "properties": {"content": {"type": "string"}},
+                        "required": ["content"],
+                    }
+            elif request["method"] == "tools/call":
+                arguments = request["params"]["arguments"]
+                if "content" not in arguments:
+                    return {"error": {"code": -32602, "message": "content required"}}
+                response["result"] = {
+                    "content": [{"type": "text", "text": json.dumps(arguments)}]
+                }
+            return response
+
+    headers = {"aCcEpT-LaNgUaGe": "en", "User-Agent": "MetadataProbe"}
+    async with MetadataPeer() as peer:
+        registry = McpServerRegistry(
+            tmp_path / "servers.json",
+            processes=_Processes(),
+            registration=_Registration(),
+        )
+        await registry.load_and_connect_all()
+        registry.save(
+            {
+                "server_id": "http",
+                "config": {"transport": {"kind": "streamable_http", "auth": "none"}},
+                "credentials": {
+                    "url": {"op": "replace", "value": peer.url},
+                    "headers": {"op": "replace", "value": headers},
+                },
+            }
+        )
+        await registry.wait_operations()
+        try:
+            wrapper = registry._states["http"].wrappers["echo"]
+            assert wrapper.parameters == {
+                "type": "object",
+                "properties": {"content": {"type": "string"}},
+                "required": ["content"],
+            }
+            arguments = {
+                wrapper.parameters["required"][0]: "English content from MetadataProbe"
+            }
+            result = await registry.call("http", "echo", arguments)
+            assert isinstance(result, str)
+            assert json.loads(result) == arguments
+            assert all(
+                sent["accept-language"] == "en"
+                and sent["user-agent"] == "MetadataProbe"
+                for _, _, sent in peer.requests
+            )
+            row = _only_server(registry.snapshot())
+            assert row["header_names"] == sorted(headers)
+            assert "headers" not in row
+            assert "MetadataProbe" not in json.dumps(row)
+        finally:
+            await registry.shutdown()
+
+
 async def test_manual_reconnect_supersedes_pending_source_retry(tmp_path, monkeypatch):
     retry_entered = asyncio.Event()
     release_retry = asyncio.Event()
     sessions = []
     calls = []
 
-    def session_factory(_self, name, command, env=None, cwd=None, **_kwargs):
+    def session_factory(name, command, env=None, cwd=None, **_kwargs):
         session = _Session(name, command, env, cwd)
         sessions.append(session)
         return session
@@ -372,7 +587,9 @@ async def test_manual_reconnect_supersedes_pending_source_retry(tmp_path, monkey
             raise ConnectionError("lost connection")
         return f"session {number}"
 
-    monkeypatch.setattr(_Processes, "mcp", session_factory)
+    monkeypatch.setattr(
+        "plugins.mcp.backend.operations.StdioMcpSession", session_factory
+    )
     monkeypatch.setattr(_Session, "connect", connect)
     monkeypatch.setattr(_Session, "call", call)
     registration = _Registration()

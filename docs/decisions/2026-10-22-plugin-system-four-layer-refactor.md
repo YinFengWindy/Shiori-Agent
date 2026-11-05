@@ -5,6 +5,8 @@
 
 > 2026-11-04 收尾说明：本文保留重构前盘点与当时的阶段估算，不作为当前源码布局说明。P0–P8b 已合并；§5 的开发工具与统一契约缺口按[收尾决策](2026-11-04-plugin-refactor-closeout.md)补齐。当前内核只有 plan/activate/deactivate/drain 等原语，start/stop/reload 编排属于宿主与测试 harness，见 [P8b](2026-11-04-kernel-primitives-host-single-state.md)。D12 的机械搬迁方案已由 P7 的音频边界修订取代：宿主持有通用音频原语，插件持有语音策略。后文旧目录、旧方法名与数量仅描述原方案，不构成继续删除现有模块的要求。当前运行边界见[后端架构](../knowledge/architecture/current-backend.md)与[插件生命周期](../_handbook/plugin-lifecycle.md)。
 
+> 2026-11-05 版本修订：D22 的大版本/4.x 兼容约定由 [SDK 版本规则](2026-11-05-sdk-version-policy.md) 取代。当前 A 是代际、B 可破坏、C 保持 A.B 兼容，消费方写显式范围；本文的历史盘点与审查引用按当时原文保留。
+
 ## 0. 四层规则
 
 | 层 | 定义 | 可禁用 | 依赖方向 |
@@ -43,7 +45,7 @@
 | D19 | **proactive 拆分方案已确认**（第 7 节） | 按第 7 节执行：核心新增/通用化 5 个 API——`SESSIONS.presence`、`CONVERSATION.deliver_initiated_reply`、`InitiatedMessageCommitted` 事件、`ROLES.plugin_settings`、renderer `roleSettings` 插槽；proactive_gates 删除，gate 变成插件内部列表 | P6b 按 7.5 的 6 个 PR 实施 |
 | D20 | **memory_optimizer → 系统插件（推翻先前「进核心」）** | **证据（2026-10-22 重查）**：`proactive_v2/memory_optimizer.py`（621 行）只后台重写 `MEMORY.md` / `SELF.md`；由 `bootstrap/proactive.py::build_memory_optimizer_task` → `bootstrap/runtime/background.py` 启动；`memory_optimizer_enabled=false` 时直接跳过（`config.py` / `config_models.py`）；桌面侧 `desktop_bridge/role_task_service.py` 只在任务面板列出进行中的整理，没有手动触发入口。**回合路径零引用**：`agent/turns`、`lifecycle`、`retrieval`、`conversation` 均不 import。拔掉/禁用后照常聊天 → 按分层规则做成**系统插件** `memory_optimizer`（可禁用，默认开），provide `MEMORY_OPTIMIZER`（只读进度）供任务面板列出进行中的整理；不做「立即整理」（#907 维护者 2026-10-30）；**不**进核心 memory。 | 回应 PR #897 / M6；覆盖先前 D20「移进核心」 |
 | D21 | **角色任务面板外壳留在核心，schedule 通过 `roleTasks` 插槽挂入** | 核心 renderer 保留面板外壳，继续列出 subagent 和记忆任务；schedule 插件前端挂入定时任务区块 | 只新增一个前端插槽，不需要后端插座；在 P6s 完成 |
-| D22 | **版本策略（修订，回应 R3）** | **大版本 = 破坏性**。manifest `api: 4` + sdk 最低约束（peer）。SDK 独立 semver；**废除** Unreleased/sync 批次。同大版本内：**禁止**给已有 Key/Protocol **新增方法**；新能力一律以**新 Key**（或新 Event）出现。缺 Key → setup 失败 + `PluginDiagnostic`。D10/D19 的新方法必须在进 4.0 前并入基线契约，4.0 之后只能开新 Key。现行 `runtime_api` 删除 | P5；改 AGENTS.md |
+| D22 | **版本策略（2026-11-05 用户修订）** | SDK 使用自定义 A.B.C：A 是代际，B 允许破坏性 API 变更，C 是同一 A.B 线内的兼容更新。manifest 仍为 `api: 4`，SDK/Python/frontend peer 显式声明上下限，例如 `>=4.1.0 <4.2.0`；不添加隐式上限，不改变通用比较器。同一 A.B 内不增加已有 Key/Protocol 的必需方法，破坏性整理提升 B；缺 Key 仍产生 `PluginDiagnostic`。已发布版本不可复用。详见 [新版本规则](2026-11-05-sdk-version-policy.md)；旧规则与审查原文已被取代。 | 当前规则；改 AGENTS.md |
 | D23 | **发布边界** | 桌面发版**仅在 P1–P8 全部完成后**随 SDK 4.0 一起发。P1–P8 期间**不从 main 发桌面版**（「不发没事」，见 D26）。已装 3.x/`api:2` → 启动 BLOCKED、不迁移、保留文件配置。不要求可降级。0.5.x 用户数据正向兼容仍按 D4′ | P4/P8；D13 Diagnostic |
 | D24 | **`conflicts` / `replaces`（修订，回应 R5）** | `replaces: [other_id]` = **被替换插件整体不加载**（强于只盖 Key；UI 显示「已被 X 替换」）。`conflicts: [other_id]` = 不可同时启用。未声明关系的双 provide 同一 Key → **双方都标 BLOCKED**，诊断互相点名，其他插件照常启动；插件与核心 provide 同一个 Key 时整个启动失败（2026-10-22 维护者在 P1 实现时确认）。这三项只在可运行（启用且已准入）的插件之间计算：禁用或只登记的不参与，也不能把启用的一方标成 BLOCKED（2026-10-27 P4-1，#903） | 避免 default_memory 被替后仍注册工具/handler |
 | D25 | **热重载排空：`ctx.on_drain`，不用活代理（R2 / T3）** | `require`/`get` 返回原始对象，删掉 seal 的说法。reload 时先排空闭包里的每个插件，再 dispose，再 re-setup。**默认排空（不注册 `on_drain` 也生效）**：内核只等该插件正在执行的 `on`/`watch` handler 结束；`spawn` 出去的任务不参与排空，dispose 时按 §8.4 的顺序直接取消（2026-10-22 维护者在 P1 实现时确认：常驻循环永远不会结束，等它会让每次 reload 都超时）。注册了 **`ctx.on_drain`** 的插件，再额外执行自己的排空逻辑。总超时 60 秒，超时则中止这次 reload、保留旧实例并产出诊断。**核心不得长期持有** provider 实例，每次使用都重新 `get`。契约测试：provider 带代际 id，重载后下一次调用必须拿到新代际；另测「未注册 `on_drain`」的默认排空路径 | §8.2；P1 |
@@ -250,7 +252,7 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
 | **P2 核心模块 provide** | tools/channels(accounts,avatars)/sessions/roles/models/memory/processes/commands/conversation/bridge 各自 provide Key；把 capabilities.py、kernel.py 里的业务方法、透传 capability 文件、session_presenter 的 import 搬出内核；bootstrap 改成"核心 provide 列表" | +900 / −1800 | 中（启动顺序） | 无数据变化 |
 | **P3 phase/hook 事件化 + 记忆插座** | conversation/tools 定义 typed events；citation 搬进核心回复管线（D9）；迁移 context_pressure、meme（改依赖核心事件）、status_commands、plugin_undo 以及 4 个 tool_hooks 插件；default_memory 改为 `provide(MEMORY_ENGINE)`，记忆工具随它走，删掉 bootstrap 里专门的记忆引擎加载代码（约 280 行，D1）；删除 PHASE_SLOTS、requires/produces 排序、agent/tool_hooks、proactive_gates；bot_commands 改走 COMMANDS；plugin_undo 改用 `SESSIONS.rollback_last_turn` + `MemoryEngine.rollback_turn`（D10）；diagnostics **拆分**（D13）：保留 `PluginDiagnostic`；新增核心 `CRASH_REPORTING`；observe 改 inject + watch | +830 / −2650 | 中高（回合内顺序语义） | 无数据变化（default_memory 的数据目录不变）；用回合 golden trace 测试守住顺序 |
 | **P4 manifest v4 + 内置插件迁移** | 24 个内置 manifest 在仓库内改成 `api: 4` / `inject` / `frontend.entry`；插件代码从 `ctx.xxx` 改成 `ctx.require(KEY)`；删除 KNOWN_CAPABILITIES、CapabilityNotGranted、runtime_context 的 40 个 property 和各种 *PluginContext Protocol、适配层；非 `api: 4` 的包直接拒绝（含现行 `api: 2`，D4/D23，一条错误信息，约 20 行），同时删除 runtime_api 范围解析和 package_contract 兼容；已装旧插件启动 BLOCKED（D23） | +550 / −3400 | 中（改动面广但机械） | 外部非 api:4：BLOCKED/拒绝，无迁移；0.5.x 用户数据不变；中途不发桌面版（D23） |
-| **P5 SDK 缩减 + 版本** | SDK = `shiori_sdk.kernel`（P1 已就位）+ 核心插座契约（Key/Protocol/Event，含 `MEMORY_ENGINE`）+ 测试 harness（真内核 + stub）+ 少量 helper；删除 capability 镜像和 2.7k fake；版本策略按 D22：`api: 4` + sdk 最低约束（>=4.0.0），SDK 独立 semver；废除 Unreleased/sync_sdk_version；同大版本新 Key 靠运行时 inject 发现；1686 行 contract 换成"指南 + 生成的 API 参考" | +600 / −6200 | 中 | 无 |
+| **P5 SDK 缩减 + 版本** | SDK = `shiori_sdk.kernel`（P1 已就位）+ 核心插座契约（Key/Protocol/Event，含 `MEMORY_ENGINE`）+ 测试 harness（真内核 + stub）+ 少量 helper；删除 capability 镜像和 2.7k fake；版本策略按修订 D22：`api: 4` + 显式 A.B 兼容范围，A 代际/B 可破坏/C 兼容；废除 Unreleased/sync_sdk_version；缺 Key 仍由运行时 inject 发现；1686 行 contract 换成"指南 + 生成的 API 参考" | +600 / −6200 | 中 | 无 |
 | **P6a natural_chat + affection 插件化** | natural_chat（D8）：插件只负责提示词和策略；**全部分支盘点必须在 P3 结束前完成**（含 `reply_interruption.py`、`dispatcher.py`、`chat_service.py`），缺事件在 P3 补齐，P6a 只搬迁；真值表已写入 `docs/decisions/2026-10-27-natural-chat-switch.md`（P3-9），P6a 按该表搬迁；投递协议留核心；relationship_runtime + renderer affection UI 搬进 `plugins/affection`（后端 provide AFFECTION，前端放 `ui/`，D12）；core/scene 搬成系统插件 `scene`（D7）；agent/mcp 搬成外部插件 `mcp`（原 P9） | +950 / −1200（主要是搬迁） | 中 | `natural_chat_enabled`、`state/affection.json` 路径和格式不变；插件直接读旧位置 |
 | **P6s schedule 插件化**（在 P6b 之前） | scheduler + cron + schedule 工具 + 角色定时任务搬进 `plugins/schedule`（D17）：setup 里 provide `SCHEDULER`、向 `TOOLS` 注册 schedule 工具、`ctx.spawn` 运行调度循环（取代 `bootstrap/app.py` 第 209 行的启动任务）；`schedule_role_task_service` 改成插件 rpc；renderer 角色任务面板新增 `roleTasks` 插槽，定时任务表单和列表搬进插件 frontend；core-only 冒烟测试确认禁用后照常聊天 | +350 / −300 | 低中 | 定时任务 JSON 路径和格式不变；已有任务在插件启用时继续执行 |
 | **P6b proactive 插件化** | 按第 7 节方案分 6 个 PR：先在核心侧把 presence、发起回复投递、角色级插件设置做成通用能力，再搬代码，最后清零核心对 proactive 的引用（core-only 冒烟测试 + import-linter 守住） | +900 / −1300 | **高**（在 P6s 之后） | proactive.db、drift 目录、sessions.db presence 列、角色 JSON 里的 proactive 字段、配置键都不变；可以拆成多个 PR |
@@ -295,7 +297,7 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
    - 插件只能 import `shiori_sdk` 和 manifest 里声明的依赖插件；
    - 前端用 eslint `no-restricted-imports`：插件 ui 只能用 `@yinfengwindy/shiori-sdk` 和 react。
 5. **保留最小 wheelhouse / 发布态 SDK 隔离 job**（M8）：至少一条 CI 用发布形态的 SDK wheel 跑插件测试；**不**删除 provenance 的最小证明。与 D3 配套。
-6. **manifest schema**：`packages/sdk/manifest.schema.json` 作为唯一来源；`api` 只允许 4；新增 `sdk` 最低约束、`supports_hot_unload`、`replaces`/`conflicts`（D14/D22/D24）；保留 pyproject 版本 = manifest 版本检查。
+6. **manifest schema**：`packages/sdk/manifest.schema.json` 作为唯一来源；`api` 只允许 4；新增 `sdk` 显式兼容范围、`supports_hot_unload`、`replaces`/`conflicts`（D14/D22/D24）；保留 pyproject 版本 = manifest 版本检查。
 7. **脚手架**：`pnpm new-plugin <id> [--ui]`，约 120 LOC 模板，生成以下文件：
    - manifest.yaml
    - backend/plugin.py
@@ -314,7 +316,7 @@ py/fe 为非测试 LOC。"默认关"取自 manifest 的 `default_enabled: false`
    - 新功能先用四层规则判定，默认做成插件；内置工具留核心是**显式例外**（D11）；
    - 禁止新增层、适配层、镜像 fake；
    - 事件只有两种：`on` / `watch`；语义见 §8；
-   - 版本：大版本=破坏性；`api`+sdk 最低约束；**4.x 内禁止给已有 Key 加方法，新能力=新 Key**（D22）；废除 Unreleased/sync；
+   - 版本：按 2026-11-05 修订 D22，A 是代际、B 可破坏、C 保持 A.B 兼容；`api: 4` 与显式 SDK 范围独立；已发布版本不可复用；废除 Unreleased/sync；
    - `supports_hot_unload` 语义与「需重启」UI（D14）；
    - 插件只能 import SDK 和已声明的依赖；
    - 不为旧插件 API 写兼容层；0.5.x 用户数据路径保留（D4′）；配置外迁用幂等迁移（D27）；桌面发版门闩 P1–P8，重构期停用自动发版（D23/D26）；

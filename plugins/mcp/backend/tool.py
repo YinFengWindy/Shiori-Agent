@@ -1,7 +1,7 @@
 """Registered tools retain identity, never an unguarded session."""
 
 from typing import TYPE_CHECKING, Any
-from shiori_sdk.mcp import McpToolInfo
+from shiori_mcp_client import McpToolInfo
 from shiori_sdk.tools import Tool, ToolResult
 from .api import SourceCall
 

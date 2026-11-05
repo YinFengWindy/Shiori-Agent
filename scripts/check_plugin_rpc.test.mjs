@@ -7,7 +7,7 @@ import { checkPluginRpc } from './check_plugin_rpc.mjs';
 
 function fixture(source, extension = 'ts') {
   const directory = mkdtempSync(join(tmpdir(), 'shiori-rpc-contract-'));
-  writeFileSync(join(directory, 'manifest.yaml'), 'api: 4\nid: contract_probe\nsdk: ">=4.0.0"\n', 'utf8');
+  writeFileSync(join(directory, 'manifest.yaml'), 'api: 4\nid: contract_probe\nsdk: ">=4.0.0 <4.2.0"\n', 'utf8');
   writeFileSync(join(directory, 'rpc-contract.generated.json'), JSON.stringify({ plugin_id: 'contract_probe', dependencies: ['telegram', 'desktop_pet'], methods: ['read', 'write'], services: [{ service_id: 'voice', contract: 'voice.v1', methods: ['speak'] }] }), 'utf8');
   writeFileSync(join(directory, `probe.${extension}`), 'import type { PluginRpcClient } from "@yinfengwindy/shiori-sdk";\n' + source, 'utf8');
   return { directory, run: () => checkPluginRpc({ plugin: directory }), close: () => rmSync(directory, { recursive: true, force: true }) };

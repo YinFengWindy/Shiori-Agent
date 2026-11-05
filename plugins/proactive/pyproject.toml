@@ -6,11 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "shiori-plugin-proactive"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-sdk>=4.0.0,<5", "pydantic>=2.11.7", "ftfy>=6.3.1", "tzdata>=2025.2; sys_platform == 'win32'"]
+dependencies = ["shiori-sdk>=4.0.0,<4.2.0", "pydantic>=2.11.7", "ftfy>=6.3.1", "tzdata>=2025.2; sys_platform == 'win32'"]
 
 [project.optional-dependencies]
 mcp = ["shiori-plugin-mcp==0.1.0"]
-test = ["shiori-sdk[testing]>=4.0.0,<5", "shiori-plugin-mcp==0.1.0"]
+test = ["shiori-sdk[testing]>=4.0.0,<4.2.0", "shiori-plugin-mcp==0.1.0"]
 
 [tool.setuptools]
 include-package-data = false

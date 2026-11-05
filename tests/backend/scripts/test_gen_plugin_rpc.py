@@ -11,7 +11,7 @@ def package(tmp_path: Path, source: str) -> Path:
     directory = tmp_path / "plugins" / "example"
     (directory / "backend").mkdir(parents=True)
     (directory / "manifest.yaml").write_text(
-        'api: 4\nsdk: ">=4.0.0"\nid: example\n', encoding="utf-8"
+        'api: 4\nsdk: ">=4.0.0 <4.2.0"\nid: example\n', encoding="utf-8"
     )
     (directory / "backend" / "plugin.py").write_text(source, encoding="utf-8")
     return directory

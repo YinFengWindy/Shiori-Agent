@@ -1,8 +1,9 @@
-"""SDK semver. A new major is a breaking change (D22).
+"""SDK A.B.C: generation, compatibility line, compatible update.
 
-The npm package, the host pin and host-testing use this same number.
-``scripts/check_sdk_release.mjs --align`` checks they match. There is no
-runtime_api version and no Unreleased batch.
+B may change APIs incompatibly; C preserves the A.B contract. This custom
+compatibility policy does not change numeric version ordering or range syntax.
+The npm package, host and host-testing pins use this same version. See
+``docs/decisions/2026-11-05-sdk-version-policy.md``.
 """
 
-__version__ = "4.0.0"
+__version__ = "4.1.0"

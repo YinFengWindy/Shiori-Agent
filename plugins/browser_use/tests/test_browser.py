@@ -113,7 +113,7 @@ async def test_close_reaps_all_roles_even_if_one_fails(manager):
 async def test_close_during_startup_cancels_old_actions_before_releasing_owner(
     tmp_path, monkeypatch, phase
 ):
-    from shiori_sdk.testing.processes import FakeMcpSession
+    from shiori_mcp_client.testing import FakeMcpSession
     from plugins.browser_use.backend.daemon import BrowserDaemon
     from plugins.browser_use.backend.profile import ProfileLease
 
@@ -186,8 +186,8 @@ async def test_close_during_startup_cancels_old_actions_before_releasing_owner(
 async def test_mcp_initialization_error_retires_generation_before_retry(
     tmp_path, monkeypatch
 ):
-    from shiori_sdk.testing.processes import FakeMcpSession
-    from shiori_sdk.mcp import McpToolError
+    from shiori_mcp_client.testing import FakeMcpSession
+    from shiori_mcp_client import McpToolError
     from plugins.browser_use.backend.daemon import BrowserDaemon
 
     error = McpToolError(
@@ -224,7 +224,7 @@ async def test_mcp_initialization_error_retires_generation_before_retry(
 async def test_cancelled_close_is_owned_until_plugin_unload_finishes(
     tmp_path, monkeypatch
 ):
-    from shiori_sdk.testing.processes import FakeMcpSession
+    from shiori_mcp_client.testing import FakeMcpSession
     from plugins.browser_use.backend.daemon import BrowserDaemon
 
     close_started = asyncio.Event()
@@ -313,7 +313,7 @@ async def test_abandoned_close_failure_remains_owned_until_unload_observes_it(ma
 
 
 async def test_closing_one_role_does_not_serialize_other_roles(tmp_path, monkeypatch):
-    from shiori_sdk.testing.processes import FakeMcpSession
+    from shiori_mcp_client.testing import FakeMcpSession
     from plugins.browser_use.backend.daemon import BrowserDaemon
 
     blocked = asyncio.Event()

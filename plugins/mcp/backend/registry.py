@@ -9,17 +9,22 @@ from typing import Any, Callable
 from uuid import uuid4
 from pydantic import ValidationError
 from shiori_sdk.core.mcp_tools import McpToolRegistration
-from shiori_sdk.mcp import McpSession, McpToolInfo, McpToolError
+from shiori_mcp_client import (
+    McpProtocolError,
+    McpHttpError,
+    McpSession,
+    McpToolInfo,
+    McpToolError,
+)
 from . import operations
 from shiori_sdk.processes import Processes
 from shiori_sdk.redaction import redact_secrets
 from shiori_sdk.tools import ToolResult
 from .api import SourceCall
+from .configuration import connection_edit
 from .models import (
-    LaunchCredentials,
     McpConfigError,
     ServerConfig,
-    StdioTransport,
     ToolSelection,
 )
 from .store import ServerStore
@@ -115,6 +120,9 @@ class McpServerRegistry:
                     "transport": config.transport.model_dump(),
                     "command_configured": bool(credentials.command),
                     "env_names": sorted(credentials.env),
+                    "url_configured": bool(credentials.url),
+                    "bearer_configured": bool(credentials.bearer),
+                    "header_names": sorted(credentials.headers),
                     "selection": config.tools.model_dump(),
                     "status": state.status,
                     "error": state.error,
@@ -147,24 +155,17 @@ class McpServerRegistry:
         edits = payload.get("credentials", {})
         try:
             old = self.store.credentials(previous) if previous else None
-            command = self._edit(
-                edits.get("command", {"op": "keep"}), old.command if old else None
+            transport, credentials = connection_edit(
+                raw.get(
+                    "transport",
+                    previous.transport.model_dump() if previous else {"kind": "stdio"},
+                ),
+                edits,
+                old,
             )
-            env = self._edit(edits.get("env", {"op": "keep"}), old.env if old else {})
-            credentials = LaunchCredentials.model_validate(
-                {"command": command, "env": env or {}}
-            )
-            if any(not part or "\x00" in part for part in credentials.command) or any(
-                "=" in key or "\x00" in key + value
-                for key, value in credentials.env.items()
-            ):
-                raise ValueError("Invalid launch")
             label = raw.get("label", server)
             if not isinstance(label, str) or not label.strip():
                 raise ValueError("Invalid label")
-            transport = StdioTransport.model_validate(
-                raw.get("transport", {"kind": "stdio"})
-            )
             selection = ToolSelection.model_validate(
                 raw.get("tools", {"mode": "all", "names": []})
             )
@@ -181,9 +182,11 @@ class McpServerRegistry:
                 tools=selection,
                 credential_ref=ref,
             )
+        except McpConfigError:
+            raise
         except (ValidationError, TypeError, AttributeError, ValueError):
             raise McpConfigError(
-                "服务器设置无效，请检查命令数组、环境变量与工具选择"
+                "服务器设置无效，请检查连接参数、凭据与工具选择"
             ) from None
         self.store.commit({**self.store.servers, server: config})
         state = self._states.setdefault(server, ServerState())
@@ -199,16 +202,6 @@ class McpServerRegistry:
             self._register(server, state)
             self._changed()
         return self.snapshot()
-
-    @staticmethod
-    def _edit(edit: dict[str, Any], old: object) -> object:
-        if edit.get("op") == "keep":
-            return old
-        if edit.get("op") == "replace":
-            return edit["value"]
-        if edit.get("op") == "delete":
-            return None
-        raise ValueError("Unknown credential edit")
 
     def set_enabled(
         self, server: str, enabled: object, revision: object
@@ -323,6 +316,10 @@ class McpServerRegistry:
                 raise
             raise McpConfigError("MCP 调用已取消") from None
         except Exception as error:
+            if isinstance(error, McpHttpError) and state.epoch == epoch:
+                self._invalidate(server)
+                state.status, state.error = "error", str(error)
+                self._changed()
             transport = isinstance(
                 error, (ConnectionError, BrokenPipeError, EOFError, OSError)
             ) and not isinstance(error, TimeoutError)
@@ -379,14 +376,14 @@ class McpServerRegistry:
 
     @staticmethod
     def _safe_error(error: Exception) -> str:
-        if isinstance(error, McpConfigError):
+        if isinstance(error, (McpConfigError, McpProtocolError)):
             return str(error)
         if isinstance(error, FileNotFoundError):
             return "找不到 MCP 启动程序或工作目录"
         if isinstance(error, TimeoutError):
             return "MCP 连接或调用超时"
         if isinstance(error, (ConnectionError, OSError, EOFError)):
-            return "MCP 连接失败，请检查程序与工作目录"
+            return "MCP 连接失败，请检查连接地址或启动程序"
         return "MCP 操作失败，请检查服务器设置"
 
     async def shutdown(self) -> None:
