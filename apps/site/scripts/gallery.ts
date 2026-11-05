@@ -4,7 +4,9 @@
  * to `GALLERY_THUMB_HEIGHT` pixels tall in `apps/site/src/assets/gallery/<art>.webp`.
  * The site build only reads those committed files; run this
  * (`pnpm run site:gallery`) after changing the strip's list or its art, and
- * commit the output. Files no entry names any more are deleted.
+ * commit the output. WebP files no entry names any more are deleted.
+ * Other files in that directory, such as a blog cover that is not a strip
+ * thumbnail, are left alone.
  *
  * Usage: `tsx scripts/gallery.ts`.
  */
@@ -24,7 +26,9 @@ const WEBP_QUALITY = 78;
 mkdirSync(outDir, { recursive: true });
 const wanted = new Set(GALLERY_ARTS.map((art) => `${art}.webp`));
 for (const file of readdirSync(outDir)) {
-  if (!wanted.has(file)) rmSync(resolve(outDir, file));
+  // Blog covers sit beside the strip thumbnails. Only stale WebP thumbs go.
+  if (!file.endsWith(".webp") || wanted.has(file)) continue;
+  rmSync(resolve(outDir, file));
 }
 
 const oversized: string[] = [];

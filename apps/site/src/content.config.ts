@@ -32,7 +32,9 @@ function postCollection(base: string) {
         /**
          * Picture on the list card and over the post, with its alt text: a
          * landscape gallery preview (`assets/gallery/`, 480px tall) suits it;
-         * the portrait ones are too narrow for the reading column.
+         * the portrait ones are too narrow for the reading column. A cover
+         * that is not one of those previews must itself be at least
+         * 1200×630: the share picture is cropped from it and never enlarged.
          */
         cover: z.object({ image: image(), alt: z.string().min(1) }).optional(),
         draft: z.boolean().default(false),
