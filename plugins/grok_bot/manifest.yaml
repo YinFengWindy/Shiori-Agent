@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0 <4.2.0"
 id: grok_bot
 display_name: Grok Bot
-version: 0.1.1
+version: 0.1.2
 desc: 角色与 Grok Bot 的双向私聊
 distribution: builtin
 category: channel

@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0 <4.2.0"
 id: telegram
 display_name: Telegram
-version: 0.1.3
+version: 0.1.4
 desc: Telegram Bot 渠道
 inject:
   - channels

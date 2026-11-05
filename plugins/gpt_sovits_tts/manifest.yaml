@@ -2,7 +2,7 @@ api: 4
 sdk: ">=4.0.0 <4.2.0"
 id: gpt_sovits_tts
 display_name: GPT-SoVITS 语音合成
-version: 0.2.1
+version: 0.2.2
 desc: 本机 GPT-SoVITS v2ProPlus 角色语音 provider
 default_enabled: false
 entry: backend/plugin.py

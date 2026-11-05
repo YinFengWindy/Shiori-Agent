@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shiori-plugin-affection"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.12"
 dependencies = ["shiori-sdk>=4.0.0,<4.2.0"]
 
