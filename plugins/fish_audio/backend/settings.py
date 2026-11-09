@@ -8,6 +8,24 @@ from shiori_sdk.files.json import atomic_save_json, load_json
 from shiori_sdk.storage import plugin_data_dir
 
 type TtsModel = Literal["s2.1-pro-free", "s2.1-pro", "s2-pro"]
+type TextLanguage = Literal[
+    "auto",
+    "zh-CN",
+    "zh-TW",
+    "en",
+    "ja",
+    "ko",
+    "es-ES",
+    "es-MX",
+    "fr",
+    "de",
+    "it",
+    "pt-BR",
+    "ru",
+    "ar",
+    "tr",
+    "fil",
+]
 
 
 class Settings(BaseModel):
@@ -28,11 +46,12 @@ class SettingsUpdate(BaseModel):
 
 
 class RoleVoice(BaseModel):
-    """One role's Fish voice identity and speaking speed."""
+    """One role's Fish voice, speed and text-normalization language."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
     reference_id: str = Field(default="", max_length=256)
     speed: float = Field(default=1.0, ge=0.5, le=2.0, allow_inf_nan=False)
+    language: TextLanguage = "auto"
 
     @field_validator("reference_id")
     @classmethod

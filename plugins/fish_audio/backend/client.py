@@ -95,6 +95,8 @@ class FishClient:
                 "reference_id": voice.reference_id,
                 "prosody": {"speed": voice.speed},
                 "format": "mp3",
+                # Omission preserves Fish's per-chunk detection for mixed-language text.
+                **({"language": voice.language} if voice.language != "auto" else {}),
             },
         )
         # MP3 starts with ID3 metadata or an MPEG audio frame header.

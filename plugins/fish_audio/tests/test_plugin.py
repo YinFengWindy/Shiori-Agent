@@ -15,11 +15,11 @@ async def test_independent_service_registration_role_selection_and_unload(
 ):
     import json
 
-    voices = []
+    requests = []
 
     def serve(request):
         if request.url.path == "/v1/tts":
-            voices.append(json.loads(request.content)["reference_id"])
+            requests.append(json.loads(request.content))
             return httpx.Response(200, content=b"ID3audio")
         return httpx.Response(200, json={"text": "你好"})
 
@@ -28,9 +28,12 @@ async def test_independent_service_registration_role_selection_and_unload(
     await plugin.setup(context)
     rpc = context.fake_rpc.handlers
     await rpc["settings.set"]({"api_key": "key", "tts_model": "s2.1-pro-free"})
-    for name in ("alice", "bob"):
+    for name, language in (("alice", "ja"), ("bob", "en")):
         await rpc["role.set"](
-            {"role_id": name, "voice": {"reference_id": name, "speed": 1.0}}
+            {
+                "role_id": name,
+                "voice": {"reference_id": name, "speed": 1.0, "language": language},
+            }
         )
     for name in ("bob", "alice"):
         result = await context.fake_services.methods["tts", "synthesize"](
@@ -40,7 +43,21 @@ async def test_independent_service_registration_role_selection_and_unload(
             "audio_base64": base64.b64encode(b"ID3audio").decode(),
             "format": "mp3",
         }
-    assert voices == ["bob", "alice"]
+    assert [(request["reference_id"], request["language"]) for request in requests] == [
+        ("bob", "en"),
+        ("alice", "ja"),
+    ]
+    # The whole private role document round-trips; resetting one role to auto
+    # removes the API override without changing the other role's language.
+    alice = await rpc["role.get"]({"role_id": "alice"})
+    assert alice["language"] == "ja"
+    await rpc["role.set"]({"role_id": "alice", "voice": {**alice, "language": "auto"}})
+    await context.fake_services.methods["tts", "synthesize"](
+        {"text": "今日は November 9。", "role_id": "alice", "mood": ""}
+    )
+    assert requests[-1]["text"] == "今日は November 9。"
+    assert "language" not in requests[-1]
+    assert (await rpc["role.get"]({"role_id": "bob"}))["language"] == "en"
     assert await context.fake_services.methods["asr", "transcribe"](
         {"audio_base64": base64.b64encode(audio).decode(), "format": "wav"}
     ) == {"text": "你好"}
