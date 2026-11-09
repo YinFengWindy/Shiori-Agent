@@ -6,6 +6,7 @@ import { clamp } from "./lids";
 import { AvatarWebGL } from "./webgl";
 import { FacePoseTracker } from "./facePose";
 import type { FaceSample } from "../../capture/contracts";
+import { defaultAnimationSettings, type AnimationSettings } from "../../shared/animation";
 
 /** Loads images through img-src grants; no model path is evaluated as code or fetched as a script. */
 export function loadAvatarImage(url: string, signal: AbortSignal): Promise<HTMLImageElement> {
@@ -38,6 +39,7 @@ export class AvatarRenderer {
   private playbackId: string | null = null;
   private lastPainted = -1;
   private readonly face = new FacePoseTracker();
+  private settings = defaultAnimationSettings();
   private constructor(canvas: HTMLCanvasElement, private readonly model: AvatarModel, private readonly fail: (error: unknown) => void) {
     this.meshes = createScene(model); this.motion = createSceneMotion(this.meshes); this.gpu = new AvatarWebGL(canvas, model.width, model.height);
   }
@@ -71,8 +73,10 @@ export class AvatarRenderer {
   audio(audio: PetPresentationState["audio"]) {
     const id = audio?.playback_id ?? null;
     if (id !== this.playbackId || !audio) this.mouthValue = 0;
-    this.playbackId = id; this.amplitude = audio ? clamp(audio.amplitude * 4) : 0;
+    this.playbackId = id; this.amplitude = audio ? audio.amplitude : 0;
   }
+  /** Applies package preferences in place, retaining textures, pose and spring state. */
+  tune(settings: AnimationSettings) { this.settings = settings; }
   /** Camera samples are local to this renderer and one explicitly started session. */
   startFaceSession(sessionId: string, mirror: boolean) { this.face.start(sessionId, mirror); }
   /** Retires late frames as soon as the camera or its lease stops. */
@@ -90,10 +94,10 @@ export class AvatarRenderer {
       const face = this.face.sample(time, elapsed);
       // Ownership follows the real playback ID, so a silent TTS segment still
       // suppresses camera mouth motion while head and eyes continue tracking.
-      const mouthTarget = this.playbackId !== null ? this.amplitude : face?.mouth ?? 0;
+      const mouthTarget = this.playbackId !== null ? clamp(this.amplitude * 4 * this.settings.voiceMouthGain) : clamp((face?.mouth ?? 0) * this.settings.faceMouthGain);
       this.mouthValue += (mouthTarget - this.mouthValue) * (1 - Math.exp(-elapsed / (mouthTarget > this.mouthValue ? 0.035 : 0.06)));
       if (this.mouthValue < 0.003) this.mouthValue = 0;
-      const openness = animateScene(this.model, this.meshes, this.motion, this.simulationSeconds, elapsed, this.reducedMotion.matches, this.mouthValue, face);
+      const openness = animateScene(this.model, this.meshes, this.motion, this.simulationSeconds, elapsed, this.reducedMotion.matches, this.mouthValue, face, this.settings);
       if (Math.abs(this.mouthValue - this.lastPainted) > 0.001) {
         paintMouth(this.mouthCanvas, this.model.mouth, this.mouthValue); this.lastPainted = this.mouthValue;
         const index = this.meshes.findIndex((mesh) => mesh.part === "mouth"); this.gpu.mouth(index, this.mouthCanvas);

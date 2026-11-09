@@ -31,3 +31,10 @@ is played here. A terminal sample closes the mouth; a changed playback identity
 starts a fresh envelope. Reduced-motion mode suppresses idle motion and blinking
 while retaining speech articulation. Website drama, expression-generation and
 viseme features are outside this provider's scope.
+
+Role configuration exposes per-package animation controls. The background keeps
+preferences keyed by the immutable manifest hash, previews edits on shown leases,
+and serializes camera/animation persistence through one store owner. Body motion
+uses the package pivots; hair combines attachment inertia with bounded wind and
+still respects every baked pin constraint. Voice and face mouth gains are
+independent, and settings updates retain the renderer and its spring state.

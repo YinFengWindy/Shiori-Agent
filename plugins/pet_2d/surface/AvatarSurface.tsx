@@ -4,6 +4,7 @@ import { PetShell, readPresentationIdentity, readPresentationState, type PetPres
 import { finite, parseAvatarModel, record, type AvatarModel } from "./runtime/model";
 import { AvatarRenderer } from "./runtime/renderer";
 import { useFaceCapture } from "../capture/useFaceCapture";
+import { useAnimationSettings } from "./useAnimationSettings";
 
 type Loaded = { leaseId: string; body: { width: number; height: number }; model: AvatarModel; state: PetPresentationState };
 /** A lease loads once; subsequent audio/reply snapshots keep its mesh and GPU state intact. */
@@ -31,6 +32,7 @@ function AvatarCanvas({ load, surface }: { load: Loaded; surface: SurfaceHandle 
   const canvas = useRef<HTMLCanvasElement>(null), renderer = useRef<AvatarRenderer | null>(null);
   const latestState = useLatestRef(load.state);
   useFaceCapture(surface, load.leaseId, renderer);
+  useAnimationSettings(surface, load.leaseId, renderer);
   useEffect(() => {
     const element = canvas.current; if (!element) return;
     const abort = new AbortController();

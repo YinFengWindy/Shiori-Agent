@@ -1,6 +1,7 @@
 import type { BackgroundCtx } from "@yinfengwindy/shiori-sdk";
 import { isRecord, type PetProviderLoad } from "@yinfengwindy/shiori-pet";
 import type { CaptureCommand, CapturePreferences, CaptureStatus } from "../capture/contracts";
+import type { AvatarPreferences } from "./preferences";
 
 type ActiveSurface = { surfaceId: string; leaseId: string; sessionId: string | null };
 type PendingStop = { leaseId: string; sessionId: string; finish: () => void; timer: ReturnType<typeof setTimeout> };
@@ -16,11 +17,8 @@ export class CaptureCoordinator {
   private visibilityEpoch = 0;
   private readonly pendingStops = new Map<string, PendingStop>();
   private saveQueue = Promise.resolve();
-  private readonly stored: Record<string, unknown>;
-  constructor(private readonly ctx: Pick<BackgroundCtx, "surfaces" | "store" | "rpc" | "reportFailure">, stored: unknown) {
-    this.stored = isRecord(stored) ? stored : {};
-    const capture = isRecord(this.stored.capture) ? this.stored.capture : {};
-    this.preferences = { deviceId: typeof capture.deviceId === "string" ? capture.deviceId : "", mirror: capture.mirror !== false };
+  constructor(private readonly ctx: Pick<BackgroundCtx, "surfaces" | "rpc" | "reportFailure">, private readonly saved: AvatarPreferences) {
+    this.preferences = saved.capture();
   }
   /** Registers provider-private settings commands, with no backend RPC or media transport. */
   async register() {
@@ -98,7 +96,7 @@ export class CaptureCoordinator {
     const operation = this.saveQueue.then(async () => {
       if (this.disposed) throw new Error("面捕插件已停用");
       if (this.active?.sessionId) await this.stopSession(this.active);
-      await this.ctx.store.write({ ...this.stored, capture: next }); this.preferences = next;
+      await this.saved.saveCapture(next); this.preferences = next;
       if (this.active && this.enabled) this.startSession(this.active);
       return this.snapshot();
     });
