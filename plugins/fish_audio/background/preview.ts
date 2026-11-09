@@ -28,8 +28,14 @@ export class PreviewPlayer {
     await this.audio.stop();
     return this.snapshot();
   }
-  /** Invalidate pending native startup before releasing the plugin. */
-  async dispose() { this.disposed = true; await this.stop(this.state.id); }
+  /** Retire pending playback while the host releases this plugin's native resources. */
+  dispose() {
+    this.disposed = true;
+    this.revision++;
+    this.state = { ...this.state, phase: "idle", error: "" };
+    // Background disposal has already closed capability admission. The host's
+    // native-resources disposer stops owned audio; plugin cleanup cannot call it.
+  }
 
   private async run(revision: number, audio: NativeAudio) {
     const current = () => !this.disposed && revision === this.revision;

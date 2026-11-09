@@ -10,11 +10,23 @@ const models = [{ value: "s2.1-pro-free", label: "S2.1 Pro Free（免费 TTS）"
 /** Global cloud credentials and models only; voices are edited on each role's card. */
 export function FishSettingsPage({ client, host }: PluginSettingsSectionComponentProps) {
   const [key, setKey] = useState("");
+  const [keyError, setKeyError] = useState("");
   const state = usePrivateAutosave<SettingsDraft>(client, "settings", {
     load: async () => ({ ...await client.call<FishSettings>(rpcMethods["settings.get"]), api_key: "", clear_api_key: false }),
     save: async (value) => ({ ...await client.call<FishSettings>(rpcMethods["settings.set"], { tts_model: value.tts_model, api_key: value.api_key, clear_api_key: value.clear_api_key }), api_key: "", clear_api_key: false }),
   });
   const draft = state.draft;
+  function saveKey() {
+    const normalized = key.trim();
+    // Invalid local text must not enter autosave's retained failed-write queue.
+    if (!normalized || normalized.length > 4096 || !/^[ -~]+$/.test(normalized)) {
+      setKeyError("API Key 需为 1–4096 个可打印 ASCII 字符");
+      return;
+    }
+    setKeyError("");
+    state.commit((current) => ({ ...current, api_key: normalized, clear_api_key: false }));
+    setKey("");
+  }
   return <div className={settingsGroupStackClass}>
     <host.ui.SettingsSavedStatus phase={state.savePhase} />
     {state.loadError ? <host.ui.InlineError message={state.loadError} actions={<button type="button" className={compactGhostButtonClass} onClick={state.reload}>重新加载</button>} /> : null}
@@ -22,9 +34,10 @@ export function FishSettingsPage({ client, host }: PluginSettingsSectionComponen
     {draft ? <SettingsGroup title="Fish Audio">
       <SettingsField label="API Key">
         <div className="grid gap-2">
-          <input aria-label="Fish Audio API Key" type="password" autoComplete="new-password" className={settingsInputClass} value={key} maxLength={4096} placeholder={draft.has_api_key ? "已配置，输入新 Key 替换" : "未配置"} onChange={(event) => setKey(event.target.value)} />
+          <input aria-label="Fish Audio API Key" type="password" autoComplete="new-password" className={settingsInputClass} value={key} maxLength={4096} aria-invalid={Boolean(keyError) || undefined} placeholder={draft.has_api_key ? "已配置，输入新 Key 替换" : "未配置"} onChange={(event) => { setKey(event.target.value); setKeyError(""); }} />
+          {keyError ? <host.ui.InlineError message={keyError} /> : null}
           <div className="flex justify-end gap-2">
-            <button type="button" className={compactGhostButtonClass} disabled={!key.trim() || state.savePhase === "saving"} onClick={() => { state.commit((current) => ({ ...current, api_key: key, clear_api_key: false })); setKey(""); }}>保存 Key</button>
+            <button type="button" className={compactGhostButtonClass} disabled={!key.trim() || state.savePhase === "saving"} onClick={saveKey}>保存 Key</button>
             <button type="button" className={compactGhostButtonClass} disabled={!draft.has_api_key || state.savePhase === "saving"} onClick={() => state.commit((current) => ({ ...current, api_key: "", clear_api_key: true }))}>清除 Key</button>
           </div>
         </div>
