@@ -1,4 +1,5 @@
 import type { HairPins, ImageRect, Layer, Lid } from "./model";
+import { imageGrid, meshVertexCount } from "./geometry";
 
 /** Geometry and semantic ownership needed for one draw call. */
 export type Mesh = {
@@ -9,11 +10,7 @@ export type Mesh = {
 };
 /** Builds the exact grid shape stored by a hair bake, or a bounded regular image mesh. */
 export function imageMesh(layer: Layer, pins?: HairPins): Mesh {
-  const detailed = layer.fade === "eyeOpen" || layer.name.startsWith("eye_skin");
-  const nx = pins?.nx ?? Math.max(1, Math.round(layer.w / (detailed ? 5 : 42)));
-  const ny = pins?.ny ?? Math.max(1, Math.round(layer.h / (detailed ? 5 : 42)));
-  const count = (nx + 1) * (ny + 1);
-  if (count > 65_000) throw new Error("模型网格超出顶点预算");
+  const { nx, ny, count } = imageGrid(layer, pins);
   const base = pins ? new Float32Array(pins.rest) : new Float32Array(count * 2), uvs = new Float32Array(count * 2);
   for (let row = 0; row <= ny; row++) for (let col = 0; col <= nx; col++) {
     const index = (row * (nx + 1) + col) * 2;
@@ -24,6 +21,7 @@ export function imageMesh(layer: Layer, pins?: HairPins): Mesh {
 }
 /** Triangulates a grid without depending on texture coordinates or model format. */
 export function gridIndices(columns: number, rows: number): Uint16Array {
+  meshVertexCount(columns, rows);
   const result = new Uint16Array((columns - 1) * (rows - 1) * 6); let offset = 0;
   for (let row = 0; row < rows - 1; row++) for (let col = 0; col < columns - 1; col++) {
     const top = row * columns + col, bottom = top + columns;

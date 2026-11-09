@@ -17,7 +17,7 @@ packages = ["plugins.pet_2d", "plugins.pet_2d.backend"]
 package-dir = {"plugins.pet_2d" = "."}
 
 [tool.setuptools.package-data]
-"plugins.pet_2d" = ["manifest.yaml", "backend/**/*.json", "backend/**/*.md"]
+"plugins.pet_2d" = ["manifest.yaml", "geometry-limits.json", "backend/**/*.json", "backend/**/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

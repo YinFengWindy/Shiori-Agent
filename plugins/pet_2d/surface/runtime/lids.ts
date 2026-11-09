@@ -1,5 +1,6 @@
 import type { EyeAnchor, Layer, Lid } from "./model";
 import { gridIndices, type Mesh } from "./mesh";
+import { lidLineGrid } from "./geometry";
 
 /** Clamps a model parameter to its valid interval. */
 export function clamp(value: number, low = 0, high = 1): number { return Math.max(low, Math.min(high, value)); }
@@ -55,7 +56,8 @@ export function lidLinePoint(lid: Lid, eye: EyeAnchor, u: number, row: number, o
 
 /** Creates a generated contour mesh; its colors and taper still come from the bake. */
 export function lidLineMesh(owner: Layer, lid: Lid, eye: EyeAnchor): Mesh {
-  const columns = Math.max(2, Math.ceil(lid.high - lid.low) + 1), base = new Float32Array(columns * 4 * 2), uvs = new Float32Array(base.length), pixels = new Uint8Array(columns * 2 * 4);
+  const { columns, count } = lidLineGrid(lid);
+  const base = new Float32Array(count * 2), uvs = new Float32Array(base.length), pixels = new Uint8Array(columns * 2 * 4);
   for (let col = 0; col < columns; col++) {
     const u = lid.low + (lid.high - lid.low) * col / (columns - 1);
     for (let row = 0; row < 4; row++) {

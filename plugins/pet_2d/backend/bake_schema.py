@@ -6,6 +6,7 @@ import math
 import struct
 from typing import Any
 
+from .geometry import GEOMETRY_LIMITS, validate_geometry
 from .package_images import ImageInfo
 from .rig_schema import anchors, box, dimensions, layers, mouth_fit
 from .validation import array, choice, number, object_value, vector
@@ -16,8 +17,8 @@ BAKE_VERSIONS = {
     "hair": "hair-v1-2de9459fc64e7fc1",
     "lids": "lids-v1-5f0c2e9a71d4b836",
 }
-MAX_VERTICES = 65000
-MAX_TOTAL_VERTICES = 250000
+MAX_VERTICES = GEOMETRY_LIMITS["maxMeshVertices"]
+MAX_TOTAL_VERTICES = GEOMETRY_LIMITS["maxTotalVertices"]
 
 
 def packed_floats(value: object, count: int, label: str) -> tuple[float, ...]:
@@ -71,6 +72,7 @@ def validate_bake(bake: dict[str, Any], images: dict[str, ImageInfo]) -> None:
     _hair(bake["hair"], rows)
     _lids(bake["lids"], rows, images)
     _mouth(bake["mouth"], rows)
+    validate_geometry(bake)
 
 
 def _hair(hair: dict[str, Any], rows: list[dict[str, Any]]) -> None:

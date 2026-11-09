@@ -1,5 +1,6 @@
 import type { Mouth } from "./model";
 import { clamp } from "./lids";
+import { geometryLimits, mouthTextureSize } from "./geometry";
 
 /** A measured amplitude-only lip outline in the mouth's own rotated frame. */
 export type MouthOutline = { upper: { x: number; y: number }[]; lower: { x: number; y: number }[]; gap: number; halfSpan: number };
@@ -17,8 +18,9 @@ export function mouthOutline(mouth: Mouth, amplitude: number): MouthOutline {
 }
 /** Paints a small supersampled texture at the exact baked placement and angle. */
 export function paintMouth(canvas: HTMLCanvasElement, mouth: Mouth, amplitude: number) {
-  const scale = 4;
-  if (canvas.width !== mouth.w * scale || canvas.height !== mouth.h * scale) { canvas.width = mouth.w * scale; canvas.height = mouth.h * scale; }
+  const scale = geometryLimits.mouthTextureScale;
+  const { width, height } = mouthTextureSize(mouth.w, mouth.h);
+  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
   const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("嘴部画布不可用");
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(scale, 0, 0, scale, (mouth.origin.x - mouth.x) * scale, (mouth.origin.y - mouth.y) * scale); ctx.rotate(mouth.angle);

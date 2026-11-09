@@ -1,31 +1,50 @@
-import type { AvatarModel } from "./model";
+import type { AvatarModel, HairPins, Layer, Lid } from "./model";
 import { componentLayer, imageMesh, type Mesh } from "./mesh";
 import { clamp, deformLid, lidLineMesh, lidLinePoint, smooth } from "./lids";
 import { createHairMotion, hairDisplacement, stepHair } from "./hair";
+import { geometryLimits, imageGrid, lidLineGrid, mouthTextureSize } from "./geometry";
+
+type ScenePart = { kind: "image"; layer: Layer; pins?: HairPins; lid?: Lid; part?: Mesh["part"] } | { kind: "line"; layer: Layer; lid: Lid };
 
 /** Resolves each prepared correction and baked replacement into ordered render meshes. */
 export function createScene(model: AvatarModel): Mesh[] {
-  const hair = new Map(model.hair.map((pins) => [pins.layer, pins])), result: Mesh[] = [];
+  const hair = new Map(model.hair.map((pins) => [pins.layer, pins])), plan: ScenePart[] = [];
   for (let index = 0; index < model.layers.length; index++) {
-    const layer = model.layers[index], mesh = imageMesh(layer, hair.get(index));
+    const layer = model.layers[index];
     const lid = model.lids.find((item) => item.side === layer.side);
-    if (lid && (layer.fade === "eyeOpen" || layer.fade === "eyeClose" || layer.fade === "eyeClose2")) mesh.lid = lid;
-    if (index !== model.mouth.closed && layer.fade !== "mouthClose" && layer.fade !== "mouthOpen") result.push(mesh);
+    if (index !== model.mouth.closed && layer.fade !== "mouthClose" && layer.fade !== "mouthOpen") plan.push({
+      kind: "image", layer, pins: hair.get(index),
+      ...(lid && (layer.fade === "eyeOpen" || layer.fade === "eyeClose" || layer.fade === "eyeClose2") ? { lid } : {}),
+    });
     if (layer.name === "face") for (const eye of model.lids) if (eye.skin) {
-      const skin = imageMesh({ ...componentLayer(layer, eye.skin, `eye_skin_${eye.side}`), side: eye.side }); skin.part = "skin"; skin.lid = eye; result.push(skin);
+      plan.push({ kind: "image", layer: { ...componentLayer(layer, eye.skin, `eye_skin_${eye.side}`), side: eye.side }, part: "skin", lid: eye });
     }
     if (index === model.mouth.closed) {
       const mouth = model.mouth;
-      const lips = imageMesh({ ...layer, ...mouth, name: "parametric_mouth", image: "", phys: null, fade: null, side: null }); lips.part = "mouth"; result.push(lips);
+      plan.push({ kind: "image", layer: { ...layer, ...mouth, name: "parametric_mouth", image: "", phys: null, fade: null, side: null }, part: "mouth" });
     }
     const lash = lid?.lashes.find((item) => item.layer === index);
     if (lid && lash) {
-      const rest = imageMesh(componentLayer(layer, lash.rest, `${layer.name}:rest`)); rest.part = "rest"; rest.lid = lid; result.push(rest);
-      result.push(lidLineMesh(layer, lid, lid.side === "L" ? model.anchors.eyeL : model.anchors.eyeR));
-      if (lash.ink) { const ink = imageMesh(componentLayer(layer, lash.ink, `${layer.name}:ink`)); ink.part = "ink"; ink.lid = lid; result.push(ink); }
+      plan.push({ kind: "image", layer: componentLayer(layer, lash.rest, `${layer.name}:rest`), part: "rest", lid });
+      plan.push({ kind: "line", layer, lid });
+      if (lash.ink) plan.push({ kind: "image", layer: componentLayer(layer, lash.ink, `${layer.name}:ink`), part: "ink", lid });
     }
   }
-  return result;
+  // Budget the final render list before allocating any derived vertex, index or
+  // pixel buffer. Discarded source mouth layers never allocate temporary meshes.
+  mouthTextureSize(model.mouth.w, model.mouth.h);
+  let total = 0;
+  for (const item of plan) {
+    total += item.kind === "line" ? lidLineGrid(item.lid).count : imageGrid(item.layer, item.pins).count;
+    if (total > geometryLimits.maxTotalVertices) throw new Error("模型场景超出总顶点预算");
+  }
+  return plan.map((item) => {
+    if (item.kind === "line") return lidLineMesh(item.layer, item.lid, item.lid.side === "L" ? model.anchors.eyeL : model.anchors.eyeR);
+    const mesh = imageMesh(item.layer, item.pins);
+    if (item.lid) mesh.lid = item.lid;
+    if (item.part) mesh.part = item.part;
+    return mesh;
+  });
 }
 
 /** Tracks motion separately from immutable package data. */

@@ -1,0 +1,7 @@
+{
+  "maxMeshVertices": 65000,
+  "maxTotalVertices": 250000,
+  "maxGeneratedTextureSide": 2048,
+  "maxGeneratedTexturePixels": 4194304,
+  "mouthTextureScale": 4
+}

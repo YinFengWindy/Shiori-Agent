@@ -1,4 +1,5 @@
 import { isRecord } from "@yinfengwindy/shiori-pet";
+import { meshVertexCount } from "./geometry";
 
 /** An image rectangle in the prepared canvas coordinate system. */
 export type ImageRect = { x: number; y: number; w: number; h: number; image: string };
@@ -48,12 +49,12 @@ export function parseAvatarModel(value: unknown): AvatarModel {
   const anchors: Anchors = { face: { ...point(face), x0: finite(face.x0), x1: finite(face.x1), y0: finite(face.y0), y1: finite(face.y1) }, neck: point(a.neckPivot), body: point(a.bodyPivot), mouth: point(a.mouth), faceScale: positive(a.faceScale), eyeL: eye(a.eyeL), eyeR: eye(a.eyeR) };
   const pins = array(hair.layers).map((value): HairPins => {
     const p = record(value), nx = integer(p.nx), ny = integer(p.ny), layer = integer(p.layer);
-    requireValue(p.version === "hair-pins/v3" && nx > 0 && ny > 0 && (nx + 1) * (ny + 1) <= 65_000 && layer < layers.length, "头发网格版本或大小无效");
+    requireValue(p.version === "hair-pins/v3" && nx > 0 && ny > 0 && layer < layers.length, "头发网格版本或大小无效");
     requireValue(p.kind === "front" || p.kind === "back" || p.kind === "accessory", "头发绑定类型无效");
     const kind = p.kind;
     const strands = array(p.strands).map((value): HairPins["strands"][number] => { const s = record(value); return { x: finite(s.x), rootY: finite(s.rootY), tipY: finite(s.tipY), attachY: finite(s.attachY), hang: finite(s.hang), freedom: unit(s.freedom), restsOn: s.restsOn === "head" || s.restsOn === "body" ? s.restsOn : null }; });
     requireValue(strands.length > 0, "头发绑定缺少发束");
-    const count = (nx + 1) * (ny + 1);
+    const count = meshVertexCount(nx + 1, ny + 1);
     return { layer, nx, ny, kind, strands, rest: decodeFloat32(p.rest, count * 2), weights: decodeFloat32(p.weights, count * strands.length), freedom: decodeFloat32(p.freedom, count), hang: decodeFloat32(p.hang, count), cap: decodeFloat32(p.cap, count), lo: decodeFloat32(p.lo, count), hi: decodeFloat32(p.hi, count) };
   });
   const eyes = array(lids.eyes).map((value): Lid => {
