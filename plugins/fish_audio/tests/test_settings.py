@@ -1,8 +1,41 @@
 """Credential secrecy and independent per-role persistence."""
 
+import json
+
 import pytest
 
 from plugins.fish_audio.backend.settings import RoleVoice, VoiceStore
+
+
+def test_existing_voice_document_defaults_language_without_losing_private_data(
+    tmp_path,
+):
+    store = VoiceStore(tmp_path)
+    previous = {
+        "settings": {"api_key": "private-key", "tts_model": "s2-pro"},
+        "roles": {
+            "alice": {"reference_id": "voice-alice", "speed": 1.2},
+            "bob": {"reference_id": "voice-bob", "speed": 0.8},
+        },
+    }
+    store.path.parent.mkdir(parents=True, exist_ok=True)
+    store.path.write_text(json.dumps(previous), encoding="utf-8")
+    document = store.read()
+    assert document.roles["alice"].language == "auto"
+    assert document.roles["bob"].language == "auto"
+    assert json.loads(store.path.read_text(encoding="utf-8")) == previous
+    document.roles["alice"].language = "ja"
+    store.save_role("alice", document.roles["alice"])
+    reloaded = VoiceStore(tmp_path).read()
+    assert reloaded.settings.model_dump() == previous["settings"]
+    assert reloaded.roles["alice"].model_dump() == {
+        **previous["roles"]["alice"],
+        "language": "ja",
+    }
+    assert reloaded.roles["bob"].model_dump() == {
+        **previous["roles"]["bob"],
+        "language": "auto",
+    }
 
 
 def test_global_edits_preserve_roles_and_key_is_only_explicitly_cleared(tmp_path):
