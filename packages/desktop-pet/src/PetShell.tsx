@@ -20,7 +20,7 @@ export function PetShell({ surface, body, state, children }: {
   const height = useRef(0);
   const extension = useRef({ side: "below" as "above" | "below", size: 0 });
   const voiceText = state.voice.status === "recording" ? "我在听"
-    : ["transcribing", "sending", "waiting_reply", "speaking_prepare"].includes(state.voice.status) ? "正在理解"
+    : ["transcribing", "sending", "waiting_reply"].includes(state.voice.status) ? "正在理解"
       : state.voice.status === "error" ? state.voice.message || "没听清，再试一次" : "";
   const text = voiceText || state.reply.text;
   const sync = useCallback(() => {

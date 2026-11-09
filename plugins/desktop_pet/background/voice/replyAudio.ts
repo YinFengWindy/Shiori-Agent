@@ -1,4 +1,4 @@
-import { errorMessage, type BackgroundCtx, type PluginServiceReference } from "@yinfengwindy/shiori-sdk";
+import { errorMessage, type BackgroundCtx, type PluginServiceReference, type TtsResult } from "@yinfengwindy/shiori-sdk";
 import type { ReplyOwner } from "../replyOutput";
 import { SpeechSentenceBuffer } from "./sentences";
 import { SentenceStream } from "./sentenceStream";
@@ -7,6 +7,7 @@ import { synthesizeSentence } from "./synthesis";
 
 const chatOwner: ReplyOwner = { source: "chat" };
 type ReplyVoice = { provider: PluginServiceReference; roleId: string; mood: string };
+type PreparedSpeech = { kind: "audio"; audio: TtsResult } | { kind: "end" } | { kind: "failed"; error: unknown };
 
 /**
  * How long a reply being spoken may go without any delta before it gives up
@@ -83,18 +84,40 @@ export class PetReplyAudio {
     const epoch = this.epoch; const stream = new SentenceStream(); this.opened = true;
     void this.speech.enqueue(chatOwner, async (job) => {
       const current = () => epoch === this.epoch && job.active;
+      const prepare = async (): Promise<PreparedSpeech> => {
+        try {
+          const sentence = await stream.next(job.signal);
+          if (sentence === null || !current()) return { kind: "end" };
+          const audio = await synthesizeSentence(this.ctx.rpc, voice.provider, { text: sentence, roleId: voice.roleId, mood: voice.mood });
+          return { kind: "audio", audio };
+        } catch (error) {
+          // Capture prefetch failures immediately, even while the current clip plays.
+          return { kind: "failed", error };
+        }
+      };
+      let pending = prepare();
       try {
-        for (let sentence = await stream.next(job.signal); sentence !== null && current(); sentence = await stream.next(job.signal)) {
+        while (current()) {
           this.status("speaking_prepare");
-          const result = await synthesizeSentence(this.ctx.rpc, voice.provider, { text: sentence, roleId: voice.roleId, mood: voice.mood });
+          const result = await pending;
           if (!current()) return;
+          if (result.kind === "end") break;
+          if (result.kind === "failed") throw result.error;
           this.status("speaking");
-          await job.play(result);
+          const playing = job.play(result.audio);
+          // Only one segment ahead: synthesis overlaps playback, never another synthesis.
+          pending = prepare();
+          await playing;
         }
         if (current()) this.status("idle");
       } catch (error) {
         // Retires the rest of this reply so later sentences do not speak past a failure.
-        if (epoch === this.epoch) { this.reset(); this.ended = true; this.status("error", errorMessage(error)); }
+        if (current()) { this.reset(); this.ended = true; this.status("error", errorMessage(error)); }
+      } finally {
+        // Wake a pending sentence read on failure, and keep the queue occupied until
+        // any already accepted provider call settles, including cancelled prefetch.
+        stream.close();
+        await pending;
       }
     });
     return stream;

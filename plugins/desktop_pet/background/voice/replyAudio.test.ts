@@ -19,6 +19,90 @@ function player() {
   return { audio, calls, end: () => { finish?.(); } };
 }
 
+test("speech prepares only the next segment while the current segment plays", async () => {
+  const p = player(); const second = deferred<TtsResult>();
+  const statuses: string[] = [];
+  const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => {
+    const text = String(payload?.text); p.calls.push(`synthesize:${text}`);
+    return (text === "第二句。" ? await second.promise : { audio_base64: text, format: "wav" }) as T;
+  } } });
+  const speech = new PetSpeechQueue(p.audio);
+  const replies = new PetReplyAudio({ rpc }, speech, (status) => statuses.push(status));
+  replies.begin(); replies.push("第一句。", false, provider, "role", "");
+  await flush();
+  replies.push("第二句。第三句。", false, provider, "role", "");
+  replies.push("", true, provider, "role", "");
+  await flush();
+  assert.deepEqual(p.calls, ["synthesize:第一句。", "play:第一句。", "synthesize:第二句。"]);
+  assert.equal(statuses.at(-1), "speaking", "prefetch must not replace actual playback state");
+  second.resolve({ audio_base64: "第二句。", format: "wav" }); await flush();
+  assert.equal(p.calls.length, 3, "one ready segment is the entire lookahead buffer");
+  p.end(); await flush();
+  assert.deepEqual(p.calls.slice(3), ["play:第二句。", "synthesize:第三句。"]);
+  p.end(); await flush(); p.end(); await flush();
+  assert.equal(p.calls.at(-1), "play:第三句。");
+  assert.equal(statuses.at(-1), "idle");
+});
+
+test("cancelling during prefetch drops its result and retains the line until inference settles", async () => {
+  const p = player(); const next = deferred<TtsResult>();
+  const statuses: string[] = [];
+  const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => {
+    const text = String(payload?.text); p.calls.push(`synthesize:${text}`);
+    return (text === "旧二。" ? await next.promise : { audio_base64: text, format: "wav" }) as T;
+  } } });
+  const speech = new PetSpeechQueue(p.audio);
+  const replies = new PetReplyAudio({ rpc }, speech, (status) => statuses.push(status));
+  replies.begin(); replies.push("旧一。旧二。旧三。", true, provider, "role", "");
+  await flush();
+  assert.equal(p.calls.at(-1), "synthesize:旧二。");
+  replies.reset(); await speech.cancel({ source: "chat" });
+  replies.begin(); replies.push("新句。", true, provider, "role", "");
+  await flush();
+  assert.equal(p.calls.at(-1), "stop", "the new job cannot overlap a cancelled provider call");
+  next.reject(new Error("retired request failed")); await flush();
+  assert.deepEqual(p.calls.slice(-2), ["synthesize:新句。", "play:新句。"]);
+  assert.ok(!p.calls.includes("synthesize:旧三。"));
+  assert.ok(!statuses.includes("error"));
+  p.end(); await flush();
+});
+
+test("a rejected prefetch is handled during playback and retires the rest of its reply", async () => {
+  const p = player(); const next = deferred<TtsResult>(); const statuses: string[] = [];
+  const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => {
+    const text = String(payload?.text); p.calls.push(`synthesize:${text}`);
+    return (text === "第二句。" ? await next.promise : { audio_base64: text, format: "wav" }) as T;
+  } } });
+  const speech = new PetSpeechQueue(p.audio);
+  const replies = new PetReplyAudio({ rpc }, speech, (status) => statuses.push(status));
+  replies.begin(); replies.push("第一句。第二句。第三句。", true, provider, "role", "");
+  await flush();
+  next.reject(new Error("prefetch failed"));
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(statuses.at(-1), "speaking", "a future failure must not replace the still-playing segment");
+  p.end(); await flush();
+  assert.equal(statuses.at(-1), "error");
+  assert.deepEqual(p.calls, ["synthesize:第一句。", "play:第一句。", "synthesize:第二句。"]);
+  const live = speech.enqueue({ source: "live" }, (job) => job.play({ audio_base64: "live", format: "wav" }));
+  await flush(); assert.equal(p.calls.at(-1), "play:live");
+  p.end(); assert.deepEqual(await live, { status: "succeeded" });
+});
+
+test("playback failure closes a pending sentence read and releases the shared line", async () => {
+  const p = player(); const failedPlayback = deferred<void>(); const play = p.audio.play;
+  p.audio.play = (audio) => audio.audio_base64 === "第一句。" ? failedPlayback.promise : play(audio);
+  const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => ({ audio_base64: String(payload?.text), format: "wav" }) as T } });
+  const speech = new PetSpeechQueue(p.audio); const statuses: string[] = [];
+  const replies = new PetReplyAudio({ rpc }, speech, (status) => statuses.push(status));
+  replies.begin(); replies.push("第一句。", false, provider, "role", "");
+  await flush();
+  const live = speech.enqueue({ source: "live" }, (job) => job.play({ audio_base64: "live", format: "wav" }));
+  failedPlayback.reject(new Error("player failed")); await flush();
+  assert.equal(statuses.at(-1), "error");
+  assert.deepEqual(p.calls, ["play:live"], "the abandoned prefetch read must not hold the line");
+  p.end(); assert.deepEqual(await live, { status: "succeeded" });
+});
+
 test("a retired reply drops late audio and new speech waits behind the real old inference", async () => {
   const synthesis = deferred<TtsResult>(); const p = player();
   const rpc = createFakePluginClient({ services: { list: async () => ({ services: [] }), call: async <T,>(_provider: unknown, _method: string, payload?: Record<string, unknown>) => { p.calls.push(String(payload?.text)); return (p.calls.length === 1 ? await synthesis.promise : { audio_base64: "new", format: "wav" }) as T; } } });
