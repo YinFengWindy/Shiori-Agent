@@ -394,6 +394,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "default_memory",
     "desktop_pet",
     "pet_codex_sprite",
+    "pet_2d",
     "feishu",
     "gpt_sovits_tts",
     "grok_bot",

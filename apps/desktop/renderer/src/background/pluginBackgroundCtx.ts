@@ -7,6 +7,7 @@ import type {
   PluginBackgroundTray,
 } from "@yinfengwindy/shiori-sdk";
 import type { DesktopApi, DesktopSurfacesApi, SurfaceSettledPayload } from "../../../src/bridge/shared";
+import { nativeAudioPlaybackEvent } from "@yinfengwindy/shiori-sdk";
 import { unavailableLocalAssetUrl } from "../../../src/assets/localAssetContract";
 import type { DesktopInvoke } from "../shared/bridgeInvoke";
 import { createPluginCommunicationClient } from "../plugins/pluginCommunicationClient";
@@ -187,9 +188,13 @@ export function createBackgroundCtx(options: {
   } = options;
   const rpc = createPluginCommunicationClient(pluginId, { invoke, onEvent, background: true });
   scope.addEventEffect("plugin-communication", () => rpc.dispose());
+  const playbackListeners = new Set<Parameters<BackgroundCtx["hostEvents"]["on"]>[1]>();
   return {
     surfaces: createPluginBackgroundSurfaces(pluginId, surfaces, onSurfaceSettled, options.onSurfaceMessage, scope),
-    native: createPluginNativeClient(options.native, () => rpc.openNativeContext(), scope),
+    native: createPluginNativeClient(options.native, () => rpc.openNativeContext(), scope, (payload) => {
+      const event: BridgeEvent = { id: payload.playback_id, type: "event", method: nativeAudioPlaybackEvent, payload };
+      for (const listener of playbackListeners) listener(payload, event);
+    }),
     chat: {
       send: (payload) => { scope.ensureActive("chat.send"); return invokeBridgePayload(invoke, "chat.send", payload); },
       // Exact-turn cancellation also serves teardown after event admission closes.
@@ -200,6 +205,13 @@ export function createBackgroundCtx(options: {
     hostEvents: {
       on(method, handler) {
         scope.ensureActive(`event:${method}`);
+        if (method === nativeAudioPlaybackEvent) {
+          // This event never enters the shared bridge stream: token and owner
+          // checks in the native client precede delivery to this context alone.
+          playbackListeners.add(handler);
+          scope.addEventEffect(`event:${method}`, () => { playbackListeners.delete(handler); });
+          return;
+        }
         if (method.startsWith(`${pluginId}.`) || method.startsWith("plugin.")) throw new Error("插件事件请使用 ctx.events 或依赖 client.events");
         const unsubscribe = onEvent((event) => {
           if (event.pluginGeneration === undefined && event.method === method) handler(event.payload, event);

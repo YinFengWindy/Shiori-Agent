@@ -1,15 +1,16 @@
-import type { PluginNativeApi, PluginNativeContext } from "@yinfengwindy/shiori-sdk";
+import type { NativeAudioPlaybackPayload, PluginNativeApi, PluginNativeContext } from "@yinfengwindy/shiori-sdk";
 import type { DesktopApi } from "../../../src/bridge/shared";
 import type { BackgroundEffectScope } from "./backgroundEffectScope";
 
 /** Keeps native tokens private to the injected background context and its effect scope. */
-export function createPluginNativeClient(api: DesktopApi["native"], context: () => Promise<PluginNativeContext>, scope: BackgroundEffectScope): PluginNativeApi {
+export function createPluginNativeClient(api: DesktopApi["native"], context: () => Promise<PluginNativeContext>, scope: BackgroundEffectScope, playback: (value: NativeAudioPlaybackPayload) => void = () => {}): PluginNativeApi {
   let opened: Promise<string> | undefined;
   let disposed = false;
+  let identity: PluginNativeContext | undefined;
   const listeners = new Map<string, (phase: "down" | "up") => void>();
   const token = () => {
     scope.ensureActive("native");
-    return opened ??= context().then((value) => api.open(value)).catch((error) => { opened = undefined; throw error; });
+    return opened ??= context().then((value) => { identity = value; return api.open(value); }).catch((error) => { opened = undefined; throw error; });
   };
   const call = async <T,>(method: string, payload: Record<string, unknown> = {}) => {
     const session = await token();
@@ -21,6 +22,13 @@ export function createPluginNativeClient(api: DesktopApi["native"], context: () 
     void opened.then((session) => { if (!disposed && session === event.token) listeners.get(event.id)?.(event.phase); }, () => undefined);
   });
   scope.addEventEffect("native-key-events", unsubscribe);
+  scope.addEventEffect("native-playback-events", api.onPlayback((event) => {
+    if (!opened || disposed) return;
+    void opened.then((session) => {
+      const value = event.payload;
+      if (!disposed && session === event.token && value.plugin_id === identity?.plugin_id && value.owner === identity.owner && value.generation === identity.generation) playback(value);
+    }, () => undefined);
+  }));
   scope.addEffect("native-resources", async () => {
     disposed = true; listeners.clear();
     if (opened) {

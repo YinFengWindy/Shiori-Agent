@@ -215,6 +215,8 @@ export { CrossfadeLayers } from "./components/CrossfadeLayers";
 export { SidebarResizeHandle } from "./components/SidebarResizeHandle";
 
 export type { PluginNativeApi, PluginNativeContext, NativeAudio, NativeAudioDevice, PluginBackgroundChat } from "./contract/native";
+export { nativeAudioPlaybackEvent } from "./contract/native";
+export type { NativeAudioPlaybackPayload } from "./contract/native";
 export type { PluginServiceReference, PluginServiceDescriptor } from "./rpc";
 export type { AsrRequest, AsrResult, TtsRequest, TtsResult } from "./contract/speech";
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BridgeEvent } from "@yinfengwindy/shiori-sdk";
+import { nativeAudioPlaybackEvent, type PluginNativeContext, type NativeAudioPlaybackPayload } from "@yinfengwindy/shiori-sdk";
 import type {
   DesktopApi,
   DesktopSurfacesApi,
@@ -93,6 +94,41 @@ function fakeTray() {
 
 const failingInvoke = (() => Promise.reject(new Error("unused"))) as DesktopInvoke;
 
+test("playback host events are token scoped, reject shared bridge spoofing and stop on disposal", async () => {
+  const source = fakeEventSource();
+  const listeners = new Set<Parameters<DesktopApi["native"]["onPlayback"]>[0]>();
+  const identities: PluginNativeContext[] = [];
+  const native: DesktopApi["native"] = {
+    open: async (identity) => { identities.push(identity); return identity.owner; },
+    call: async <T,>() => undefined as T,
+    onKey: () => () => {},
+    onPlayback: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+  const invoke: DesktopInvoke = async (request) => ({ id: "open", type: "response", method: request.method, payload: { generation: "g1" }, error: null });
+  const scope = new BackgroundEffectScope();
+  const first = makeCtx({ scope, invoke, native, onEvent: source.onEvent });
+  const otherScope = new BackgroundEffectScope();
+  const other = makeCtx({ pluginId: "other", scope: otherScope, invoke, native, onEvent: source.onEvent });
+  const received: unknown[][] = [[], []];
+  first.hostEvents.on(nativeAudioPlaybackEvent, (value) => received[0]!.push(value));
+  other.hostEvents.on(nativeAudioPlaybackEvent, (value) => received[1]!.push(value));
+  await first.native.audio.play({ audio_base64: "AQ==", format: "wav" });
+  await other.native.audio.play({ audio_base64: "AQ==", format: "wav" });
+  const identity = identities[0]!;
+  const payload: NativeAudioPlaybackPayload = { ...identity, playback_id: "1", request_id: "clip", phase: "level", amplitude: .5 };
+  source.emit({ id: "spoof", type: "event", method: nativeAudioPlaybackEvent, payload });
+  for (const listener of listeners) {
+    listener({ token: identity.owner, payload: { ...payload, generation: "old" } });
+    listener({ token: identity.owner, payload });
+  }
+  await Promise.resolve(); await Promise.resolve();
+  assert.deepEqual(received, [[payload], []]);
+  await scope.disposeAll();
+  for (const listener of listeners) listener({ token: identity.owner, payload });
+  await Promise.resolve(); assert.deepEqual(received, [[payload], []]);
+  await otherScope.disposeAll(); assert.equal(listeners.size, 0);
+});
+
 function makeCtx(overrides: Partial<Parameters<typeof createBackgroundCtx>[0]> = {}) {
   const scope = overrides.scope ?? new BackgroundEffectScope();
   return createBackgroundCtx({
@@ -102,7 +138,7 @@ function makeCtx(overrides: Partial<Parameters<typeof createBackgroundCtx>[0]> =
     onEvent: () => () => {},
     onSurfaceSettled: () => () => {},
     onSurfaceMessage: () => () => {},
-    native: { open: async () => "native", call: async <T,>() => undefined as T, onKey: () => () => {} },
+    native: { open: async () => "native", call: async <T,>() => undefined as T, onKey: () => () => {}, onPlayback: () => () => {} },
     pluginData: fakePluginData(),
     tray: fakeTray().api,
     onTrayEntryClicked: () => () => {},

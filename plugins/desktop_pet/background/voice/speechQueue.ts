@@ -1,4 +1,5 @@
 import { errorMessage, type BackgroundCtx, type NativeAudio } from "@yinfengwindy/shiori-sdk";
+import { isRecord, type PetPresentationState } from "@yinfengwindy/shiori-pet";
 import { cancelledResult, failedResult, succeededResult, type OutputResult, type PetReplySource, type ReplyOwner } from "../replyOutput";
 
 /** The handle a running job uses to learn whether it is still wanted and to play audio. */
@@ -22,7 +23,7 @@ class Job implements SpeechJob {
   readonly outcome: Promise<OutputResult>;
   readonly settle: (result: OutputResult) => void;
   private readonly abort = new AbortController();
-  constructor(readonly owner: ReplyOwner, private readonly audio: BackgroundCtx["native"]["audio"]) {
+  constructor(readonly owner: ReplyOwner, private readonly playAudio: (job: Job, audio: NativeAudio) => Promise<void>) {
     let settle: (result: OutputResult) => void = () => {};
     this.outcome = new Promise((resolve) => { settle = resolve; });
     this.settle = settle;
@@ -35,7 +36,7 @@ class Job implements SpeechJob {
   async play(audio: NativeAudio) {
     if (!this.active) return;
     this.playing = true;
-    try { await this.audio.play(audio); } finally { this.playing = false; }
+    try { await this.playAudio(this, audio); } finally { this.playing = false; }
   }
 }
 
@@ -54,12 +55,36 @@ export class PetSpeechQueue {
   private tail = Promise.resolve();
   private readonly jobs = new Set<Job>();
   private current: Job | null = null;
+  private playback: { job: Job; requestId: string; playbackId: string | null } | null = null;
 
-  constructor(private readonly audio: BackgroundCtx["native"]["audio"]) {}
+  constructor(private readonly audio: BackgroundCtx["native"]["audio"], private readonly output: (audio: PetPresentationState["audio"]) => void = () => {}) {}
+
+  /** Correlates host observations with the exact queued play, including cancelled jobs. */
+  observe(value: unknown): void {
+    const current = this.playback;
+    if (!current?.job.active || !isRecord(value) || value.request_id !== current.requestId || typeof value.playback_id !== "string" || !value.playback_id) return;
+    if (value.phase === "started") {
+      if (current.playbackId !== null) return;
+      current.playbackId = value.playback_id;
+      this.output({ playback_id: value.playback_id, amplitude: 0 });
+    } else if (value.phase === "level" && value.playback_id === current.playbackId && typeof value.amplitude === "number" && Number.isFinite(value.amplitude) && value.amplitude >= 0 && value.amplitude <= 1) {
+      this.output({ playback_id: value.playback_id, amplitude: value.amplitude });
+    } else if (value.phase === "ended" && (current.playbackId === null || value.playback_id === current.playbackId)) {
+      this.playback = null; this.output(null);
+    }
+  }
+
+  private async play(job: Job, audio: NativeAudio): Promise<void> {
+    const current = { job, requestId: crypto.randomUUID(), playbackId: null };
+    this.playback = current;
+    this.output(null);
+    try { await this.audio.play({ ...audio, request_id: current.requestId }); }
+    finally { if (this.playback === current) { this.playback = null; this.output(null); } }
+  }
 
   /** Appends one job; resolves with its outcome (never `skipped`) once it has run or been dropped. */
   enqueue(owner: ReplyOwner, work: (job: SpeechJob) => Promise<void>): Promise<OutputResult> {
-    const job = new Job(owner, this.audio);
+    const job = new Job(owner, (job, audio) => this.play(job, audio));
     this.jobs.add(job);
     this.tail = this.tail.then(() => this.execute(job, work));
     return job.outcome;
@@ -75,6 +100,7 @@ export class PetSpeechQueue {
       job.cancel();
       if (!job.started) { job.settle(cancelledResult); this.jobs.delete(job); }
     }
+    if (this.playback && inScope(this.playback.job)) { this.playback = null; this.output(null); }
     if (stopPlayback) await this.audio.stop();
   }
 

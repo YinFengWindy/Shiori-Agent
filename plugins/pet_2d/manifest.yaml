@@ -1,0 +1,16 @@
+api: 4
+sdk: ">=4.1.2 <4.2.0"
+id: pet_2d
+display_name: 2.5D 形象
+version: 0.1.0
+desc: 桌宠的 Prelulu 2.5D 形象与音量口型
+dependencies: [desktop_pet]
+inject:
+  - dependencies
+  - workspace
+  - roles
+  - events
+  - rpc
+  - services
+frontend:
+  entry: frontend.ts

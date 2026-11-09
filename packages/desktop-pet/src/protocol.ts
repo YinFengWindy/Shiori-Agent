@@ -19,7 +19,7 @@ export type PetVoiceState = {
   message?: string;
 };
 /** Retained business presentation; animation state remains provider-local. */
-export type PetPresentationState = { reply: PetReplyBubble; voice: PetVoiceState };
+export type PetPresentationState = { reply: PetReplyBubble; voice: PetVoiceState; /** Current output stream RMS; absent/null means a closed mouth. */ audio?: { playback_id: string; amplitude: number } | null };
 /** Every request/report identifies the exact model instance, including stale work. */
 export type PetPresentationIdentity = { request_id: string; lease_id: string; role_id: string; model_id: string };
 /** Generic movement and model-declared action names. */
@@ -69,5 +69,7 @@ export function readPresentationState(value: unknown): PetPresentationState | nu
   const states = ["idle", "press_pending", "dragging", "recording", "transcribing", "sending", "waiting_reply", "speaking_prepare", "speaking", "error"] as const;
   const status = states.find((state) => state === voice.status);
   if (typeof reply.text !== "string" || typeof reply.paused !== "boolean" || typeof reply.persistent !== "boolean" || !status) return null;
-  return { reply: { text: reply.text, paused: reply.paused, persistent: reply.persistent }, voice: { status, ...(voice.source === "surface" || voice.source === "hotkey" ? { source: voice.source } : {}), ...(typeof voice.message === "string" ? { message: voice.message } : {}) } };
+  const audio = value.audio;
+  if (audio !== undefined && audio !== null && (!isRecord(audio) || !nonempty(audio.playback_id) || typeof audio.amplitude !== "number" || !Number.isFinite(audio.amplitude) || audio.amplitude < 0 || audio.amplitude > 1)) return null;
+  return { reply: { text: reply.text, paused: reply.paused, persistent: reply.persistent }, voice: { status, ...(voice.source === "surface" || voice.source === "hotkey" ? { source: voice.source } : {}), ...(typeof voice.message === "string" ? { message: voice.message } : {}) }, ...(audio === null ? { audio: null } : isRecord(audio) && typeof audio.playback_id === "string" && typeof audio.amplitude === "number" ? { audio: { playback_id: audio.playback_id, amplitude: audio.amplitude } } : {}) };
 }

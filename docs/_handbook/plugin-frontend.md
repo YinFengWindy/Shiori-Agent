@@ -93,6 +93,10 @@ SDK 4.1.1 起，`surfaces.create` 的 `SurfaceSpec.visible` 可设为 `false`：
 
 background 可订阅 `surfaceLifecycleEvent`（`surface.lifecycle`），按 `SurfaceLifecyclePayload` 的 `plugin_id`、`surface_id` 和 `window_id` 识别自己的实例。`unavailable` 表示 renderer 重载/崩溃而失去就绪状态，`closed` 表示窗口已销毁；提供者应撤销相应实例的加载或展示，不用心跳推测宿主已知的窗口生命周期。
 
+SDK 4.1.2 起，background 可通过 `hostEvents.on(nativeAudioPlaybackEvent, ...)` 观察自己调用 `native.audio.play` 的实际播放。`NativeAudioPlaybackPayload` 包含 `plugin_id`、`owner`、`generation`、`playback_id`、`phase`（`started` / `level` / `ended`）与 `amplitude`。`level` 约每 33ms 返回唯一 Web Audio 播放流的 RMS（0–1）；开始和结束的音量为 0，结束还带 `reason`（`finished` / `stopped` / `failed`）。该事件经过 native token 与上下文身份校验，只送给播放所属的 background，不进入共享桥接事件流。
+
+调用方可在 `NativeAudio` 中添加可选 `request_id`，将回报关联到自己的队列项；`playback_id` 标识宿主实际的一次播放。先匹配请求号，再接受该播放 ID 的后续音量，取消时立即撤销本地关联。合成、排队、解码均不代表已播放；不得另外播放一份音频来测量音量。`audio.play` 仍在播放完成或停止时结束，已有调用不需修改。
+
 surface 组件收到 `SurfaceHandle`（`PluginSurfaceComponentProps`）。`onRoleActivity(listener)` 只给交互目标可用的 surface 推送 `SurfaceRoleActivity`（`roleId`、`sessionKey`、`phase`、`notify`），目标变化时推 `null`。窗口隐藏、关闭、重载或崩溃都会撤销交互目标。原始后端事件订阅和 `window.miraDesktop` 不是插件 API。语音手势、播放队列等归插件自己（桌宠）。
 
 ## 测试入口

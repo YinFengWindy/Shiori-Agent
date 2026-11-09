@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { NativeAudio, PluginNativeContext } from "@yinfengwindy/shiori-sdk/contract";
+import type { NativeAudio, NativeAudioPlaybackPayload, PluginNativeContext } from "@yinfengwindy/shiori-sdk/contract";
 import type { BrowserVoiceRecorder } from "../voice/recorder.js";
 import type { NativeAudioPlayer } from "./audioPlayer.js";
 import type { PluginGlobalKeys } from "./globalKeys.js";
@@ -13,6 +13,7 @@ export type NativeSessionOptions = {
   player: Pick<NativeAudioPlayer, "play" | "stop" | "dispose">;
   keys: Pick<PluginGlobalKeys, "register" | "release">;
   keyEvent(sender: number, token: string, id: string, phase: "down" | "up"): void;
+  playbackEvent(sender: number, token: string, payload: NativeAudioPlaybackPayload): void;
 };
 
 /** Tokens bind resources to one admitted plugin context and one real background window. */
@@ -76,9 +77,14 @@ export class PluginNativeSessions {
     if (method === "audio.play") {
       if (this.playback) throw new Error("音频播放已被占用");
       if (typeof payload.audio_base64 !== "string" || !payload.audio_base64 || (payload.format !== "wav" && payload.format !== "mp3")) throw new Error("音频格式无效");
+      if (payload.request_id !== undefined && (typeof payload.request_id !== "string" || !payload.request_id || payload.request_id.length > 200)) throw new Error("音频请求标识无效");
       const audio: NativeAudio = { audio_base64: payload.audio_base64, format: payload.format };
+      const requestId = typeof payload.request_id === "string" ? payload.request_id : undefined;
       const operation = { token }; this.playback = operation;
-      try { await this.options.player.play(audio); }
+      try { await this.options.player.play(audio, (value) => {
+        if (this.playback !== operation || this.sessions.get(token) !== session || !this.options.isBackground(sender)) return;
+        this.options.playbackEvent(sender, token, { ...value, ...session.context, ...(requestId ? { request_id: requestId } : {}) });
+      }); }
       finally { if (this.playback === operation) this.playback = null; }
       return;
     }

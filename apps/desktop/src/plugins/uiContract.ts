@@ -53,6 +53,7 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "chatTerminalEventMethods", "isChatTerminalEvent",
     // SDK 4.1.1: authoritative surface lifecycle events for presentation providers.
     "surfaceLifecycleEvent",
+    "nativeAudioPlaybackEvent",
     // Runtime API 3.1.1 (#720): the compact icon-only button.
     "compactIconButtonClass",
     // Unreleased (#827): the shared secondary sidebar shell.

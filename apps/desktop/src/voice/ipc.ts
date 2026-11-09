@@ -29,5 +29,9 @@ export function registerAudioRendererIpc(voiceRecorder: BrowserVoiceRecorder, pl
   });
 
   ipcMain.on("desktop:voice-playback-finished", (event, id: string) => player.finish(event.sender, id));
+  ipcMain.on("desktop:voice-playback-started", (event, id: string) => player.observe(event.sender, id));
+  ipcMain.on("desktop:voice-playback-level", (event, value: { id: string; amplitude: number }) => {
+    if (value && typeof value.id === "string" && typeof value.amplitude === "number") player.observe(event.sender, value.id, value.amplitude);
+  });
   ipcMain.on("desktop:voice-playback-error", (event, value: { id: string; message: string }) => player.finish(event.sender, value.id, value.message));
 }

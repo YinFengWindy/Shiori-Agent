@@ -8,6 +8,17 @@ import { deferred } from "@yinfengwindy/shiori-sdk/testing";
 const provider = { plugin_id: "sprite", service_id: "models" };
 const binding: PetBinding = { role_id: "r", provider, model: { id: "first", display_name: "One", body: { width: 200, height: 300 }, actions: ["wave"] } };
 async function flush() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
+
+test("same-role model handover retains actual speech while role replacement clears it", async () => {
+  const h = harness(); await h.controller.restore();
+  const audio = { playback_id: "play", amplitude: .4 };
+  h.controller.publishAudio(audio); await flush();
+  await h.controller.select({ role_id: "r", provider, model_id: "second" });
+  assert.deepEqual(h.commands.filter((command) => command.op === "show").at(-1)?.state?.audio, audio);
+  h.binding({ ...binding, role_id: "other" }); await h.controller.sync();
+  assert.equal(h.commands.filter((command) => command.op === "show").at(-1)?.state?.audio, null);
+  await h.controller.terminate();
+});
 function harness(timeoutMs = 100) {
   const commands: PetPresentationRequest[] = [];
   const visible = new Set<string>();
@@ -150,5 +161,61 @@ test("an explicit hide during handover cannot be undone by old-window recovery",
   assert.equal(pet.controller.currentSettings.visible, false);
   assert.equal(pet.commands.filter((command) => command.op === "show").length, 1);
   assert.deepEqual(pet.committed, []);
+  await pet.controller.terminate();
+});
+
+test("host provider retirement clears an orphaned active lease and reenable creates a new window", async () => {
+  const pet = harness(); await pet.controller.show(); const previous = pet.commands[0];
+  const selected = pet.controller.currentSettings.model;
+  pet.controller.publishAudio({ playback_id: "old-play", amplitude: 0.8 });
+  const beforeRetirement = pet.commands.length;
+  pet.visible.clear(); // Native cleanup closes the window after its provider RPC owner is gone.
+  pet.controller.providersReloaded({ generation: 1, plugin_ids: ["sprite"], disabled_plugin_ids: ["sprite"] });
+  assert.equal(pet.controller.isRunning, false); assert.equal(pet.controller.visibleRoleId, "");
+  assert.deepEqual(pet.controller.currentSettings.model, selected); assert.equal(pet.controller.currentSettings.visible, true);
+  assert.equal(pet.commands.length, beforeRetirement, "retiring output must not publish through a successor provider with the old lease");
+  pet.report(previous, "shown"); pet.report(previous, "ready");
+  assert.equal(pet.controller.isRunning, false);
+  pet.controller.providersReloaded({ generation: 1, plugin_ids: ["sprite"], disabled_plugin_ids: [] });
+  await pet.controller.available("sprite");
+  assert.equal(pet.visible.size, 1); assert.equal(pet.controller.isRunning, true);
+  const next = pet.commands.filter((command) => command.op === "prepare").at(-1)!;
+  assert.notEqual(next.lease_id, previous.lease_id);
+  assert.equal(next.state?.audio, null); assert.deepEqual(pet.targets, ["r", "", "r"]);
+  await pet.controller.terminate();
+});
+
+test("provider retirement cancels a pending prepare, while unrelated and no-op reloads preserve it", async () => {
+  const pet = harness(); pet.hold(true);
+  const showing = pet.controller.show(); const rejected = assert.rejects(showing, /撤销/); await flush();
+  const previous = pet.commands[0];
+  pet.controller.providersReloaded({ plugin_ids: [], disabled_plugin_ids: [] });
+  pet.controller.providersReloaded({ plugin_ids: ["other"], disabled_plugin_ids: ["other"] });
+  assert.equal(pet.commands.length, 1);
+  pet.controller.providersReloaded({ plugin_ids: ["sprite"], disabled_plugin_ids: ["sprite"] });
+  await rejected;
+  pet.report(previous, "ready"); await flush();
+  assert.equal(pet.visible.size, 0);
+  assert.equal(pet.commands.length, 1, "retired leases must not send cleanup to a successor provider");
+  pet.hold(false); pet.controller.providersReloaded({ plugin_ids: ["sprite"], disabled_plugin_ids: [] });
+  await pet.controller.available("sprite"); assert.equal(pet.visible.size, 1);
+  await pet.controller.terminate();
+});
+
+test("hide and newer selection supersede provider recovery without touching unrelated active models", async () => {
+  const pet = harness(); await pet.controller.show(); const original = [...pet.visible];
+  pet.controller.providersReloaded({ plugin_ids: ["other"], disabled_plugin_ids: [] });
+  pet.controller.providersReloaded({ plugin_ids: [], disabled_plugin_ids: [] });
+  assert.deepEqual([...pet.visible], original); assert.deepEqual(pet.targets, ["r"]);
+  pet.visible.clear(); pet.controller.providersReloaded({ plugin_ids: ["sprite"], disabled_plugin_ids: ["sprite"] });
+  const hiding = pet.controller.hide();
+  pet.controller.providersReloaded({ plugin_ids: ["sprite"], disabled_plugin_ids: [] });
+  await pet.controller.available("sprite"); await hiding; assert.equal(pet.visible.size, 0);
+  await pet.controller.show(); pet.visible.clear();
+  pet.controller.providersReloaded({ plugin_ids: ["sprite"], disabled_plugin_ids: ["sprite"] });
+  await pet.controller.select({ role_id: "r", provider: { plugin_id: "new", service_id: "models" }, model_id: "new-model" });
+  pet.controller.providersReloaded({ plugin_ids: ["sprite"], disabled_plugin_ids: [] });
+  await pet.controller.available("sprite");
+  assert.equal(pet.visible.size, 0); assert.equal(pet.controller.currentSettings.model?.provider.plugin_id, "new");
   await pet.controller.terminate();
 });
