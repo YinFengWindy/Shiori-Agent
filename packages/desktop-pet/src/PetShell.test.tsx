@@ -4,6 +4,21 @@ import test from "node:test";
 import type { SurfaceExtension, SurfacePlacement } from "@yinfengwindy/shiori-sdk";
 import { createFakeSurfaceHandle, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { PetShell } from "./PetShell";
+import type { PetPresentationState } from "./protocol";
+
+test("preparing the next spoken segment preserves reply content and its dismiss control", async () => {
+  const surface = createFakeSurfaceHandle();
+  const reply = { text: "这是一段还在连续播报的长回复。后面的内容应该一直可读。", persistent: true, paused: false };
+  const render = (status: PetPresentationState["voice"]["status"]) => <PetShell surface={surface} body={{ width: 192, height: 208 }} state={{ reply, voice: { status } }}>{() => null}</PetShell>;
+  const view = await mountTestComponent(render("speaking"));
+  try {
+    await view.render(render("speaking_prepare"));
+    assert.equal(view.container.querySelector('[role="status"] span')?.textContent, reply.text);
+    assert.ok(view.container.querySelector('button[aria-label="关闭消息"]'));
+    await view.render(render("speaking"));
+    assert.equal(view.container.querySelector('[role="status"] span')?.textContent, reply.text);
+  } finally { await view.cleanup(); }
+});
 
 test("a shell mounted after initial surface readiness replays placement and expands its first bubble", async () => {
   const view = await mountTestComponent(null);
