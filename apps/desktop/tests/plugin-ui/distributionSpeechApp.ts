@@ -41,7 +41,7 @@ export class SpeechApp extends DevelopmentApp {
   }
   async pet() {
     const page = await eventually(async () => this.app!.windows().find((candidate) => {
-      const url = new URL(candidate.url()); return url.pathname.endsWith("/surface.html") && url.searchParams.get("plugin") === "desktop_pet";
+      const url = new URL(candidate.url()); return url.pathname.endsWith("/surface.html") && url.searchParams.get("plugin") === "pet_codex_sprite";
     }), Boolean, "real desktop pet surface");
     assert.ok(page); await page.getByLabel("桌宠", { exact: true }).waitFor(); return page;
   }

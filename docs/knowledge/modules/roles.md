@@ -15,7 +15,7 @@ source_paths:
   - apps/backend/core/accounts/
   - apps/backend/core/identity/
   - plugins/desktop_pet/backend/pet_state.py
-  - plugins/desktop_pet/backend/pet_packages.py
+  - plugins/pet_codex_sprite/backend/pet_packages.py
   - apps/backend/core/roles/services.py
   - apps/backend/core/roles/role_runtime.py
   - plugins/affection/
@@ -32,7 +32,7 @@ related:
 
 ## 模块边界
 
-`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责版本化 JSON 清单（当前 v10，旧版本与旧字段由 `migration.py` 归一）的校验、持久化和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，宿主角色数据契约集中在 `models.py`。旧的角色渠道绑定与 `RoleBindingPolicy` 已退役：渠道账号记录与凭据归渠道插件，`RoleStore.accounts`（`core/accounts/` 的 `AccountRegistry`）只是已加载插件登记账号的内存索引；`RoleStore.identities`（`core/identity/` 的 `UserIdentityStore`）保存桌面用户在各渠道的已绑定身份，`RoleStore.avatars` 缓存渠道头像。桌宠插件的 `RolePetStateStore` 负责选择与单启用状态；桌宠和 NovelAI 各自拥有 `roles.json` 的不透明插件命名空间，通过 `RoleExtensions` 和角色字段一起原子保存，宿主业务模型不包含插件字段。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleRuntimeRegistry` 将持久化角色装配为角色运行时。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
+`RoleStore` 是兼容 facade：`RoleManifestRepository` 负责版本化 JSON 清单（当前 v10，旧版本与旧字段由 `migration.py` 归一）的校验、持久化和进程内锁，`RoleAssetStore` 负责素材文件、路径安全与分类，宿主角色数据契约集中在 `models.py`。旧的角色渠道绑定与 `RoleBindingPolicy` 已退役：渠道账号记录与凭据归渠道插件，`RoleStore.accounts`（`core/accounts/` 的 `AccountRegistry`）只是已加载插件登记账号的内存索引；`RoleStore.identities`（`core/identity/` 的 `UserIdentityStore`）保存桌面用户在各渠道的已绑定身份，`RoleStore.avatars` 缓存渠道头像。桌宠插件的 `RolePetStateStore` 负责提供者/模型引用与单启用状态；精灵素材 metadata 归 `pet_codex_sprite`，私有文件位于其 `plugin-data` 目录。桌宠、形象提供者和 NovelAI 各自拥有 `roles.json` 的不透明插件命名空间，通过 `RoleExtensions` 和角色字段一起原子保存，宿主业务模型不包含插件字段。`RoleAggregateService` 和相关 service 提供角色聚合业务入口，`RoleRuntimeRegistry` 将持久化角色装配为角色运行时。桌面端、渠道和主动能力应调用这些服务，不应各自读写角色文件。
 
 角色能力包含基本设定、所属渠道账号、工作区、素材、心情相关配置和运行时关系状态。`card_import/` 预览 JSON、PNG、CharX 等角色卡格式（只解析，不直接创建角色或复制素材），`card_export/` 把白名单角色字段导出为 CCv3 文件；桥接层的 `role_card_import_service.py` / `role_card_export_service.py` 负责落地。角色素材既被桌面管理页使用，也可能进入提示词、场景和图片生成流程。
 

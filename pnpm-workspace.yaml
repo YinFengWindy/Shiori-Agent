@@ -2,3 +2,4 @@ packages:
   - apps/desktop
   - apps/site
   - packages/sdk
+  - packages/desktop-pet

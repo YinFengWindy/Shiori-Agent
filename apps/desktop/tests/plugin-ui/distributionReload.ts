@@ -7,7 +7,7 @@ import { record } from "./packagedEvidence";
 /** Observe real windows and persisted preferences across unrelated reloads and repeated pet restarts. */
 export async function verifySpeechReloadLifecycle(app: SpeechApp) {
   const windows = () => app.app!.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((window) => ({ id: window.id, url: window.webContents.getURL() })));
-  const owned = async () => (await windows()).filter((window) => window.url.includes("/voice.html") || (window.url.includes("/surface.html") && new URL(window.url).searchParams.get("plugin") === "desktop_pet"));
+  const owned = async () => (await windows()).filter((window) => window.url.includes("/voice.html") || (window.url.includes("/surface.html") && new URL(window.url).searchParams.get("plugin") === "pet_codex_sprite"));
   const preferences = await app.pluginCall("desktop_pet", "voice.preferences.get");
   const initial = await owned();
   const config = await app.call("plugin.config.get", { plugin_id: "proactive" });

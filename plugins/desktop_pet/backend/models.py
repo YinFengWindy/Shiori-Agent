@@ -1,98 +1,89 @@
-"""Desktop-pet package metadata and per-role state, owned by the plugin."""
+"""Presentation selection and visibility, independent of model formats."""
 
-from __future__ import annotations
-
-from dataclasses import asdict, dataclass, field
-from typing import Any
-
-from shiori_sdk.values import normalize_rel_path, now_iso
+from dataclasses import dataclass
+from typing import Any, TypedDict
+from shiori_sdk.services import ServiceReference
 
 
-@dataclass(frozen=True)
-class RolePetPackage:
-    """A validated Codex-compatible pet package owned by one role."""
+class SelectedModel(TypedDict):
+    """Persisted model identity owned by a presentation provider."""
 
-    id: str
-    format: str
-    display_name: str
-    manifest_path: str
-    spritesheet_path: str
-    imported_at: str
-    preview_path: str | None = None
-    actions: dict[str, str] = field(default_factory=dict)
+    provider: ServiceReference
+    model_id: str
 
-    def to_dict(self) -> dict[str, Any]:
-        """Serializes validated package metadata in the plugin namespace."""
-        return asdict(self)
 
-    @classmethod
-    def from_dict(cls, payload: dict[str, Any]) -> "RolePetPackage":
-        """Restores package metadata and normalizes workspace-relative asset paths."""
-        package_id = str(payload.get("id") or "").strip()
-        display_name = str(payload.get("display_name") or "").strip()
-        manifest_path = normalize_rel_path(str(payload.get("manifest_path") or ""))
-        spritesheet_path = normalize_rel_path(
-            str(payload.get("spritesheet_path") or "")
-        )
-        if (
-            not package_id
-            or not display_name
-            or not manifest_path
-            or not spritesheet_path
-        ):
-            raise ValueError("桌宠包元数据不完整")
-        raw_actions = payload.get("actions", {})
-        actions = (
-            {
-                str(name).strip(): str(state).strip()
-                for name, state in raw_actions.items()
-                if str(name).strip() and str(state).strip()
-            }
-            if isinstance(raw_actions, dict)
-            else {}
-        )
-        return cls(
-            id=package_id,
-            format=str(payload.get("format") or "").strip(),
-            display_name=display_name,
-            manifest_path=manifest_path,
-            spritesheet_path=spritesheet_path,
-            imported_at=str(payload.get("imported_at") or now_iso()),
-            preview_path=normalize_rel_path(payload.get("preview_path")),
-            actions=actions,
-        )
+def read_provider(value: object) -> ServiceReference:
+    """Reject incomplete service identities at the RPC boundary."""
+    if not isinstance(value, dict):
+        raise ValueError("缺少形象提供者")
+    plugin_id, service_id = value.get("plugin_id"), value.get("service_id")
+    if (
+        not isinstance(plugin_id, str)
+        or not plugin_id.strip()
+        or not isinstance(service_id, str)
+        or not service_id.strip()
+    ):
+        raise ValueError("形象提供者身份无效")
+    return {"plugin_id": plugin_id, "service_id": service_id}
+
+
+def read_selection(value: object) -> SelectedModel | None:
+    """Read a reference without requiring its provider to be installed."""
+    if value is None:
+        return None
+    if (
+        not isinstance(value, dict)
+        or not isinstance(value.get("model_id"), str)
+        or not value["model_id"].strip()
+    ):
+        raise ValueError("形象选择无效")
+    return {
+        "provider": read_provider(value.get("provider")),
+        "model_id": value["model_id"],
+    }
 
 
 @dataclass
 class RolePetState:
-    """The plugin's persisted state for one role; never part of RoleRecord."""
+    """Desktop-owned intent; unavailable providers never erase this state."""
 
     id: str
-    pet_packages: list[RolePetPackage] = field(default_factory=list)
-    selected_pet_package_id: str | None = None
+    selected_model: SelectedModel | None = None
     desktop_pet_enabled: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        """Serializes only the plugin-owned namespace."""
-        result = asdict(self)
-        result.pop("id")
-        return result
+        """Serialize desktop-owned fields only."""
+        return {
+            "selected_model": self.selected_model,
+            "desktop_pet_enabled": self.desktop_pet_enabled,
+        }
 
     @classmethod
     def from_dict(cls, role_id: str, payload: object) -> "RolePetState":
-        """Validates package membership before exposing an enabled selection."""
+        """Read legacy selection until its provider safely adopts the assets."""
         if not isinstance(payload, dict):
             raise ValueError("桌宠角色状态必须是对象")
-        packages = [
-            RolePetPackage.from_dict(item)
-            for item in (payload.get("pet_packages") or [])
-        ]
-        selected = payload.get("selected_pet_package_id")
-        if selected not in {package.id for package in packages}:
-            selected = None
+        selected: SelectedModel | None
+        if "selected_model" in payload:
+            selected = read_selection(payload["selected_model"])
+        else:
+            old_id = payload.get("selected_pet_package_id")
+            installed = {
+                item.get("id")
+                for item in payload.get("pet_packages", [])
+                if isinstance(item, dict)
+            }
+            selected = (
+                {
+                    "provider": {
+                        "plugin_id": "pet_codex_sprite",
+                        "service_id": "models",
+                    },
+                    "model_id": old_id,
+                }
+                if isinstance(old_id, str) and old_id in installed
+                else None
+            )
         return cls(
-            role_id,
-            packages,
-            selected,
-            bool(selected and payload.get("desktop_pet_enabled")),
+            role_id, selected, bool(selected and payload.get("desktop_pet_enabled"))
         )

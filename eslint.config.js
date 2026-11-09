@@ -29,6 +29,8 @@ const pluginRendererFiles = [
   "plugins/*/shared/**/*.tsx",
   "packages/sdk/src/**/*.ts",
   "packages/sdk/src/**/*.tsx",
+  "packages/desktop-pet/src/**/*.ts",
+  "packages/desktop-pet/src/**/*.tsx",
 ];
 
 const hostImportMessage = "Plugins must not import host source (apps/desktop); use @yinfengwindy/shiori-sdk or the injected client/host.";

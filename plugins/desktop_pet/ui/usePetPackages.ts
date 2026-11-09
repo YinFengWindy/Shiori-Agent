@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { errorMessage, type HostInlineErrorProps, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@yinfengwindy/shiori-sdk";
 import { noPetPackages, readPetPackages, type PetPackages } from "./petPackages";
 import { pickPetPackageFile } from "./petPackagePicker";
+import type { PetPackageProvider } from "./petPackages";
+import type { PetModelReference } from "@yinfengwindy/shiori-pet";
 
 /** Loads and mutates this role's packages, then refreshes both form and pet projections. */
 export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: Omit<PluginRoleAssetsComponentProps, "host">) {
@@ -61,20 +63,25 @@ export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: 
     }
   }, []);
 
-  const mutate = useCallback(async (method: "pets.import" | "pets.remove" | "pets.select", payload: Record<string, unknown>) => {
+  const mutate = useCallback(async (method: "pets.import" | "pets.remove", payload: Record<string, unknown>) => {
     setState(parse(await client.call<unknown>(rpcMethods[method], { role_id: roleId, ...payload })));
     onRoleDataChanged();
     if (method !== "pets.import") await client.background.call("sync");
   }, [client, onRoleDataChanged, parse, roleId]);
 
-  const onImport = useCallback(() => void run("桌宠素材包导入未完成", async () => {
-    const source = await pickPetPackageFile(pickFiles);
-    if (source) await mutate("pets.import", { source });
+  const onImport = useCallback((provider: PetPackageProvider) => void run("桌宠素材包导入未完成", async () => {
+    const source = await pickPetPackageFile(pickFiles, provider.importOptions);
+    if (source) await mutate("pets.import", { provider: provider.reference, source });
   }), [mutate, pickFiles, run]);
 
   /** Resolves once the removal has finished, failed or not (a failure lands in `error`). */
-  const onRemove = useCallback((packageId: string) => run("桌宠素材包删除未完成", () => mutate("pets.remove", { package_id: packageId })), [mutate, run]);
-  const onSelect = useCallback((packageId: string) => void run("桌宠素材包切换未完成", () => mutate("pets.select", { package_id: packageId })), [mutate, run]);
+  const onRemove = useCallback((reference: PetModelReference) => run("桌宠素材包删除未完成", () => mutate("pets.remove", { ...reference })), [mutate, run]);
+  const onSelect = useCallback((reference: PetModelReference) => void run("桌宠素材包切换未完成", async () => {
+    // Prepare the candidate before committing a live role's selection.
+    await client.background.call("select", { role_id: roleId, ...reference });
+    setState(parse(await client.call<unknown>(rpcMethods["pets.list"], { role_id: roleId })));
+    onRoleDataChanged();
+  }), [client, onRoleDataChanged, parse, roleId, run]);
 
   return { state, loading: Boolean(roleId) && answeredRole !== roleId, busy, error, onImport, onRemove, onSelect };
 }

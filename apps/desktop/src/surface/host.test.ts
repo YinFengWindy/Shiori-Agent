@@ -88,6 +88,7 @@ function setup(options: {
   displayId?: () => string;
   onSettled?: DesktopSurfaceHostOptions["onSettled"];
   onInteractionChanged?: () => void;
+  onLifecycle?: DesktopSurfaceHostOptions["onLifecycle"];
 } = {}) {
   const clock = new FakeClock();
   const windows: FakeWindow[] = [];
@@ -99,6 +100,7 @@ function setup(options: {
     cursorScreenPoint: options.cursor ?? (() => cursor),
     onSettled: options.onSettled,
     onInteractionChanged: options.onInteractionChanged,
+    onLifecycle: options.onLifecycle,
     now: () => clock.nowMs,
     setTimer: clock.setTimer,
     clearTimer: clock.clearTimer,
@@ -682,4 +684,37 @@ test("renderer loss stops native drag timers until a fresh gesture arrives", () 
   assert.ok(clock.pending > 0);
   windows[0].emitUnavailable();
   assert.equal(clock.pending, 0);
+});
+
+test("a prepared surface remains hidden through readiness and reload until explicitly shown", () => {
+  const { host, windows } = setup();
+  host.create(key, { body, visible: false }, { x: 0, y: 0 });
+  host.setState(key, { model: "candidate" });
+  host.markReady(key);
+  assert.equal(windows[0].shown, 0);
+  assert.deepEqual(windows[0].sent.filter((item) => item.channel === surfaceStateChannel).at(-1)?.payload, { model: "candidate" });
+  windows[0].emitUnavailable();
+  host.markReady(key);
+  assert.equal(windows[0].shown, 0);
+  host.show(key);
+  assert.equal(windows[0].shown, 1);
+});
+
+test("surface loss reports the actual instance and stale window callbacks cannot revoke its replacement", () => {
+  const lifecycle: Parameters<NonNullable<DesktopSurfaceHostOptions["onLifecycle"]>>[0][] = [];
+  const { host, windows } = setup({ onLifecycle: (event) => lifecycle.push(event) });
+  host.create(key, spec, { x: 0, y: 0 });
+  windows[0].emitUnavailable();
+  assert.deepEqual(lifecycle[0], { plugin_id: key.pluginId, surface_id: key.surfaceId, window_id: windows[0].id, status: "unavailable" });
+  windows[0].emitClosed();
+  assert.equal(host.has(key), false);
+  assert.equal(lifecycle.at(-1)?.status, "closed");
+  host.create(key, spec, { x: 0, y: 0 });
+  const before = lifecycle.length;
+  windows[0].emitUnavailable();
+  windows[0].emitClosed();
+  assert.equal(lifecycle.length, before);
+  assert.equal(host.has(key), true);
+  host.destroy(key);
+  assert.equal(lifecycle.at(-1)?.window_id, windows[1].id);
 });

@@ -38,6 +38,7 @@ PLUGINS = frozenset(
         "context_pressure",
         "default_memory",
         "desktop_pet",
+        "pet_codex_sprite",
         "feishu",
         "gpt_sovits_tts",
         "grok_bot",

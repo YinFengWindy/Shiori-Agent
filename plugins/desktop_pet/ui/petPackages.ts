@@ -1,51 +1,66 @@
-/** One pet package as `desktop_pet.pets.list` reports it. */
+import type { NativeFilePickerOptions, PluginServiceReference } from "@yinfengwindy/shiori-sdk";
+import { isRecord, readPetModelReference, readPetProviderReference, type PetModelReference } from "@yinfengwindy/shiori-pet";
+
+/** A model offered by one installed appearance provider. */
 export type PetPackageRow = {
-  id: string;
+  reference: PetModelReference;
   displayName: string;
-  /** Opaque asset URL, or empty when the host granted none (missing file). */
   previewUrl: string;
 };
 
-export type PetPackages = {
-  selectedPackageId: string | null;
-  packages: PetPackageRow[];
+/** Import policy is supplied by the plugin that validates and owns the files. */
+export type PetPackageProvider = {
+  reference: PluginServiceReference;
+  label: string;
+  importOptions: NativeFilePickerOptions;
 };
 
-export const noPetPackages: PetPackages = { selectedPackageId: null, packages: [] };
+/** The role's saved selection and models from currently available providers. */
+export type PetPackages = {
+  selectedModel: PetModelReference | null;
+  packages: PetPackageRow[];
+  providers: PetPackageProvider[];
+};
 
-/**
- * Parses a `pets.list` response.
- *
- * Split from the component so the parsing is testable without a DOM, and
- * because it is the boundary where this plugin stops trusting a payload: the
- * rows cross the bridge as plain data, and a malformed one must degrade to
- * "no packages" rather than render a row with `undefined` in it.
- *
- * `preview_abs` becomes a URL here rather than in the component: the raw path
- * is a filesystem path the renderer must not display or keep, and
- * `resolveAssetUrl` is the only thing that turns it into something showable.
- */
-export function readPetPackages(
-  value: unknown,
-  resolveAssetUrl: (path: string) => string,
-): PetPackages {
-  if (!value || typeof value !== "object") return noPetPackages;
-  const source = value as { selected_package_id?: unknown; packages?: unknown };
-  const rows = Array.isArray(source.packages) ? source.packages : [];
-  const packages: PetPackageRow[] = [];
-  for (const row of rows) {
-    if (!row || typeof row !== "object") continue;
-    const { id, display_name: displayName, preview_abs: previewAbs } = row as Record<string, unknown>;
-    if (typeof id !== "string" || !id) continue;
-    packages.push({
-      id,
-      displayName: typeof displayName === "string" ? displayName : id,
-      previewUrl: typeof previewAbs === "string" && previewAbs ? resolveAssetUrl(previewAbs) : "",
-    });
+export const noPetPackages: PetPackages = { selectedModel: null, packages: [], providers: [] };
+
+/** Reads the provider-scoped library, converting granted paths to opaque URLs. */
+export function readPetPackages(value: unknown, resolveAssetUrl: (path: string) => string): PetPackages {
+  if (!isRecord(value) || !Array.isArray(value.packages) || !Array.isArray(value.providers)) {
+    throw new Error("桌宠素材列表格式无效");
   }
-  const selected = source.selected_package_id;
-  return {
-    selectedPackageId: typeof selected === "string" && selected ? selected : null,
-    packages,
-  };
+  const packages = value.packages.map((row): PetPackageRow => {
+    if (!isRecord(row)) throw new Error("桌宠素材记录格式无效");
+    const reference = readPetModelReference({ provider: row.provider, model_id: row.id });
+    if (!reference || typeof row.display_name !== "string") throw new Error("桌宠素材缺少提供者或名称");
+    return {
+      reference,
+      displayName: row.display_name,
+      previewUrl: typeof row.preview_abs === "string" && row.preview_abs ? resolveAssetUrl(row.preview_abs) : "",
+    };
+  });
+  const providers = value.providers.map((provider): PetPackageProvider => {
+    if (!isRecord(provider) || typeof provider.label !== "string") throw new Error("形象插件记录格式无效");
+    const reference = readPetProviderReference(provider);
+    const policy = provider.import;
+    if (!reference || !isRecord(policy) || typeof policy.namespace !== "string" || !policy.namespace
+      || typeof policy.max_file_bytes !== "number" || !Number.isSafeInteger(policy.max_file_bytes) || policy.max_file_bytes <= 0
+      || typeof policy.label !== "string" || !Array.isArray(policy.extensions) || !policy.extensions.length
+      || !policy.extensions.every((extension): extension is string => typeof extension === "string" && /^[a-z0-9]+$/i.test(extension))) {
+      throw new Error("形象插件导入配置无效");
+    }
+    return {
+      reference,
+      label: provider.label,
+      importOptions: {
+        namespace: policy.namespace,
+        filters: [{ name: policy.label, extensions: policy.extensions }],
+        multiple: false,
+        maxFileBytes: policy.max_file_bytes,
+      },
+    };
+  });
+  const selectedModel = value.selected_model == null ? null : readPetModelReference(value.selected_model);
+  if (value.selected_model != null && !selectedModel) throw new Error("桌宠已选形象格式无效");
+  return { selectedModel, packages, providers };
 }

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 
 from .rpc import DesktopPetRpcHandlers
+from .providers import PetProviders
 from .tool import DesktopPetActionTool
 from .bubbles import register_bubble_rpc
 from .live_output import LiveReplyOutput, log_failed_outcome
@@ -30,6 +31,8 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     from .reconcile import PetStateReconciler
 
     role_store = ctx.require(ROLES)
+    providers = PetProviders(role_store)
+    ctx.expose(providers)
     reconciler = PetStateReconciler(role_store, ctx.require(WORKSPACE))
     reconciler.reconcile()
     ctx.effect(
@@ -48,6 +51,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     ctx.require(TOOLS).register(
         DesktopPetActionTool(
             role_store=role_store,
+            providers=providers,
             rpc=ctx.require(RPC),
             tool_registry=ctx.require(TOOLS),
         ),
@@ -55,9 +59,7 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
         always_on=True,
         search_hint="桌宠 移动 位置 动作 挥手 跳跃",
     )
-    handlers = DesktopPetRpcHandlers(
-        role_store=role_store, workspace=ctx.require(WORKSPACE)
-    )
+    handlers = DesktopPetRpcHandlers(role_store=role_store, providers=providers)
     register_bubble_rpc(ctx.require(RPC))
     # The one live-reply output of this setup (it owns the outcome RPC); the
     # live engine emits replies through it and paces on their outcomes.
@@ -71,6 +73,9 @@ async def setup(ctx: "PluginRuntimeContext") -> None:
     register_bilibili_login(ctx.require(RPC), bilibili_login)
     ctx.require(RPC).register(
         "binding.get", handlers.binding_get, concurrency=Concurrency.READ_ONLY
+    )
+    ctx.require(RPC).register(
+        "binding.preview", handlers.binding_preview, concurrency=Concurrency.READ_ONLY
     )
     ctx.require(RPC).register(
         "pets.list", handlers.pets_list, concurrency=Concurrency.READ_ONLY

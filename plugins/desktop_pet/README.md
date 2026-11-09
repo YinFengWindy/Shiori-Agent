@@ -1,32 +1,29 @@
 # desktop_pet
 
-桌宠包模型、校验、导入服务、角色选择与单点启用状态由 `backend/` 拥有。后端仅依赖 `shiori-sdk` 与 Pillow；`setup(ctx)` 通过 SDK 的 `roles`、`events`、`tools`、`rpc` 能力装配，角色存储由宿主注入。插件测试使用 `shiori-sdk[testing]`，独立安装见 `TESTING.md`。
-角色能力页中的开关由 `ui/roleSettings.tsx` 贡献，修改草稿后仍通过角色页的「保存」提交；选择/删除桌宠包后的投影刷新保留其他角色字段的未保存修改。
+桌宠插件拥有角色绑定、形象选择、显示与位置策略、气泡、语音交互和 Bilibili 直播陪伴。模型格式由独立形象插件提供；当前 `pet_codex_sprite` 支持 Codex 精灵图，依赖 `desktop_pet`。
 
-## 持久化边界
+## 状态与素材
 
-状态存于工作区 `roles/roles.json` 顶层 `plugin_data.desktop_pet.<role_id>`，不在 `RoleRecord`、角色序列化字段或 `runtime_config` 中。宿主的 `RoleExtensions` 只处理不透明命名空间和插件注册的草稿校验/投影。物理上与角色清单同文件是为了让角色修改、启用目标角色和禁用其他角色共享一次原子替换；没有两个 RPC 或两个文件之间的部分成功窗口。所有访问该规范化路径的 repository 实例共享进程内重入锁。
+`roles/roles.json` 的 `plugin_data.desktop_pet.<role_id>` 只保存 `selected_model`（提供者服务引用和模型 ID）与 `desktop_pet_enabled`。角色能力开关仍随角色页「保存」提交，单启用角色校验仍在同一角色事务中完成。模型提供者暂不可用不会删除选择。
 
-角色清单 v2/v3/v4 → v5 迁移在读取/重写边界执行，早于 `RoleRecord` 投影；无需启用插件。旧 pet 字段的捕获和移除发生在同一次原子替换，失败保留旧清单，重试幂等。已存在的插件命名空间优先于残留旧字段，其他命名空间保持不变。
+精灵包 metadata 归 `plugin_data.pet_codex_sprite.<role_id>`，文件归 `plugin-data/pet_codex_sprite/pets-<role_id>/<package_id>/`。旧桌宠素材由精灵插件复制并核对，先提交自身 metadata，再改写桌宠选择，最后清理旧包目录；中断后可重试。备份应同时包含角色清单和各形象插件素材目录。
 
-桌宠包最终文件归 `plugin-data/desktop_pet/pets-<role_id>/<package_id>/`，包路径相对工作区。旧 `roles/assets/<role_id>/pets/` 在角色清单锁内复制并校验，再原子改写全部包路径；元数据发布失败保留源文件，重试复用已确认副本。完成后只移除旧 pet 子目录，头像等角色素材保留。迁移凭证位于 `private_runtime/plugin-data-migrations/desktop_pet/`，清空插件文件不能触发旧包复活。
+窗口可见状态与按角色/显示器保存的位置仍归桌宠设备偏好 `userData/plugin-data/desktop_pet.json`。语音偏好仍在 `plugin-data/desktop_pet/voice-preferences.json`；直播设置和登录凭据也继续归桌宠。
 
-插件启用时和收到 `RoleDeleted` 时对照现存角色清理状态与孤儿 `pets` 资产；因此停用期间删除的角色会在重新启用时清理。删除角色时保留的非 pet 资产不受此清理影响。未完成导入/删除留下的孤儿目录在下次启用时清理。清空插件目录后，重新启用会移除已不存在的包记录并关闭无效选择，允许重新导入同名包；其他角色偏好和其他插件命名空间保持原样。
+## 选择与导入
 
-普通插件数据清理保留角色清单中的插件命名空间。完整桌宠备份应同时包含私有素材目录、角色清单中的 `plugin_data.desktop_pet` 和迁移凭证；恢复命名空间时合并对应角色，不能覆盖其他插件的状态。窗口位置与可见状态仍属设备偏好，保存在 Electron `userData/plugin-data/desktop_pet.json`，不属于工作区素材备份。
+桌宠素材入口聚合当前可用提供者的模型和导入策略。原生 picker 使用该提供者声明的暂存命名空间、过滤条件与大小上限；后端由提供者再次验证文件和格式。`pets.import/remove/select` 使用角色、提供者引用及素材路径/模型 ID，桌宠不解析图集。
 
-## 原生文件选择与导入
+实际切换通过桌宠 background 的 `select` 执行：活动角色先准备候选模型，成功后交接并保存；准备或保存失败恢复原展示。未启用角色的选择只持久化，不激活窗口。
 
-`ui/petPackagePicker.ts` 通过注入的 `PluginHostServices.pickFiles` 选择 ZIP，插件声明过滤条件、32MB 限制与 `desktop_pet-pets` 暂存命名空间。宿主只提供通用的原生选择及受限复制，返回 `private_runtime/imports/<namespace>/UUID-原文件名`，不对 ZIP 签发媒体 URL。选择取消返回空列表；复制失败清理此次实际创建的文件。
+## 呈现与语音
 
-`pets.import` 保持 `{role_id, source}` 契约，RPC 边界只接受该插件暂存目录内的普通 ZIP，拒绝外部路径、路径穿越、链接逃逸和超限文件；包结构与图片校验仍由插件服务负责。
+桌宠通过 `shiori.pet-models.v1` 服务向选中提供者提交短呈现请求。提供者发自身事件给 background，加载完成后通过桌宠依赖回报实例就绪。接受请求不代表已显示；每次请求和呈现实例有独立身份，超时与迟到回报不能恢复旧窗口。
 
-## Surface 与语音
+形象插件拥有实际 surface，通用气泡视图、指针手势和菜单来自 `@yinfengwindy/shiori-pet` 构建时共享模块。语音手势和显示落点回报桌宠；语音输入、TTS 队列和直播输出仍只有一套。真实录音、解码与播放由宿主通用原语提供，ASR/TTS 模型由可选择的 provider 提供。
 
-后台在绑定解析后调用 `ctx.surfaces.setInteraction("pet", { roleId, available: true })`，显示状态由 surface 的生命周期决定；隐藏、解绑与停用立即撤销目标。宿主不读取桌宠设备 KV 的 `visible/roleId/packageId`。旧 `desktop-pet.json` 的一次性文件位置迁移仍保留。
+SDK 4.0.1 的隐藏创建与 `surface.lifecycle` 事件支持模型准备和窗口失效处理。拖动、惯性和移动仍走原有通用 surface 原语；没有跨插件 React 挂载或新的插件层。
 
-Surface 通过注入的 `surface.voice.gesture("press" | "move" | "release" | "cancel")` 和 `surface.voice.onState` 使用宿主语音；ASR/TTS、录音、热键与播放继续由宿主拥有。宿主按真实窗口 ID 归属手势，按下时固定角色，隐藏、角色替换、renderer 重载/崩溃都会取消旧轮次。`surface.onRoleActivity` 只提供当前角色的 typed activity，目标变化发出 `null` 重置动画；动画优先级与提示挥手时长仍由插件决定。
+## 验证
 
-拖动、惯性、窗口扩展与菜单继续走通用 surface 能力。动作通过 `ctx.rpc.emit("action", ...)` 下发；UI/surface 用注入 client 的 `background.call("sync", ...)` 通知后台。异步 workArea 返回后再次核对绑定，不能移动后来替换的角色。
-
-`pnpm typecheck:plugins` 独立检查所有插件源码与单测，仅解析 SDK 和根 workspace 声明的依赖，不包含宿主 ambient 类型；全局桥接调用和类型引用同时由 ESLint 反例测试禁止。
+插件测试仅使用 `shiori-sdk[testing]`；包安装见 `TESTING.md`。共享前端、桌宠和精灵插件的定向测试覆盖选择、交接、按来源取消和清理；真实宿主装配、独立打包与 Electron 语音组合另行验收。设计见 `docs/decisions/2026-11-09-desktop-pet-2d-providers.md`。

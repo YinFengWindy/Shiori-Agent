@@ -1,7 +1,7 @@
 import { rpcMethods } from "../rpcMethods.generated";
 import { chatTerminalEventMethods, type PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { readDesktopPetBinding } from "./binding";
-import { DesktopPetController, desktopPetSurfaceId } from "./controller";
+import { DesktopPetController } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
 import { registerLiveReplies } from "./live/register";
 import { PetVoiceController } from "./voice/controller";
@@ -32,13 +32,23 @@ const desktopPetBackground = {
     const reportError = (operation: string, error: unknown) => ctx.reportFailure(operation, error);
 
     const controller = new DesktopPetController({
-      surfaces: ctx.surfaces,
+      services: ctx.rpc.services,
       settings: normalizeDesktopPetSettings(await ctx.store.read()),
       saveSettings: (settings) => ctx.store.write(settings),
       resolveBinding: async () => readDesktopPetBinding(
         await ctx.rpc.call(rpcMethods["binding.get"]),
-        (path) => ctx.assets.url(path),
+
       ),
+      preview: async (roleId, model) => {
+        const binding = readDesktopPetBinding(await ctx.rpc.call("binding.preview", { role_id: roleId, ...model }));
+        if (!binding) throw new Error("桌宠候选模型不可用");
+        return binding;
+      },
+      select: (roleId, model) => ctx.rpc.call(rpcMethods["pets.select"], { role_id: roleId, ...model }),
+      onGesture: (gesture) => {
+        if (gesture.kind === "voice.stop") activeVoice.stop();
+        if (gesture.kind === "voice.gesture") activeVoice.gesture(gesture.gesture);
+      },
       onError: reportError,
       onChanged: () => refreshTrayEntry(),
     });
@@ -53,7 +63,7 @@ const desktopPetBackground = {
      */
     const refreshTrayEntry = () => {
       const settings = controller.currentSettings;
-      const available = Boolean(settings.roleId && settings.packageId);
+      const available = Boolean(settings.roleId && settings.model);
       ctx.tray.setEntry(desktopPetTrayEntryId, {
         label: settings.visible ? "隐藏桌宠" : "显示桌宠",
         enabled: available,
@@ -85,11 +95,7 @@ const desktopPetBackground = {
       ttsProvider: () => activeVoice.ttsProvider,
       watchTarget: (listener) => controller.watchTarget(listener),
     });
-    ctx.surfaces.onMessage(desktopPetSurfaceId, (message) => {
-      if (!message || typeof message !== "object" || !("kind" in message)) return;
-      if (message.kind === "voice.stop") activeVoice.stop();
-      if (message.kind === "voice.gesture" && "gesture" in message) activeVoice.gesture(String(message.gesture));
-    });
+
     await ctx.events.on("voice.preferences.changed", (payload) => { void activeVoice.configure(payload as VoicePreferences).catch((error) => reportError("voice.preferences", error)); });
     await ctx.rpc.handle("voice.devices", () => ctx.native.audio.devices());
     await ctx.rpc.handle("voice.preferences.validate", (payload) => ctx.native.keys.validate(String(payload.hotkey ?? "")));
@@ -99,7 +105,11 @@ const desktopPetBackground = {
     ctx.hostEvents.on("bridge.exit", () => activeVoice.stop("chat"));
 
     ctx.effect("desktop_pet_controller", () => controller.terminate());
-    ctx.surfaces.onSettled(desktopPetSurfaceId, (settled) => controller.handleSettled(settled));
+    await ctx.rpc.handle("provider.report", (payload) => controller.report(payload));
+    await ctx.rpc.handle("provider.available", (payload) => {
+      if (typeof payload.plugin_id === "string") void controller.available(payload.plugin_id).catch((error) => reportError("restore", error));
+    });
+    await ctx.rpc.handle("select", (payload) => controller.select(payload));
     await ctx.events.on("action", (payload) => controller.handleAgentAction(payload));
     await ctx.rpc.handle("sync", async (payload) => {
       const forceVisible = typeof payload.forceVisible === "boolean" ? payload.forceVisible : undefined;
@@ -119,11 +129,7 @@ const desktopPetBackground = {
     // whole contribution down and nothing retries it — the pet would then stay
     // dead until the app restarted. Letting it fail leaves the pet hidden,
     // which the tray entry can undo.
-    try {
-      await controller.restore();
-    } catch (error) {
-      reportError("restore", error);
-    }
+    void controller.restore().catch((error: unknown) => reportError("restore", error));
   },
 } satisfies PluginBackgroundContribution;
 

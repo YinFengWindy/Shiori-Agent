@@ -16,6 +16,7 @@ async def test_setup_registers_scoped_tools_rpc_and_role_participant(tmp_path):
     assert "pet_action" in ctx.fake_tools.tools
     assert set(ctx.fake_rpc.handlers) == {
         "binding.get",
+        "binding.preview",
         "pets.list",
         "pets.import",
         "pets.remove",

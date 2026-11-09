@@ -234,6 +234,7 @@ function readCreateRequest(
     key,
     spec: {
       body: { width: Math.round(width), height: Math.round(height) },
+      visible: typeof flags.visible === "boolean" ? flags.visible : undefined,
       transparent: typeof flags.transparent === "boolean" ? flags.transparent : undefined,
       alwaysOnTop: typeof flags.alwaysOnTop === "boolean" ? flags.alwaysOnTop : undefined,
       skipTaskbar: typeof flags.skipTaskbar === "boolean" ? flags.skipTaskbar : undefined,

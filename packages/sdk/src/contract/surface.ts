@@ -39,6 +39,8 @@ export type SurfaceMenuItem = { id: string; label: string };
 export type SurfaceSpec = {
   /** Fixed body size; the window may exceed it only via an extension. */
   body: { width: number; height: number };
+  /** Initial visibility after renderer readiness; defaults to true. */
+  visible?: boolean;
   /** Defaults to true — the point of a surface is to sit over the desktop. */
   transparent?: boolean;
   /** Defaults to true. Never elevated to the screen-saver level. */
@@ -47,6 +49,17 @@ export type SurfaceSpec = {
   skipTaskbar?: boolean;
   /** Starts the surface click-through; can be toggled later. */
   clickThrough?: boolean;
+};
+
+/** Host event for a window that lost renderer readiness or was destroyed. */
+export const surfaceLifecycleEvent = "surface.lifecycle";
+
+/** Identity-only lifecycle notification; consumers match their own surface instance. */
+export type SurfaceLifecyclePayload = {
+  plugin_id: string;
+  surface_id: string;
+  window_id: number;
+  status: "unavailable" | "closed";
 };
 
 /**

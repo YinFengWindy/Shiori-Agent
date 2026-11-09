@@ -77,6 +77,7 @@ const testRoots = [
   resolve(desktopRoot, "tests", "integration"),
   // 插件 SDK（#440）的源码与单测同目录并列
   resolve(repoRoot, "packages", "sdk", "src"),
+  resolve(repoRoot, "packages", "desktop-pet", "src"),
   ...(await pluginTestRoots()),
 ];
 

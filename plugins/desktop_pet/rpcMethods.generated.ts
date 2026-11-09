@@ -6,6 +6,7 @@ export const rpcMethods = {
   "bilibili.login.poll": "bilibili.login.poll",
   "bilibili.login.start": "bilibili.login.start",
   "binding.get": "binding.get",
+  "binding.preview": "binding.preview",
   "bubble.dismiss": "bubble.dismiss",
   "live.config.get": "live.config.get",
   "live.config.set": "live.config.set",

@@ -1,429 +1,202 @@
+import type { PluginRpcClient } from "@yinfengwindy/shiori-sdk";
+import { emptyPetReply, isRecord, petModelKey, readPetModelReference, type PetAction, type PetBinding, type PetGesture, type PetModelReference, type PetPresentationState, type PetProviderReport, type PetVoiceState } from "@yinfengwindy/shiori-pet";
 import { ReplyBubbleController } from "./replyBubble";
-import { emptyPetReply, type PetReplyBubble } from "../shared/replyBubble";
-import type { PluginBackgroundSettled, PluginBackgroundSurfaces } from "@yinfengwindy/shiori-sdk";
 import { desktopPetBindingPatch } from "./settings";
-import {
-  desktopPetBody,
-  type DesktopPetActionPayload,
-  type DesktopPetBinding,
-  type DesktopPetPosition,
-  type DesktopPetSettings,
-  type DesktopPetState,
-  type DesktopPetWorkArea,
-} from "./types";
+import { PetPresentationTransport } from "./presentation";
+import type { DesktopPetSettings } from "./types";
 
-/** Keeps role-requested moves visible as a short, deliberate desktop animation. */
-export const desktopPetAgentMoveDurationMs = 900;
-
-/** Names the pet's window within this plugin's own surfaces. */
-export const desktopPetSurfaceId = "pet";
-
-/**
- * A deliberately unreachable anchor, used when the pet has no remembered
- * position: the host clamps the body into the work area, which lands it in the
- * bottom-right corner of whichever display the surface opened on — the same
- * fallback the pet had before it moved onto surfaces.
- */
-const desktopPetFallbackAnchor: DesktopPetPosition = {
-  x: Number.MAX_SAFE_INTEGER,
-  y: Number.MAX_SAFE_INTEGER,
-};
-
-/** Settle reasons that mean the user (or a role) actually relocated the pet. */
-const persistedSettleReasons = new Set(["drag", "momentum", "move"]);
-
-/** The slice of `ctx.surfaces` this controller uses; narrowed so tests can fake it. */
-export type DesktopPetSurfaces = Pick<
-  PluginBackgroundSurfaces,
-  "create" | "destroy" | "setPosition" | "moveTo" | "post" | "setState" | "workArea" | "setInteraction"
->;
-
+type Instance = { binding: PetBinding; leaseId: string };
+/** Desktop-owned policy, with format-specific effects behind services. */
 export type DesktopPetControllerOptions = {
-  surfaces: DesktopPetSurfaces;
-  /** The settings already read out of `ctx.store`; the controller owns them from here. */
+  services: PluginRpcClient["services"];
   settings: DesktopPetSettings;
   saveSettings: (settings: DesktopPetSettings) => Promise<void>;
-  resolveBinding: () => Promise<DesktopPetBinding | null>;
-  /** Reports a failure from a fire-and-forget path that has no caller to throw at. */
-  onError?: (operation: string, error: unknown) => void;
-  /**
-   * Called after anything that changes what the pet's tray item should say.
-   *
-   * The pet is the only thing that knows whether it is showing and whether it
-   * has a binding to show, and since #181-D it owns the menu item that reports
-   * both. Position writes call this too — they are cheap to ignore, and the
-   * alternative is this class deciding what its consumer considers a change.
-   */
+  resolveBinding: () => Promise<PetBinding | null>;
+  preview: (roleId: string, model: PetModelReference) => Promise<PetBinding>;
+  select: (roleId: string, model: PetModelReference) => Promise<unknown>;
+  onError: (operation: string, error: unknown) => void;
   onChanged?: () => void;
+  onGesture?: (gesture: PetGesture) => void;
+  timeoutMs?: number;
 };
 
-/**
- * The desktop pet's always-resident orchestration, running in the plugin-host
- * renderer as this plugin's `app.background` contribution.
- *
- * Moved out of the Electron main process by #181-C. The host now knows nothing
- * about roles, packages, sprite states or remembered positions: it provides
- * DesktopSurface, a per-plugin store and a backend RPC namespace, and this
- * class is the only thing that puts those together into "a pet". The reason it
- * is not in the main process is recorded on #181: a plugin's timers and
- * listeners there could never be reclaimed on disable, so "停用插件后订阅全部
- * 回收" could only be pretended.
- *
- * Voice orchestration is a sibling plugin controller; this class owns presentation.
- */
+/** Owns selection, replies and visibility, independent of the rendering format. */
 export class DesktopPetController {
-  private readonly surfaces: DesktopPetSurfaces;
-  private queue = Promise.resolve();
-  private settings: DesktopPetSettings;
-  private activeRoleId = "";
-  private activeLoad: { binding: DesktopPetBinding; state: DesktopPetState } | null = null;
-  private latestReply: PetReplyBubble = emptyPetReply;
-  /** Reply lifecycle is owned and reclaimed alongside this plugin controller. */
   readonly replies: ReplyBubbleController;
-  private readonly targetListeners: Array<(roleId: string) => void> = [];
-  private running = false;
-  /** A hide retires queued/in-flight presentation work without mirroring visibility. */
-  private presentationEpoch = 0;
-  /**
-   * Set the moment teardown starts, and never cleared.
-   *
-   * `terminate()` going through the queue is what orders the destroy after any
-   * operation already running; this flag is what stops that operation from
-   * doing pointless work on the way. A `show()` parked on `resolveBinding()` —
-   * a round trip to the Python backend — resumes *after* the plugin was
-   * disabled, and without this it would open a window purely so the queued
-   * destroy could close it again, which the user sees as a flash.
-   *
-   * Paired with the presentation epoch at async boundaries: teardown and hide
-   * both revoke immediately, even while an older queued operation is awaiting
-   * binding, native window creation or persistence.
-   */
+  private readonly transport: PetPresentationTransport;
+  private settings: DesktopPetSettings;
+  private state: PetPresentationState = { reply: emptyPetReply, voice: { status: "idle" } };
+  private active: Instance | null = null;
+  private preparing: Instance | null = null;
+  private queue = Promise.resolve();
+  private epoch = 0;
   private disposed = false;
-  /**
-   * Where the surface last came to rest, and on which display.
-   *
-   * Cached rather than asked for, because both answers arrive unprompted: the
-   * creation result carries them, and every settle refreshes them. The old
-   * main-process controller could call `anchorFromWindow` to re-read the
-   * window's real bounds; from a renderer that would be an IPC round trip.
-   *
-   * The one place a stale value shows: `handleAgentAction` compares this
-   * against the move target to pick `running-left` vs `running-right`. Two
-   * role-requested moves in quick succession — or one issued mid-glide, before
-   * the settle lands — can read the pre-move anchor and face the sprite the
-   * wrong way for the duration of the move. Cosmetic, and not worth an IPC
-   * round trip per action, but it is not "nothing".
-   */
-  private anchor: DesktopPetPosition = desktopPetFallbackAnchor;
-  private displayId = "";
-
+  private target = "";
+  private retryProvider: { epoch: number; pluginId: string } | null = null;
+  private readonly listeners: Array<(roleId: string) => void> = [];
   constructor(private readonly options: DesktopPetControllerOptions) {
-    this.surfaces = options.surfaces;
     this.settings = options.settings;
-    this.replies = new ReplyBubbleController((payload) => {
-      this.latestReply = payload;
-      this.pushRetainedState();
-    });
+    this.transport = new PetPresentationTransport(options.services, (report) => this.providerReport(report), options.timeoutMs);
+    this.replies = new ReplyBubbleController((reply) => { this.state = { ...this.state, reply }; this.publish(); });
   }
-
-  /**
-   * Whether the pet's surface is currently up.
-   *
-   * Tracked locally rather than asked of the host, which is the one place this
-   * controller can disagree with reality: if the OS or Electron destroyed the
-   * window behind our back, the host has forgotten the surface while this flag
-   * still says it exists. The pet's window is frameless and always-on-top with
-   * no close affordance, so in practice that only happens during shutdown,
-   * when nothing reads this again.
-   */
-  get isRunning(): boolean {
-    return this.running;
-  }
-
-  /** The settings as last saved, for callers that need the current binding. */
-  get currentSettings(): DesktopPetSettings {
-    return this.settings;
-  }
-
-  /**
-   * Subscribes a sibling controller to the displayed role: called with the role
-   * whenever one is loaded and with "" when the pet hides or tears down, so the
-   * sibling can retire work immediately.
-   */
-  watchTarget(listener: (roleId: string) => void) { this.targetListeners.push(listener); }
-
-  /** Exposes only the currently displayed role to other controllers in this plugin. */
-  get visibleRoleId() { return this.running ? this.activeRoleId : ""; }
-
-  /** Sends plugin-owned voice state to its own renderer without host speech semantics. */
-  publishVoice(state: import("./voice/types").VoiceStatePayload) {
-    if (this.running) this.surfaces.post(desktopPetSurfaceId, { voice: state });
-  }
-
-  /**
-   * Records where the surface came to rest.
-   *
-   * Driven by `ctx.surfaces.onSettled` rather than from here, because a drag or
-   * release glide is started by the surface renderer talking to the host
-   * directly; this controller never sees those calls.
-   */
-  handleSettled(settled: PluginBackgroundSettled): void {
-    this.anchor = settled.placement.anchor;
-    this.displayId = settled.displayId;
-    if (!persistedSettleReasons.has(settled.reason) || !this.activeRoleId) return;
-    this.persistPosition(this.activeRoleId, settled.placement.anchor);
-  }
-
-  show(): Promise<void> {
-    const epoch = this.presentationEpoch;
-    return this.enqueue(async () => {
-      if (!this.isCurrentPresentation(epoch)) return;
-      const binding = await this.options.resolveBinding();
-      if (!this.isCurrentPresentation(epoch)) return;
-      if (!binding) throw new Error("没有已启用且已选择素材的桌宠角色");
-      await this.load(binding, "idle", epoch);
-      if (!this.isCurrentPresentation(epoch)) return;
-      await this.saveSettings(desktopPetBindingPatch(binding, true));
-    });
-  }
-
-  hide(): Promise<void> {
-    const epoch = this.invalidatePresentation();
-    return this.enqueue(async () => {
-      await this.destroySurface();
-      if (!this.isCurrentPresentation(epoch)) return;
-      await this.saveSettings({ visible: false });
-    });
-  }
-
-  sync(forceVisible?: boolean): Promise<void> {
-    const epoch = forceVisible === false ? this.invalidatePresentation() : this.presentationEpoch;
-    return this.enqueue(async () => {
-      if (!this.isCurrentPresentation(epoch)) return;
-      // Forced hiding also comes from role-save: reclaim the window before
-      // querying the new binding, then retain its metadata/availability update.
-      if (forceVisible === false) {
-        await this.destroySurface();
-        if (!this.isCurrentPresentation(epoch)) return;
-      }
-      const binding = await this.options.resolveBinding();
-      if (!this.isCurrentPresentation(epoch)) return;
-      if (!binding) {
-        if (forceVisible !== false) await this.destroySurface();
-        if (!this.isCurrentPresentation(epoch)) return;
-        await this.saveSettings({ visible: false, roleId: null, packageId: null });
-        return;
-      }
-      const current = this.settings;
-      const changedBinding = current.roleId !== binding.roleId || current.packageId !== binding.package.id;
-      const visible = forceVisible ?? (changedBinding || current.visible);
-      if (visible) await this.load(binding, "idle", epoch);
-      else if (forceVisible !== false) await this.destroySurface();
-      if (!this.isCurrentPresentation(epoch)) return;
-      await this.saveSettings(desktopPetBindingPatch(binding, visible));
-    });
-  }
-
-  restore(): Promise<void> {
+  get isRunning() { return this.active !== null; }
+  get currentSettings() { return this.settings; }
+  get visibleRoleId() { return this.target; }
+  /** A model change within the same role does not restart speech or live output. */
+  watchTarget(listener: (roleId: string) => void) { this.listeners.push(listener); }
+  /** Receives completion before startup can block on it. */
+  report(value: unknown) { this.transport.report(value); }
+  /** Voice state is retained so surface reloads do not lose it. */
+  publishVoice(voice: PetVoiceState) { this.state = { ...this.state, voice }; this.publish(); }
+  show() { return this.sync(true); }
+  restore() { return this.sync(); }
+  /** Late startup restores only the currently selected provider and visibility intent. */
+  available(pluginId: string) {
+    if (this.disposed || this.active || this.retryProvider?.epoch !== this.epoch || this.retryProvider.pluginId !== pluginId) return Promise.resolve();
     return this.sync();
   }
-
-  play(state: DesktopPetState): void {
-    this.postPlay(state, false);
+  hide() {
+    const epoch = this.newIntent(true);
+    return this.enqueue(async () => { await this.closeActive(); if (this.current(epoch)) await this.save({ visible: false }); });
   }
-
-  /** Executes one already-authorized role action without exposing window APIs to the renderer. */
-  handleAgentAction(value: unknown): void {
-    if (!isDesktopPetActionPayload(value)) return;
-    if (!this.running || value.role_id !== this.activeRoleId || value.channel !== "desktop") return;
-    if (value.kind === "play") {
-      const state = value.name ? this.activeLoad?.binding.actions?.[value.name] : undefined;
-      if (state) this.postPlay(state, true);
-      return;
-    }
-    const target = value.target;
-    if (!target) return;
-    const current = this.anchor;
-    const activeLoad = this.activeLoad;
-    void this.surfaces.workArea(desktopPetSurfaceId).then((workArea) => {
-      // The surface can be torn down while the work area is in flight; moving a
-      // surface that no longer exists would be reported as a host error.
-      if (!this.running || this.disposed || this.activeLoad !== activeLoad) return;
-      const next = desktopPetTargetPosition(target, workArea);
-      // The host runs the tween and reports the landing through `handleSettled`.
-      this.surfaces.moveTo(desktopPetSurfaceId, next, desktopPetAgentMoveDurationMs);
-      if (value.animation === "run") {
-        const state = next.x < current.x ? "running-left" : next.x > current.x ? "running-right" : "idle";
-        this.postPlay(state, true);
+  sync(forceVisible?: boolean) {
+    const epoch = this.newIntent(forceVisible === false);
+    return this.enqueue(async () => {
+      if (!this.current(epoch)) return;
+      if (forceVisible === false) await this.closeActive();
+      let binding: PetBinding | null;
+      try { binding = await this.options.resolveBinding(); }
+      catch (error) { if (this.current(epoch)) await this.closeActive(); throw error; }
+      if (!this.current(epoch)) return;
+      if (!binding) { await this.closeActive(); await this.save({ visible: false, roleId: null, model: null }); return; }
+      const changed = this.settings.roleId !== binding.role_id || !this.settings.model || petModelKey(this.settings.model) !== bindingKey(binding);
+      const visible = forceVisible ?? (changed || this.settings.visible);
+      if (visible) {
+        this.retryProvider = { epoch, pluginId: binding.provider.plugin_id };
+        await this.load(binding, epoch);
+        if (this.current(epoch)) this.retryProvider = null;
+      } else await this.closeActive();
+      if (this.current(epoch)) await this.save(desktopPetBindingPatch(binding, visible));
+    });
+  }
+  /** Active-role replacements prepare before changing the authoritative selection. */
+  select(value: unknown) {
+    const reference = readPetModelReference(value);
+    if (!reference || !isRecord(value) || typeof value.role_id !== "string" || !value.role_id) return Promise.reject(new Error("桌宠选择无效"));
+    const roleId = value.role_id;
+    // Editing another role's model must not retire an active role's pending load.
+    if (this.active?.binding.role_id !== roleId && this.preparing?.binding.role_id !== roleId && this.settings.roleId !== roleId) return this.options.select(roleId, reference);
+    const epoch = this.newIntent(false);
+    return this.enqueue(async () => {
+      if (!this.current(epoch)) return;
+      if (!this.active || this.active.binding.role_id !== roleId) {
+        const result = await this.options.select(roleId, reference);
+        if (this.current(epoch) && this.settings.roleId === roleId) await this.save({ model: reference });
+        return result;
       }
-    }).catch((error) => this.options.onError?.("pet-action", error));
+      const binding = await this.options.preview(roleId, reference);
+      if (!this.current(epoch)) return;
+      await this.load(binding, epoch, () => this.options.select(roleId, reference));
+      if (this.current(epoch)) await this.save(desktopPetBindingPatch(binding, true));
+    });
   }
-
-  /** Tears the pet's window down when the plugin is disabled or reloaded. */
-  async terminate(): Promise<void> {
-    this.disposed = true;
-    this.invalidatePresentation();
-    this.replies.dispose();
-    // Through the queue, so a `show()` that is mid-flight finishes (and bails
-    // on `disposed`) before the destroy runs, rather than racing it.
-    await this.enqueue(() => this.destroySurface());
-  }
-
-  private enqueue(operation: () => Promise<void>): Promise<void> {
-    const next = this.queue.then(operation, operation);
-    this.queue = next.catch(() => undefined);
-    return next;
-  }
-
-  private async load(binding: DesktopPetBinding, state: DesktopPetState, epoch: number): Promise<void> {
-    // Host window creation is an IPC round trip. Retain replies arriving after
-    // the role is resolved but before the new surface acknowledges creation.
-    this.replies.bind(binding.roleId);
-    if (!this.running) {
-      // Created at the fallback corner first: only once the window exists can
-      // the host say which display it landed on, and the remembered position is
-      // per display. `create` answers with both, so the remembered position is
-      // applied without a second round trip.
-      //
-      // Being applied before the surface paints is a practical consequence, not
-      // a guarantee: `create` and `setPosition` are two messages from this
-      // renderer, while the first paint happens in the *surface's* renderer
-      // after it has loaded its HTML — which is far slower than one IPC hop,
-      // but nothing enforces the ordering. Before #181-C this was a real
-      // invariant, because both calls were synchronous inside the main process.
-      const placement = await this.surfaces.create(
-        desktopPetSurfaceId,
-        { body: desktopPetBody },
-        desktopPetFallbackAnchor,
-      ).catch((error: unknown) => {
-        this.replies.bind("");
-        throw error;
-      });
-      if (!this.isCurrentPresentation(epoch)) return;
-      this.running = true;
-      this.anchor = { x: placement.x, y: placement.y };
-      this.displayId = placement.displayId;
-      // Read from `this.settings` rather than from a caller's snapshot: a
-      // settle can have written a position while `create` was in flight.
-      const remembered = this.settings.positions[positionKey(binding.roleId, placement.displayId)];
-      if (remembered) this.surfaces.setPosition(desktopPetSurfaceId, remembered);
+  /** Only model-supported names are sent; movement does not mention sprite rows. */
+  handleAgentAction(value: unknown) {
+    const active = this.active;
+    if (!active || !isRecord(value) || value.channel !== "desktop" || value.role_id !== active.binding.role_id) return;
+    let command: PetAction;
+    if (value.kind === "play" && typeof value.name === "string" && active.binding.model.actions.includes(value.name)) command = { kind: "play", name: value.name };
+    else {
+      const target = (["top_left", "top_right", "center", "bottom_left", "bottom_right"] as const).find((item) => item === value.target);
+      if (value.kind !== "move" || !target) return;
+      command = { kind: "move", target, animation: value.animation === "run" ? "run" : "" };
     }
-    if (this.activeRoleId !== binding.roleId) this.revokeInteraction();
-    this.activeRoleId = binding.roleId;
-    this.notifyTarget(binding.roleId);
-    this.activeLoad = { binding, state };
-    // Retained, so a renderer that mounts or reloads later still gets it.
-    this.pushRetainedState();
-    this.surfaces.setInteraction(desktopPetSurfaceId, { roleId: binding.roleId, available: true });
+    void this.transport.update(active.binding, active.leaseId, "action", { command }).catch((error: unknown) => this.failure(active, error));
   }
-
-  private pushRetainedState(): void {
-    if (!this.activeLoad || !this.running) return;
-    this.surfaces.setState(desktopPetSurfaceId, {
-      load: {
-        package: this.activeLoad.binding.package,
-        state: this.activeLoad.state,
-      },
-      reply: this.latestReply,
-    });
+  /** Ends presentation and waiting callbacks when the background stops. */
+  async terminate() {
+    if (this.disposed) return;
+    this.newIntent(true); this.disposed = true; this.replies.dispose();
+    await this.enqueue(() => this.closeActive());
+    this.transport.dispose();
   }
-
-  /** One-shot sprite command; never retained, so a reload does not replay it. */
-  private postPlay(state: DesktopPetState, transient: boolean): void {
-    if (!this.running) return;
-    this.surfaces.post(desktopPetSurfaceId, { state, transient });
+  private async load(binding: PetBinding, epoch: number, commit?: () => Promise<unknown>) {
+    const previous = this.active;
+    if (previous && bindingKey(previous.binding) === bindingKey(binding) && previous.binding.role_id === binding.role_id) { if (commit) await commit(); return; }
+    if (previous && previous.binding.role_id !== binding.role_id) await this.closeActive();
+    const old = this.active;
+    const next: Instance = { binding, leaseId: crypto.randomUUID() };
+    this.preparing = next;
+    let oldHidden = false;
+    try {
+      const ready = await this.transport.request(binding, next.leaseId, "prepare", { state: this.state });
+      if (!this.current(epoch)) return;
+      const position = ready.placement ? this.settings.positions[`${binding.role_id}:${ready.placement.displayId}`] : undefined;
+      if (old) { await this.transport.request(old.binding, old.leaseId, "hide"); oldHidden = true; }
+      if (!this.current(epoch)) return;
+      await this.transport.request(binding, next.leaseId, "show", { state: this.state, ...(position ? { position } : {}) });
+      if (!this.current(epoch)) return;
+      if (commit) await commit();
+      if (!this.current(epoch)) return;
+      this.active = next; this.preparing = null;
+      this.bind(binding.role_id); this.publish();
+      if (old) await this.close(old);
+    } catch (error) {
+      if (oldHidden && old && this.current(epoch)) {
+        await this.close(next);
+        try { await this.transport.request(old.binding, old.leaseId, "show", { state: this.state }); }
+        catch (restoreError) { this.failure(old, restoreError); }
+      }
+      throw error;
+    } finally {
+      if (this.preparing === next) this.preparing = null;
+      if (this.active !== next) await this.close(next);
+    }
   }
-
-  /**
-   * Merges a change into the current settings and persists the result.
-   *
-   * A patch rather than a whole snapshot, because `persistPosition` runs
-   * *outside* the queue — a settle is pushed in from the host whenever the user
-   * lets go of the pet — and can land between a queued operation taking its
-   * snapshot and that operation saving it. Saving a whole snapshot would then
-   * write back the positions as they were before the drag, silently losing it.
-   */
-  private async saveSettings(patch: Partial<DesktopPetSettings>): Promise<void> {
-    // In memory first: a failed write must not leave this controller acting on
-    // a binding it has already replaced.
-    this.settings = { ...this.settings, ...patch };
-    await this.options.saveSettings(this.settings);
-    this.options.onChanged?.();
+  private publish() {
+    const active = this.active;
+    if (active) void this.transport.update(active.binding, active.leaseId, "update", { state: this.state }).catch((error: unknown) => this.failure(active, error));
   }
-
-  private persistPosition(roleId: string, position: DesktopPetPosition): void {
-    void this.saveSettings({
-      positions: { ...this.settings.positions, [positionKey(roleId, this.displayId)]: position },
-    }).catch((error) => {
-      this.options.onError?.("persist-position", error);
-    });
+  private providerReport(report: PetProviderReport) {
+    const active = this.active;
+    if (!active || active.leaseId !== report.lease_id || active.binding.role_id !== report.role_id || active.binding.model.id !== report.model_id) return;
+    if (report.kind === "lost" || report.kind === "failed") { this.failure(active, new Error(report.error || "桌宠形象不可用")); return; }
+    if (report.kind === "settled" && report.placement && ["drag", "momentum", "move"].includes(report.placement.reason)) {
+      const { displayId, placement: { anchor } } = report.placement;
+      if (typeof displayId !== "string" || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
+      void this.save({ positions: { ...this.settings.positions, [`${report.role_id}:${displayId}`]: anchor } }).catch((error: unknown) => this.options.onError("position", error));
+    }
+    if (report.kind === "gesture" && report.gesture) {
+      if (report.gesture.kind === "hide") void this.hide().catch((error: unknown) => this.options.onError("hide", error));
+      else if (report.gesture.kind === "bubble.dismiss") this.replies.dismiss();
+      else this.options.onGesture?.(report.gesture);
+    }
   }
-
-  private revokeInteraction(): void {
-    if (this.running) this.surfaces.setInteraction(desktopPetSurfaceId, null);
+  private failure(instance: Instance, error: unknown) {
+    if (this.active !== instance) return;
+    this.active = null; this.bind(""); this.options.onError("presentation", error);
+    void this.close(instance); this.options.onChanged?.();
   }
-
-  private invalidatePresentation() {
-    this.presentationEpoch += 1;
-    this.revokeInteraction();
-    this.notifyTarget("");
-    return this.presentationEpoch;
+  private newIntent(revoke: boolean) {
+    this.epoch += 1;
+    this.retryProvider = null;
+    if (this.preparing) this.transport.cancel(this.preparing.leaseId);
+    if (revoke) this.bind("");
+    return this.epoch;
   }
-
-  private notifyTarget(roleId: string) {
-    for (const listener of this.targetListeners) listener(roleId);
+  private current(epoch: number) { return !this.disposed && this.epoch === epoch; }
+  private bind(roleId: string) {
+    if (this.target === roleId) return;
+    this.target = roleId; this.replies.bind(roleId);
+    for (const listener of this.listeners) listener(roleId);
   }
-
-  private isCurrentPresentation(epoch: number) {
-    return !this.disposed && epoch === this.presentationEpoch;
+  private async closeActive() { const active = this.active; this.active = null; this.bind(""); if (active) await this.close(active); }
+  private async close(instance: Instance) {
+    this.transport.cancel(instance.leaseId);
+    try { await this.transport.request(instance.binding, instance.leaseId, "close"); }
+    catch (error) { this.options.onError("presentation.close", error); }
   }
-
-  private async destroySurface(): Promise<void> {
-    this.revokeInteraction();
-    // Called unconditionally rather than only when `running`: the host treats
-    // an unknown surface as a no-op, and doing it this way also reclaims a
-    // window this controller has somehow lost track of.
-    await this.surfaces.destroy(desktopPetSurfaceId);
-    this.running = false;
-    this.activeRoleId = "";
-    this.activeLoad = null;
-    this.replies.bind("");
-  }
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> { const next = this.queue.then(operation, operation); this.queue = next.then(() => {}, () => {}); return next; }
+  private async save(patch: Partial<DesktopPetSettings>) { this.settings = { ...this.settings, ...patch }; await this.options.saveSettings(this.settings); this.options.onChanged?.(); }
 }
-
-/** Positions are remembered per role *and* display, so unplugging a monitor does not move the pet. */
-function positionKey(roleId: string, displayId: string): string {
-  return `${roleId}:${displayId}`;
-}
-
-function isDesktopPetActionPayload(value: unknown): value is DesktopPetActionPayload {
-  if (!value || typeof value !== "object") return false;
-  const payload = value as Partial<DesktopPetActionPayload>;
-  return payload.channel === "desktop"
-    && typeof payload.role_id === "string"
-    && (payload.kind === "move" || payload.kind === "play");
-}
-
-/**
- * Resolves a named corner or the centre of a work area.
- *
- * The corners deliberately overshoot: the host clamps the body into the work
- * area, so `{ workArea.x + workArea.width, ... }` lands exactly at the right
- * edge without this function having to repeat the body arithmetic. Only the
- * centre genuinely needs the body size.
- */
-function desktopPetTargetPosition(
-  target: NonNullable<DesktopPetActionPayload["target"]>,
-  workArea: DesktopPetWorkArea,
-): DesktopPetPosition {
-  const right = workArea.x + workArea.width;
-  const bottom = workArea.y + workArea.height;
-  if (target === "top_left") return { x: workArea.x, y: workArea.y };
-  if (target === "top_right") return { x: right, y: workArea.y };
-  if (target === "bottom_left") return { x: workArea.x, y: bottom };
-  if (target === "bottom_right") return { x: right, y: bottom };
-  return {
-    x: workArea.x + (workArea.width - desktopPetBody.width) / 2,
-    y: workArea.y + (workArea.height - desktopPetBody.height) / 2,
-  };
-}
+function bindingKey(binding: PetBinding) { return petModelKey({ provider: binding.provider, model_id: binding.model.id }); }

@@ -2,6 +2,11 @@
 
 SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破坏性变更。这里只记已经定版的变更，不设 Unreleased 批次。
 
+## 4.0.1
+
+- `SurfaceSpec.visible` 是可选的初始可见状态，默认 `true`。设置为 `false` 时，renderer `ready()` 仍会重放状态，但须由 background 显式 `show()` 才显示，支持模型准备完成后的窗口交接。
+- 新增 `surfaceLifecycleEvent`（`surface.lifecycle`）和 `SurfaceLifecyclePayload`。background 通过已有 `hostEvents.on` 接收窗口 `unavailable` / `closed`，按 `plugin_id`、`surface_id`、`window_id` 识别自己的实例。事件不携带角色或模型业务数据。
+
 ## 4.0.0
 
 - 存储位置（2026-11-04）：scene、schedule、mcp 的状态文件与 proactive 的两份诊断日志统一到各自 `plugin-data/<id>/`。bootstrap 冷启动迁入五个固定旧文件；已有新目标优先，旧来源核对后归档，失败阻止启动。此项修订下文 P6s 保留 `schedules.json` 旧路径的约定；文件格式与 SDK 接口不变，详见[存储决策](../decisions/2026-11-04-plugin-storage-paths.md)。

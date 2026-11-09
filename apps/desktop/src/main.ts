@@ -276,6 +276,7 @@ void app.whenReady().then(async () => {
     cursorScreenPoint,
     showContextMenu: showSurfaceContextMenu,
     activateMainWindow: showOrCreateDesktopWindow,
+    onLifecycle: (payload) => publishDesktopEvent("surface.lifecycle", payload),
     // Forwarded to the plugin-host renderer rather than handled here: the code
     // that decides whether a settle is worth remembering belongs to whichever
     // plugin owns the surface. Only that window is sent it — it is the only one
