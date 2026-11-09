@@ -33,6 +33,8 @@ export class VoicePlaybackRenderer {
   private playbackId = "";
   private ignoreEnd = false;
   private generation = 0;
+  private analyser: AnalyserNode | null = null;
+  private meter: ReturnType<typeof setInterval> | null = null;
 
   handleCommand(command: VoicePlaybackCommand): void {
     if (command.command === "cancel") {
@@ -51,12 +53,18 @@ export class VoicePlaybackRenderer {
       if (!this.context || generation !== this.generation) return;
       const sourceNode = this.context.createBufferSource();
       sourceNode.buffer = audio;
-      sourceNode.connect(this.context.destination);
+      const analyser = this.context.createAnalyser();
+      analyser.fftSize = 1024;
+      sourceNode.connect(analyser);
+      analyser.connect(this.context.destination);
+      this.analyser = analyser;
       this.source = sourceNode;
       this.playbackId = id;
       this.ignoreEnd = false;
       sourceNode.onended = () => {
         if (this.ignoreEnd || this.source !== sourceNode || this.playbackId !== id) return;
+        this.releaseMeter();
+        sourceNode.disconnect();
         this.source = null;
         this.playbackId = "";
         window.miraDesktop.voicePlaybackFinished(id);
@@ -65,10 +73,18 @@ export class VoicePlaybackRenderer {
       if (generation !== this.generation) return;
       sourceNode.start();
       window.miraDesktop.voicePlaybackStarted(id);
+      const samples = new Float32Array(analyser.fftSize);
+      this.meter = setInterval(() => {
+        if (generation !== this.generation || this.source !== sourceNode) return;
+        analyser.getFloatTimeDomainData(samples);
+        let squared = 0;
+        for (const sample of samples) squared += sample * sample;
+        const amplitude = Math.min(1, Math.sqrt(squared / samples.length));
+        window.miraDesktop.voicePlaybackLevel(id, amplitude);
+      }, 33);
     } catch (error) {
       if (generation !== this.generation) return;
-      this.source = null;
-      this.playbackId = "";
+      this.cancel();
       window.miraDesktop.voicePlaybackError(id, error instanceof Error ? error.message : "音频播放失败");
     }
   }
@@ -82,8 +98,16 @@ export class VoicePlaybackRenderer {
       // The source may already have ended between queue transitions.
     }
     this.source?.disconnect();
+    this.releaseMeter();
     this.source = null;
     this.playbackId = "";
+  }
+
+  private releaseMeter(): void {
+    if (this.meter !== null) clearInterval(this.meter);
+    this.meter = null;
+    this.analyser?.disconnect();
+    this.analyser = null;
   }
 }
 

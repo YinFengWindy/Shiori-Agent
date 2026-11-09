@@ -1,5 +1,5 @@
 import { rpcMethods } from "../rpcMethods.generated";
-import { chatTerminalEventMethods, type PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
+import { chatTerminalEventMethods, nativeAudioPlaybackEvent, type PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
 import { readDesktopPetBinding } from "./binding";
 import { DesktopPetController } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
@@ -85,7 +85,8 @@ const desktopPetBackground = {
       reportError("voice.preferences", error);
     }
     // One speech line for every reply source, so chat and live speech never overlap.
-    const speech = new PetSpeechQueue(ctx.native.audio);
+    const speech = new PetSpeechQueue(ctx.native.audio, (audio) => controller.publishAudio(audio));
+    ctx.hostEvents.on(nativeAudioPlaybackEvent, (payload) => speech.observe(payload));
     const activeVoice = new PetVoiceController(ctx, preferences, (state) => controller.publishVoice(state), speech);
     controller.watchTarget((roleId) => activeVoice.bind(roleId));
     ctx.effect("desktop_pet_voice", () => activeVoice.dispose());
@@ -105,6 +106,7 @@ const desktopPetBackground = {
     ctx.hostEvents.on("bridge.exit", () => activeVoice.stop("chat"));
 
     ctx.effect("desktop_pet_controller", () => controller.terminate());
+    ctx.hostEvents.on("plugins.reloaded", (payload) => controller.providersReloaded(payload));
     await ctx.rpc.handle("provider.report", (payload) => controller.report(payload));
     await ctx.rpc.handle("provider.available", (payload) => {
       if (typeof payload.plugin_id === "string") void controller.available(payload.plugin_id).catch((error) => reportError("restore", error));

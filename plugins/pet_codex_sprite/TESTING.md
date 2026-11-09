@@ -1,6 +1,6 @@
 # 独立测试
 
-插件依赖 `shiori-sdk>=4.0.1,<5`、`shiori-plugin-desktop-pet>=0.1.3` 和 Pillow；测试仅使用 SDK testing。独立 wheelhouse 必须同时包含匹配的 SDK 与桌宠插件 wheel，不依赖宿主或根 conftest。
+插件依赖 `shiori-sdk>=4.1.1,<4.2.0`、`shiori-plugin-desktop-pet>=0.1.5` 和 Pillow；测试仅使用 SDK testing。独立 wheelhouse 必须同时包含匹配的 SDK 与桌宠插件 wheel，不依赖宿主或根 conftest。
 
 ```sh
 uv venv .venv --python 3.12

@@ -5,7 +5,18 @@ export type PluginNativeContext = { plugin_id: string; owner: string; generation
 export type NativeAudioDevice = { deviceId: string; label: string };
 
 /** One complete audio buffer; capture always returns 16 kHz mono WAV. */
-export type NativeAudio = { audio_base64: string; format: "wav" | "mp3" };
+export type NativeAudio = { audio_base64: string; format: "wav" | "mp3"; /** Optional caller correlation, echoed in playback observations. */ request_id?: string };
+
+/** Owner-scoped observations from the host's actual output stream, via hostEvents. */
+export const nativeAudioPlaybackEvent = "native.audio.playback";
+/** RMS is measured from the playing Web Audio stream, clamped to [0, 1]; terminals are zero. */
+export type NativeAudioPlaybackPayload = PluginNativeContext & {
+  request_id?: string;
+  playback_id: string;
+  phase: "started" | "level" | "ended";
+  amplitude: number;
+  reason?: "finished" | "stopped" | "failed";
+};
 
 /** Scoped native resources, revoked when the owning background activation ends. */
 export type PluginNativeApi = {

@@ -21,6 +21,7 @@ export function createNativeRuntime(window: BrowserWindow, bridge: DesktopBridge
     },
     recorder, player, keys: new PluginGlobalKeys(),
     keyEvent: (sender, token, id, phase) => webContents.fromId(sender)?.send("desktop:native-key", { token, id, phase }),
+    playbackEvent: (sender, token, payload) => webContents.fromId(sender)?.send("desktop:native-playback", { token, payload }),
   });
   ipcMain.handle("desktop:native-open", (event, context) => sessions.open(event.sender.id, context));
   ipcMain.handle("desktop:native-call", (event, request) => sessions.call(event.sender.id, request.token, request.method, request.payload));

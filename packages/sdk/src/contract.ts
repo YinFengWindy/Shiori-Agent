@@ -25,5 +25,7 @@ export type { PluginBackgroundSettled } from "./contract/background";
 export type { SurfaceInteractionTarget, SurfaceRoleActivity } from "./contract/surfaceInteraction";
 
 export type { PluginNativeApi, PluginNativeContext, NativeAudio, NativeAudioDevice, PluginBackgroundChat } from "./contract/native";
+export { nativeAudioPlaybackEvent } from "./contract/native";
+export type { NativeAudioPlaybackPayload } from "./contract/native";
 
 export type { PluginFrontendExport } from "./contract/frontendNames";

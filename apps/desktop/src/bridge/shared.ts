@@ -230,6 +230,7 @@ export type DesktopApi = {
     open(context: import("@yinfengwindy/shiori-sdk/contract").PluginNativeContext): Promise<string>;
     call<T = void>(token: string, method: string, payload?: Record<string, unknown>): Promise<T>;
     onKey(listener: (event: { token: string; id: string; phase: "down" | "up" }) => void): () => void;
+    onPlayback(listener: (event: { token: string; payload: import("@yinfengwindy/shiori-sdk/contract").NativeAudioPlaybackPayload }) => void): () => void;
   };
   onSurfaceMessage(listener: (event: { pluginId: string; surfaceId: string; message: unknown }) => void): () => void;
   /** Retains and acknowledges native notification clicks in the main window. */
@@ -337,6 +338,7 @@ export type DesktopApi = {
   onVoicePlaybackCommand(listener: (command: VoicePlaybackCommand) => void): () => void;
   /** Reports that one decoded audio item started playing. */
   voicePlaybackStarted(id: string): void;
+  voicePlaybackLevel(id: string, amplitude: number): void;
   /** Reports that one audio item finished naturally. */
   voicePlaybackFinished(id: string): void;
   /** Reports a playback decode or device error. */

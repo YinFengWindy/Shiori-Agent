@@ -2,6 +2,11 @@
 
 SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。现行自定义 A.B.C 规则中，A 是代际、B 可破坏、C 是同一 A.B 线内的兼容更新；详见 [版本规则](../decisions/2026-11-05-sdk-version-policy.md)。这里只记定版变更，不设 Unreleased 批次。4.0 及更早条目保留其发布时的历史约定。
 
+## 4.1.2
+
+- 新增 `nativeAudioPlaybackEvent`（`native.audio.playback`）和 `NativeAudioPlaybackPayload`。仅播放所属的 background 实例通过已有 `hostEvents.on` 接收实际开始、RMS 音量与结束；事件携带 owner、generation、playback_id 和可选 request_id，结束包含原因。
+- `NativeAudio.request_id` 为可选调用方关联号；已有 `audio.play(audio)` 签名保持兼容。宿主在唯一实际播放链路采样，不另播音频；排队和解码期间不发布已开始事件，取消、失败和结束均复位音量。
+
 ## 4.1.1
 
 - `SurfaceSpec.visible` 是可选的初始可见状态，默认 `true`。设置为 `false` 时，renderer `ready()` 仍会重放状态，但须由 background 显式 `show()` 才显示，支持模型准备完成后的窗口交接。

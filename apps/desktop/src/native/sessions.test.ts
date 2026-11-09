@@ -11,7 +11,7 @@ function fixture() {
     authorize: async (value) => { if (value.generation !== "one") throw new Error("stale"); return value; },
     recorder: { start: async () => { calls.push("start"); }, stop: async () => new Uint8Array([1]), cancel: async () => { calls.push("cancel"); }, listInputDevices: async () => [], dispose: () => { calls.push("capture-dispose"); } },
     player: { play: async () => { calls.push("play"); }, stop: () => { calls.push("stop"); }, dispose: () => { calls.push("player-dispose"); } },
-    keys: { register: () => { calls.push("key"); }, release: (token) => { calls.push(`release:${token}`); } }, keyEvent: () => {},
+    keys: { register: () => { calls.push("key"); }, release: (token) => { calls.push(`release:${token}`); } }, keyEvent: () => {}, playbackEvent: () => {},
   };
   return { options, calls, sessions: new PluginNativeSessions(options) };
 }
@@ -107,4 +107,22 @@ test("completed playback resources are reclaimed when the last native owner leav
   assert.equal(playerResources.size, 1, "another owner can still reuse the idle native player");
   await f.sessions.call(7, other, "close");
   assert.equal(playerResources.size, 0, "idle resources must not outlive every native owner");
+});
+
+test("native playback events stay with their exact owner and ignore retired observer closures", async () => {
+  const f = fixture(); const events: unknown[] = [];
+  f.options.playbackEvent = (sender, token, payload) => events.push({ sender, token, payload });
+  const done = deferred<void>();
+  let observe: NonNullable<Parameters<typeof f.options.player.play>[1]> = () => {};
+  f.options.player.play = async (_audio, callback) => { observe = callback!; await done.promise; };
+  const token = await f.sessions.open(7, context);
+  const task = f.sessions.call(7, token, "audio.play", { audio_base64: "AQ==", format: "wav", request_id: "first" });
+  await Promise.resolve(); await Promise.resolve();
+  observe({ playback_id: "1", phase: "started", amplitude: 0 });
+  assert.deepEqual(events, [{ sender: 7, token, payload: { ...context, request_id: "first", playback_id: "1", phase: "started", amplitude: 0 } }]);
+  f.sessions.revoke(context.plugin_id);
+  await f.sessions.open(7, { ...context, owner: "successor" });
+  observe({ playback_id: "1", phase: "level", amplitude: 1 });
+  assert.equal(events.length, 1);
+  done.resolve(); await task;
 });

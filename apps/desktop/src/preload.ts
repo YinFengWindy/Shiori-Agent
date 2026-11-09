@@ -102,6 +102,11 @@ window.addEventListener("click", (event) => {
 
 const api: DesktopApi = {
   native: {
+    onPlayback(listener) {
+      const wrapped = (_event: unknown, value: Parameters<typeof listener>[0]) => listener(value);
+      ipcRenderer.on("desktop:native-playback", wrapped);
+      return () => ipcRenderer.off("desktop:native-playback", wrapped);
+    },
     open: (context) => ipcRenderer.invoke("desktop:native-open", context),
     call: (token, method, payload = {}) => ipcRenderer.invoke("desktop:native-call", { token, method, payload }),
     onKey(listener) {
@@ -380,6 +385,9 @@ const api: DesktopApi = {
   },
   voicePlaybackStarted(id) {
     ipcRenderer.send("desktop:voice-playback-started", id);
+  },
+  voicePlaybackLevel(id, amplitude) {
+    ipcRenderer.send("desktop:voice-playback-level", { id, amplitude });
   },
   voicePlaybackFinished(id) {
     ipcRenderer.send("desktop:voice-playback-finished", id);

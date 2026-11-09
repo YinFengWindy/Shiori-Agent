@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deferred } from "@yinfengwindy/shiori-sdk/testing";
 import type { BackgroundCtx, NativeAudio } from "@yinfengwindy/shiori-sdk";
+import type { PetPresentationState } from "@yinfengwindy/shiori-pet";
 import { PetSpeechQueue } from "./speechQueue";
 
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };
@@ -17,6 +18,40 @@ function player() {
   return { audio, log, end: () => { log.push("end"); finish?.(); } };
 }
 const clip = (name: string): NativeAudio => ({ audio_base64: name, format: "wav" });
+
+test("mouth follows only the actually started clip across chat, live, cancellation and silence", async () => {
+  const p = player(); const sent: NativeAudio[] = [];
+  const originalPlay = p.audio.play;
+  p.audio.play = (value) => { sent.push(value); return originalPlay(value); };
+  const levels: PetPresentationState["audio"][] = [];
+  const queue = new PetSpeechQueue(p.audio, (value) => levels.push(value));
+  const waiting = deferred<void>();
+  const chat = queue.enqueue({ source: "chat" }, async (job) => { await waiting.promise; await job.play(clip("chat")); });
+  const live = queue.enqueue({ source: "live", runId: "live" }, (job) => job.play(clip("live")));
+  await flush(); assert.deepEqual(levels, [], "synthesis and queueing are not playback");
+  waiting.resolve(); await flush();
+  const first = sent[0]!.request_id;
+  queue.observe({ request_id: first, playback_id: "old", phase: "level", amplitude: .6 });
+  assert.deepEqual(levels, [null], "decoding cannot open the mouth");
+  queue.observe({ request_id: first, playback_id: "old", phase: "started", amplitude: 0 });
+  queue.observe({ request_id: first, playback_id: "old", phase: "level", amplitude: .6 });
+  assert.deepEqual(levels.at(-1), { playback_id: "old", amplitude: .6 });
+  await queue.cancel({ source: "chat" }); await flush();
+  assert.equal(levels.at(-1), null);
+  const second = sent[1]!.request_id;
+  queue.observe({ request_id: first, playback_id: "old", phase: "started", amplitude: 0 });
+  queue.observe({ request_id: first, playback_id: "old", phase: "level", amplitude: 1 });
+  assert.equal(levels.at(-1), null, "old speech cannot animate the next queued source");
+  queue.observe({ request_id: second, playback_id: "new", phase: "started", amplitude: 0 });
+  queue.observe({ request_id: second, playback_id: "new", phase: "level", amplitude: .8 });
+  await queue.cancel({ source: "chat" });
+  assert.deepEqual(levels.at(-1), { playback_id: "new", amplitude: .8 }, "chat cancellation leaves live speech intact");
+  queue.observe({ request_id: second, playback_id: "new", phase: "level", amplitude: 0 });
+  assert.deepEqual(levels.at(-1), { playback_id: "new", amplitude: 0 });
+  queue.observe({ request_id: second, playback_id: "new", phase: "ended", amplitude: 0 });
+  assert.equal(levels.at(-1), null);
+  p.end(); await Promise.all([chat, live]);
+});
 
 test("jobs from different sources play strictly one after another", async () => {
   const p = player(); const queue = new PetSpeechQueue(p.audio);

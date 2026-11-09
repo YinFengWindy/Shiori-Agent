@@ -5,7 +5,7 @@ import { desktopPetBindingPatch } from "./settings";
 import { PetPresentationTransport } from "./presentation";
 import type { DesktopPetSettings } from "./types";
 
-type Instance = { binding: PetBinding; leaseId: string; shown: boolean };
+type Instance = { binding: PetBinding; leaseId: string; shown: boolean; retired: boolean };
 /** Desktop-owned policy, with format-specific effects behind services. */
 export type DesktopPetControllerOptions = {
   services: PluginRpcClient["services"];
@@ -32,10 +32,12 @@ export class DesktopPetController {
   private epoch = 0;
   private disposed = false;
   private target = "";
+  private desiredVisible: boolean;
   private retryProvider: { epoch: number; pluginId: string } | null = null;
   private readonly listeners: Array<(roleId: string) => void> = [];
   constructor(private readonly options: DesktopPetControllerOptions) {
     this.settings = options.settings;
+    this.desiredVisible = options.settings.visible;
     this.transport = new PetPresentationTransport(options.services, (report) => this.providerReport(report), options.timeoutMs);
     this.replies = new ReplyBubbleController((reply) => { this.state = { ...this.state, reply }; this.publish(); });
   }
@@ -48,6 +50,10 @@ export class DesktopPetController {
   report(value: unknown) { this.transport.report(value); }
   /** Voice state is retained so surface reloads do not lose it. */
   publishVoice(voice: PetVoiceState) { this.state = { ...this.state, voice }; this.publish(); }
+  /** Retains only the selected role's actual output level across model handover. */
+  publishAudio(audio: PetPresentationState["audio"]) {
+    this.state = { ...this.state, audio: this.target ? audio : null }; this.publish();
+  }
   show() { return this.sync(true); }
   restore() { return this.sync(); }
   /** Late startup restores only the currently selected provider and visibility intent. */
@@ -55,11 +61,35 @@ export class DesktopPetController {
     if (this.disposed || this.active || this.retryProvider?.epoch !== this.epoch || this.retryProvider.pluginId !== pluginId) return Promise.resolve();
     return this.sync();
   }
+  /** Retires only provider instances named by the host's replacement publication.
+   * Their RPC owners are already gone, so teardown must not call the successor.
+   */
+  providersReloaded(payload: unknown) {
+    if (this.disposed || !isRecord(payload) || !Array.isArray(payload.plugin_ids)) return;
+    const ids = new Set(payload.plugin_ids.filter((id): id is string => typeof id === "string"));
+    const active = this.active, preparing = this.preparing;
+    const activeRetired = active !== null && ids.has(active.binding.provider.plugin_id);
+    const preparingRetired = preparing !== null && ids.has(preparing.binding.provider.plugin_id);
+    const waitingProvider = this.retryProvider?.pluginId ?? this.settings.model?.provider.plugin_id;
+    const waitingRetired = !active && !preparing && this.desiredVisible && waitingProvider !== undefined && ids.has(waitingProvider);
+    if (!activeRetired && !preparingRetired && !waitingRetired) return;
+    if (activeRetired) { active.retired = true; active.shown = false; this.transport.cancel(active.leaseId); }
+    if (preparingRetired) { preparing.retired = true; preparing.shown = false; this.transport.cancel(preparing.leaseId); }
+    // Do not invalidate an already queued hide: it still has to persist false.
+    // A visible intent must invalidate accepted handovers and stale async commits.
+    const epoch = this.desiredVisible ? this.newIntent(activeRetired) : this.epoch;
+    if (activeRetired) { this.active = null; this.bind(""); }
+    if (preparingRetired) this.preparing = null;
+    if (this.desiredVisible && waitingProvider && ids.has(waitingProvider)) this.retryProvider = { epoch, pluginId: waitingProvider };
+    this.options.onChanged?.();
+  }
   hide() {
+    this.desiredVisible = false;
     const epoch = this.newIntent(true);
     return this.enqueue(async () => { await this.closeActive(); if (this.current(epoch)) await this.save({ visible: false }); });
   }
   sync(forceVisible?: boolean) {
+    if (forceVisible !== undefined) this.desiredVisible = forceVisible;
     const epoch = this.newIntent(forceVisible === false);
     return this.enqueue(async () => {
       if (!this.current(epoch)) return;
@@ -68,9 +98,10 @@ export class DesktopPetController {
       try { binding = await this.options.resolveBinding(); }
       catch (error) { if (this.current(epoch)) await this.closeActive(); throw error; }
       if (!this.current(epoch)) return;
-      if (!binding) { await this.closeActive(); await this.save({ visible: false, roleId: null, model: null }); return; }
+      if (!binding) { this.desiredVisible = false; await this.closeActive(); await this.save({ visible: false, roleId: null, model: null }); return; }
       const changed = this.settings.roleId !== binding.role_id || !this.settings.model || petModelKey(this.settings.model) !== bindingKey(binding);
       const visible = forceVisible ?? (changed || this.settings.visible);
+      this.desiredVisible = visible;
       if (visible) {
         this.retryProvider = { epoch, pluginId: binding.provider.plugin_id };
         await this.load(binding, epoch);
@@ -116,6 +147,7 @@ export class DesktopPetController {
   /** Ends presentation and waiting callbacks when the background stops. */
   async terminate() {
     if (this.disposed) return;
+    this.desiredVisible = false;
     this.newIntent(true); this.disposed = true; this.replies.dispose();
     await this.enqueue(() => this.closeActive());
     this.transport.dispose();
@@ -132,7 +164,7 @@ export class DesktopPetController {
     }
     if (previous && previous.binding.role_id !== binding.role_id) await this.closeActive();
     const old = this.active;
-    const next: Instance = { binding, leaseId: crypto.randomUUID(), shown: false };
+    const next: Instance = { binding, leaseId: crypto.randomUUID(), shown: false, retired: false };
     this.preparing = next;
     try {
       const ready = await this.transport.request(binding, next.leaseId, "prepare", { state: this.state });
@@ -167,12 +199,13 @@ export class DesktopPetController {
     }
   }
   private async showInstance(instance: Instance, position?: { x: number; y: number }) {
+    if (instance.retired) throw new Error("桌宠呈现实例已撤销");
     await this.transport.request(instance.binding, instance.leaseId, "show", { state: this.state, ...(position ? { position } : {}) });
     instance.shown = true;
   }
   private publish() {
     const active = this.active;
-    if (active) void this.transport.update(active.binding, active.leaseId, "update", { state: this.state }).catch((error: unknown) => this.failure(active, error));
+    if (active && !active.retired) void this.transport.update(active.binding, active.leaseId, "update", { state: this.state }).catch((error: unknown) => this.failure(active, error));
   }
   private providerReport(report: PetProviderReport) {
     const active = this.active;
@@ -207,6 +240,7 @@ export class DesktopPetController {
   private current(epoch: number) { return !this.disposed && this.epoch === epoch; }
   private bind(roleId: string) {
     if (this.target === roleId) return;
+    this.state = { ...this.state, audio: null };
     this.target = roleId; this.replies.bind(roleId);
     for (const listener of this.listeners) listener(roleId);
   }
@@ -214,6 +248,7 @@ export class DesktopPetController {
   private async close(instance: Instance) {
     instance.shown = false;
     this.transport.cancel(instance.leaseId);
+    if (instance.retired) return;
     try { await this.transport.request(instance.binding, instance.leaseId, "close"); }
     catch (error) { this.options.onError("presentation.close", error); }
   }
