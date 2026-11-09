@@ -1,0 +1,17 @@
+api: 4
+sdk: ">=4.1.0 <4.2.0"
+id: fish_audio
+display_name: Fish Audio
+version: 0.1.0
+desc: Fish Audio 云端语音合成与语音识别
+distribution: external
+default_enabled: false
+entry: backend/plugin.py
+inject:
+  - workspace
+  - services
+  - rpc
+  - roles
+  - events
+frontend:
+  entry: frontend.ts
