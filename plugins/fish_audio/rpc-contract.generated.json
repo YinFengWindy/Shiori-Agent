@@ -1,0 +1,54 @@
+{
+  "plugin_id": "fish_audio",
+  "dependencies": [],
+  "methods": [
+    "role.get",
+    "role.set",
+    "settings.get",
+    "settings.set",
+    "transcribe_file"
+  ],
+  "registrations": [
+    {
+      "name": "role.get",
+      "path": "plugins/fish_audio/backend/rpc.py",
+      "line": 61
+    },
+    {
+      "name": "role.set",
+      "path": "plugins/fish_audio/backend/rpc.py",
+      "line": 62
+    },
+    {
+      "name": "settings.get",
+      "path": "plugins/fish_audio/backend/rpc.py",
+      "line": 57
+    },
+    {
+      "name": "settings.set",
+      "path": "plugins/fish_audio/backend/rpc.py",
+      "line": 60
+    },
+    {
+      "name": "transcribe_file",
+      "path": "plugins/fish_audio/backend/rpc.py",
+      "line": 63
+    }
+  ],
+  "services": [
+    {
+      "service_id": "tts",
+      "contract": "shiori.tts.v1",
+      "methods": [
+        "synthesize"
+      ]
+    },
+    {
+      "service_id": "asr",
+      "contract": "shiori.asr.v1",
+      "methods": [
+        "transcribe"
+      ]
+    }
+  ]
+}
