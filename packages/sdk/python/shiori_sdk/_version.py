@@ -6,4 +6,4 @@ The npm package, host and host-testing pins use this same version. See
 ``docs/decisions/2026-11-05-sdk-version-policy.md``.
 """
 
-__version__ = "4.1.2"
+__version__ = "4.1.3"

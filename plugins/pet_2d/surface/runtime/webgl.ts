@@ -1,5 +1,5 @@
 import type { Mesh } from "./mesh";
-import { baseName, meshOpacity } from "./scene";
+import { baseName, meshOpacity, type EyeOpenness } from "./scene";
 
 type GpuMesh = { vertex: WebGLBuffer; uv: WebGLBuffer; indices: WebGLBuffer; texture: WebGLTexture; count: number };
 const vertexShader = `attribute vec2 position; attribute vec2 texcoord; uniform vec2 canvasSize; varying vec2 uv;
@@ -56,18 +56,18 @@ export class AvatarWebGL {
   /** Replaces only the small mouth texture when its measured amplitude changes. */
   mouth(index: number, canvas: HTMLCanvasElement) { const gl = this.gl; gl.bindTexture(gl.TEXTURE_2D, this.meshes[index].texture); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas); }
   /** Renders corrected layers in their prepared order and clips each iris to its eye white. */
-  draw(meshes: Mesh[], openness: number) {
+  draw(meshes: Mesh[], openness: EyeOpenness) {
     if (this.disposed) return;
     const gl = this.gl; gl.viewport(0, 0, this.canvas.width, this.canvas.height); gl.clearColor(0, 0, 0, 0); gl.stencilMask(0xff); gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
     for (let index = 0; index < meshes.length; index++) { gl.bindBuffer(gl.ARRAY_BUFFER, this.meshes[index].vertex); gl.bufferSubData(gl.ARRAY_BUFFER, 0, meshes[index].positions); }
     gl.enable(gl.STENCIL_TEST); gl.colorMask(false, false, false, false);
     for (let index = 0; index < meshes.length; index++) {
       const mesh = meshes[index]; if (baseName(mesh.layer.name) !== "eyewhite" || !mesh.layer.side) continue;
-      gl.stencilFunc(gl.ALWAYS, mesh.layer.side === "L" ? 1 : 2, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE); this.drawMesh(index, meshOpacity(mesh, openness));
+      gl.stencilFunc(gl.ALWAYS, mesh.layer.side === "L" ? 1 : 2, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE); this.drawMesh(index, meshOpacity(mesh, mesh.layer.side === "R" ? openness.right : openness.left));
     }
     gl.colorMask(true, true, true, true); gl.stencilMask(0); gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
     for (let index = 0; index < meshes.length; index++) {
-      const mesh = meshes[index], alpha = meshOpacity(mesh, openness); if (alpha < 0.004) continue;
+      const mesh = meshes[index], alpha = meshOpacity(mesh, mesh.layer.side === "R" ? openness.right : openness.left); if (alpha < 0.004) continue;
       if (baseName(mesh.layer.name) === "irides") { gl.enable(gl.STENCIL_TEST); gl.stencilFunc(gl.EQUAL, mesh.layer.side === "L" ? 1 : 2, 0xff); }
       else gl.disable(gl.STENCIL_TEST);
       this.drawMesh(index, alpha);

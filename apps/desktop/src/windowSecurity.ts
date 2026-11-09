@@ -64,7 +64,9 @@ export function resolveRendererEntryUrl(
 /** Builds the CSP applied to the privileged renderer main frame. */
 export function buildDesktopContentSecurityPolicy(devServerUrl: string | undefined): string {
   const trustedDevUrl = validateRendererDevServerUrl(devServerUrl);
-  const scriptSources = ["'self'", `${pluginUiScheme}:`];
+  // WebAssembly compilation is distinct from JS eval. Runtime code and bytes
+  // still come only from app-built or admitted plugin resources.
+  const scriptSources = ["'self'", `${pluginUiScheme}:`, "'wasm-unsafe-eval'"];
   const connectSources = ["'self'"];
   if (trustedDevUrl) {
     const url = new URL(trustedDevUrl);
@@ -79,12 +81,14 @@ export function buildDesktopContentSecurityPolicy(devServerUrl: string | undefin
     const mapHash = createHash("sha256").update(pluginUiImportMap).digest("base64");
     scriptSources.push(`'sha256-${mapHash}'`);
   }
+  connectSources.push(`${pluginUiScheme}:`, "blob:");
   return [
     "default-src 'self'",
     `script-src ${scriptSources.join(" ")}`,
     `style-src 'self' 'unsafe-inline' ${pluginUiScheme}:`,
     `img-src 'self' data: blob: ${localAssetScheme}: ${pluginUiScheme}:`,
     `connect-src ${connectSources.join(" ")}`,
+    `worker-src 'self' blob: ${pluginUiScheme}:`,
     `font-src 'self' data: ${pluginUiScheme}:`,
     "object-src 'none'",
     "base-uri 'none'",

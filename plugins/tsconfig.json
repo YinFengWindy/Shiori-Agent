@@ -11,5 +11,5 @@
     "noEmit": true,
     "types": ["react", "react-dom"]
   },
-  "include": ["*/ui/**/*.ts", "*/ui/**/*.tsx", "*/surface/**/*.ts", "*/surface/**/*.tsx", "*/background/**/*.ts", "*/background/**/*.tsx", "*/shared/**/*.ts", "*/shared/**/*.tsx", "../packages/desktop-pet/src/**/*.ts", "../packages/desktop-pet/src/**/*.tsx"]
+  "include": ["*/ui/**/*.ts", "*/ui/**/*.tsx", "*/surface/**/*.ts", "*/surface/**/*.tsx", "*/background/**/*.ts", "*/background/**/*.tsx", "*/capture/**/*.ts", "*/shared/**/*.ts", "*/shared/**/*.tsx", "../packages/desktop-pet/src/**/*.ts", "../packages/desktop-pet/src/**/*.tsx"]
 }

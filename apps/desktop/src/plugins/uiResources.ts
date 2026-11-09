@@ -9,7 +9,9 @@ const mimeTypes: Record<string, string> = {
   ".mjs": "text/javascript", ".js": "text/javascript", ".css": "text/css",
   ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp",
   ".svg": "image/svg+xml", ".gif": "image/gif", ".woff": "font/woff", ".woff2": "font/woff2",
+  ".wasm": "application/wasm", ".task": "application/octet-stream",
 };
+const builtAssetExtensions = new Set([".js", ".mjs", ".wasm", ".task"]);
 
 function within(root: string, path: string) {
   const child = relative(root, path);
@@ -21,7 +23,7 @@ export class PluginUiResources {
   private grants = new Map<string, Grant>();
   // Code identity lives for the app session, independently of current authorization.
   private readonly packages = new Map<string, { identity: string; grant: Grant }>();
-  constructor(private readonly workspacePlugins: string) {}
+  constructor(private readonly workspacePlugins: string, private readonly builtAssetsRoot?: string) {}
 
   /** Reconciles one resource grant per admitted frontend package. */
   async admit(rows: unknown): Promise<RuntimePluginFrontend[]> {
@@ -73,6 +75,9 @@ export class PluginUiResources {
     }
     try {
       const parsed = new URL(url);
+      if (parsed.protocol === `${pluginUiScheme}:` && parsed.host === "host") {
+        return await this.loadBuiltAsset(parsed, headers);
+      }
       const [, token, ...segments] = parsed.pathname.split("/").map(decodeURIComponent);
       const grant = [...this.grants.values()].find((item) => item.token === token);
       if (parsed.protocol !== `${pluginUiScheme}:` || parsed.host !== "plugin" || !grant || segments.some((segment) => !segment || segment === "." || segment === ".." || /[\\/]/.test(segment))) return new Response("Plugin resource is not authorized", { status: 403 });
@@ -87,5 +92,25 @@ export class PluginUiResources {
     } catch {
       return new Response("Plugin resource is unavailable", { status: 404 });
     }
+  }
+
+  /** Serves only app-built runtime assets; plugin/user paths never select the root. */
+  private async loadBuiltAsset(url: URL, headers: Record<string, string>): Promise<Response> {
+    const [, category, ...segments] = url.pathname.split("/").map(decodeURIComponent);
+    if (!this.builtAssetsRoot || category !== "assets" || !segments.length || url.search || url.hash
+      || segments.some((segment) => !segment || segment === "." || segment === ".." || /[\\/:]/.test(segment))) {
+      return new Response("App resource is not authorized", { status: 403 });
+    }
+    const root = resolve(this.builtAssetsRoot);
+    const requested = resolve(root, ...segments);
+    const current = await realpath(requested);
+    if (await realpath(root) !== root || current !== requested || !within(root, current)) {
+      return new Response("App resource escapes its build directory", { status: 403 });
+    }
+    const extension = extname(current);
+    if (!builtAssetExtensions.has(extension) || !(await stat(current)).isFile()) {
+      return new Response("Unsupported app resource", { status: 403 });
+    }
+    return new Response(await readFile(current), { headers: { ...headers, "Content-Type": mimeTypes[extension] } });
   }
 }
