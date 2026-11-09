@@ -20,6 +20,7 @@ def test_builtin_default_disabled_plugins_are_the_declared_set():
     assert default_disabled == {
         "browser_use",
         "computer_use",
+        "fish_audio",
         "grok_bot",
         "gpt_sovits_tts",
         "herdr",
