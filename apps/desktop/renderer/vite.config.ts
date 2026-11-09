@@ -4,6 +4,7 @@ import { defineConfig } from "vite";
 import { resolve as resolvePath } from "node:path";
 import react from "@vitejs/plugin-react";
 import { builtinPluginEntries } from "../scripts/builtin-plugin-entries.mjs";
+import { classicWorkerUrls } from "../scripts/classic-worker-urls.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
@@ -26,7 +27,7 @@ export default defineConfig({
   worker: {
     rollupOptions: { output: { entryFileNames: "assets/runtime/[name]-[hash].js" } },
   },
-  plugins: [react(), builtinPluginEntries(resolve(repositoryRoot, "plugins"))],
+  plugins: [classicWorkerUrls(), react(), builtinPluginEntries(resolve(repositoryRoot, "plugins"))],
   server: {
     fs: {
       // Plugin UI is compiled in from the top-level plugins/<id>/ui/ tree

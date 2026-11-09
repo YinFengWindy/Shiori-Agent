@@ -45,7 +45,7 @@ export function pluginRendererAssets(destination) {
 }
 
 /** Workers own their runtime and cannot borrow renderer-only SDK/React globals. */
-async function bundleWorker(entry) {
+export async function bundleWorker(entry) {
   const result = await build({
     entryPoints: [entry], outfile: "worker.js", bundle: true, write: false,
     format: "iife", platform: "browser", target: "es2022",
