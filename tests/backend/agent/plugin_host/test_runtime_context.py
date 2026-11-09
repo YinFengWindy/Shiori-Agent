@@ -36,7 +36,7 @@ async def _hint(event):
 """.strip()
 
 _MANIFEST = (
-    "api: 4\nsdk: '>=4.0.0'\nid: keyed\nversion: '0.1'\n"
+    "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: keyed\nversion: '0.1'\n"
     "inject:\n  - crash_reporting\nprovides:\n  - keyed.api\n"
 )
 
@@ -105,7 +105,7 @@ async def test_optional_inject_gets_the_kv_and_service_views(
         _OPTIONAL_PLUGIN, encoding="utf-8"
     )
     (plugin_dir / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: optional\noptional_inject:\n  - config\n  - kv\n  - services\n",
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: optional\noptional_inject:\n  - config\n  - kv\n  - services\n",
         encoding="utf-8",
     )
     kernel = make_kernel(

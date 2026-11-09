@@ -662,7 +662,7 @@ async def test_a_loop_started_inside_a_request_does_not_keep_its_lease(
     from core.common.runtime_scope import current_runtime_lease
     from plugins.proactive.backend.service import ProactiveBinding, ProactiveService
     from shiori_sdk.role_events import RoleCreated
-    from shiori_sdk.testing.processes import FakeProcesses
+    from shiori_sdk.testing.extensions import FakeDependencies
 
     leases: list[object] = []
 
@@ -691,7 +691,7 @@ async def test_a_loop_started_inside_a_request_does_not_keep_its_lease(
             host=cast(Any, SimpleNamespace(configured_max_tokens=lambda: 1)),
             conversation=cast(Any, _UnusedConversation()),
             roles=HostRoles(roles),
-            processes=FakeProcesses(),
+            dependencies=FakeDependencies(),
             workspace=tmp_path,
             presence=None,
             markdown=cast(Any, None),

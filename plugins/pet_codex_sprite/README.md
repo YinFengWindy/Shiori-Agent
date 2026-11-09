@@ -1,6 +1,6 @@
 # pet_codex_sprite
 
-Codex 精灵图形象提供者，依赖 `desktop_pet` 和 SDK 4.0.1。桌宠管理角色、气泡、语音和直播；本插件管理精灵包、图集渲染和自己的透明窗口。
+Codex 精灵图形象提供者，依赖 `desktop_pet` 和 SDK 4.1.1。桌宠管理角色、气泡、语音和直播；本插件管理精灵包、图集渲染和自己的透明窗口。
 
 ## 使用
 
@@ -14,4 +14,4 @@ Codex 精灵图形象提供者，依赖 `desktop_pet` 和 SDK 4.0.1。桌宠管�
 
 本插件不建立 TTS 或直播队列，不依赖其它形象插件。公共视图和交互使用 `@yinfengwindy/shiori-pet`，精灵动作行名仅在本插件解释。
 
-独立 Python 安装需同时提供 `shiori-plugin-desktop-pet>=0.1.3`；参见 `TESTING.md`。前端打包使用固定 workspace 依赖，将共享模块打入插件，React 和 Shiori SDK 保持宿主 peer。
+独立 Python 安装需同时提供 `shiori-plugin-desktop-pet>=0.1.4`；参见 `TESTING.md`。前端打包使用固定 workspace 依赖，将共享模块打入插件，React 和 Shiori SDK 保持宿主 peer。

@@ -1,7 +1,7 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: shell_safety
 display_name: Shell 交互命令拦截
-version: 0.1.2
+version: 0.1.3
 desc: 阻止 shell 工具执行容易卡住的交互式命令
 category: system

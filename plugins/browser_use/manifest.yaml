@@ -1,8 +1,8 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.1.0 <4.2.0"
 id: browser_use
 display_name: Browser Use
-version: 0.1.2
+version: 0.1.3
 desc: agent-browser 或 ego(lite) 中的网页操作与截图
 default_enabled: false
 config_model: config:BrowserUseConfig

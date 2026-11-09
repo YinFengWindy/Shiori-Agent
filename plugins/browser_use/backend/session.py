@@ -7,7 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 from typing import Any
 
-from shiori_sdk.mcp import McpSession, McpToolError
+from shiori_mcp_client import StdioMcpSession, McpSession, McpToolError
 from shiori_sdk.processes import Processes
 from shiori_sdk.tools import ToolResult
 
@@ -80,11 +80,12 @@ class BrowserSession:
             self._runtime.agent_browser, self.profile, self._env, self._processes
         )
         await self._daemon.start(self._config.timeout_seconds)
-        self._client = self._processes.mcp(
+        self._client = StdioMcpSession(
             "browser_use",
             [str(self._runtime.agent_browser), "mcp", "--tools", "core"],
             env=self._env,
             cwd=str(self.profile),
+            processes=self._processes,
             own_process_tree=True,
             inherit_env=False,
         )

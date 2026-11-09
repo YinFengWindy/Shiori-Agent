@@ -2,10 +2,9 @@
 
 SDK 使用同一个版本号发布 `@yinfengwindy/shiori-sdk`（npm）与 `shiori-sdk`（PyPI）。
 
-SDK 大版本是破坏性变更。manifest 写 `api: 4` 和 `sdk` 最低约束。4.x 内不给已有
-Key 加方法。没有 Unreleased 批次，也没有 `runtime_api`。正式发布 SDK 前，源版本、
-npm 包、宿主和 host-testing 的精确 pin 必须一致。桌面包内置的 SDK 也是已分发契约，
-不能因为注册表尚未发布，就继续用已随桌面发出的版本号承载不同源码。发布状态以对应标签工作流及两个注册表的实际结果为准。
+SDK 使用自定义 `A.B.C`：A 是整体代际，B 允许破坏性 API 变更，C 是同一 A.B 兼容线内的兼容修复、功能与迁移。这不是标准 SemVer 的兼容承诺；数值排序与范围语法不变，详见 [版本规则](../decisions/2026-11-05-sdk-version-policy.md)。manifest 仍为 `api: 4`，新包显式声明 `sdk: ">=4.1.0 <4.2.0"`。同一 A.B 线内不增加已有 Key/Protocol 的必需方法，破坏性改动提升 B。
+
+没有 Unreleased 批次或 `runtime_api`。正式发布前，源版本、npm、宿主与 host-testing 的精确 pin 必须一致。桌面内置 SDK 也是已分发契约，不能以注册表尚未发布为由复用已有版本号承载不同源码。发布状态以标签工作流及两个注册表的实际结果为准。
 
 版本唯一来源是 `packages/sdk/python/shiori_sdk/_version.py`。改版本时直接改 npm 包、
 `setup.py` 和 host-testing 的 pin，用 `node scripts/check_sdk_release.mjs --align` 核对。
@@ -29,6 +28,16 @@ npm 包、宿主和 host-testing 的精确 pin 必须一致。桌面包内置的
 - npm 与 PyPI 各有独立发布 job，只有它们拥有 `id-token: write`。它们按 build job
   输出的 artifact ID 下载同一批文件、复核校验和，再通过 OIDC 发布；发布时不重建。
 
+显式范围由作者维护：npm/Python 仍按标准范围语法解释 caret 或 `<5`；宿主不将已发布 `>=4.0.0` 自动收窄为 4.0.x。更新兼容范围需要作者检查调用者并重新发布包。
+
+## SDK 4.1 与内部 MCP 客户端
+
+4.1.0 源码迁移删除 `Processes.mcp`，并把 MCP 会话、类型、结果转换和专用 fake 移到内部 `shiori-mcp-client` 0.1.0。manifest 仍为 `api: 4`；`MCP_TOOLS` 不变。本次源码与依赖准备不授权发布 SDK 标签或注册表，实际发布仍走上面的独立流程，不能改写 SDK 4.0 的既有标签。
+
+客户端库源码位于 `packages/mcp-client/src/shiori_mcp_client`，有独立版本。私有 wheelhouse 必须包含本次构建的确切客户端 wheel；冻结构建收集其官方 MCP SDK 依赖和元数据。它不随 SDK 发布工作流自动发布到 PyPI，后续客户端实现更新也不要求同步提高 Shiori SDK 版本。三个客户端插件的 Python 依赖为 `>=4.1.0,<4.2.0`，其余已核对未变接口的消费者可声明 `>=4.0.0,<4.2.0`。插件版本语义不变，不因 SDK 变更兼容线统一升号。
+
+这不是通用插件依赖安装器：当前 ZIP 仍只交付源码和显式资源；更换冻结程序里的依赖需要重新构建桌面。
+
 ## 契约定版检查
 
 `node scripts/check_sdk_release.mjs` 要求完整 Git 历史与标签，以及 SDK/npm/宿主/host-testing
@@ -39,7 +48,7 @@ npm 包、宿主和 host-testing 的精确 pin 必须一致。桌面包内置的
 
 指纹覆盖 `packages/sdk` 的 Python、renderer、公开 testing helpers、构建脚本和元数据，
 排除实际测试、说明文档、缓存和生成目录。只改 README/测试而运行时源码未变可继续
-使用已发布 SDK 版本。检查不推断语义兼容性，也不查询注册表，不自动升号。
+使用已发布 SDK 版本。检查只保证排序与版本不可复用，没有 API 语义 diff，不自动判断 breaking 或选择升哪一位，也不查询注册表。
 `node scripts/check_sdk_release.mjs --align` 只核对版本 pin，不读 Git 历史，供 lint 使用。
 
 Windows 的 schedule、tag、manual 三个入口都会在构建前执行；SDK 工作流仅 tag push

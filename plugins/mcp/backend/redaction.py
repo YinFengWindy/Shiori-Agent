@@ -1,0 +1,140 @@
+"""MCP connection credential detection and JSON-preserving output redaction."""
+
+from __future__ import annotations
+
+import json
+import re
+from collections.abc import Callable, Iterable
+from typing import Any
+from urllib.parse import parse_qsl, urlsplit
+
+from shiori_sdk.redaction import redact_secrets
+from .models import LaunchCredentials
+
+_HIDDEN = "[已隐藏]"
+# Standard negotiation, cache directives and client identification are metadata,
+# not authentication. Unknown/custom headers remain private credential values.
+_METADATA_HEADERS = frozenset(
+    {
+        "accept-charset",
+        "accept-encoding",
+        "accept-language",
+        "content-language",
+        "cache-control",
+        "pragma",
+        "user-agent",
+    }
+)
+
+
+def _credential_name(name: str) -> bool:
+    # Use the SDK's public redactor as the authority for credential vocabulary.
+    # Normalize CLI/camelCase spellings and allow namespaced env keys such as
+    # SERVICE_API_KEY without treating ordinary DEBUG/FORMAT options as secrets.
+    normalized = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name).strip("-")
+    parts = re.split(r"[-_ ]+", normalized.lower())
+    for index in range(len(parts)):
+        probe = "_".join(parts[index:]) + "=credential_name_probe"
+        if redact_secrets(probe) != probe:
+            return True
+    return False
+
+
+def _credential_values(launch: LaunchCredentials) -> tuple[str, ...]:
+    values = {
+        value for name, value in launch.env.items() if _credential_name(name) and value
+    }
+    # All headers stay private in storage/DTOs, but ordinary HTTP metadata must
+    # not rewrite matching schema keys or result text (e.g. language "en").
+    # URL filters are not credentials: retain ordinary format/filter values.
+    values.update(
+        value
+        for name, value in launch.headers.items()
+        if name.lower() not in _METADATA_HEADERS
+    )
+    values.update(value for value in (launch.url, launch.bearer) if value)
+    values.update(
+        value
+        for name, value in parse_qsl(urlsplit(launch.url or "").query)
+        if _credential_name(name)
+        or name.lower() in {"key", "sig", "signature", "credential", "auth"}
+    )
+    if launch.oauth and launch.oauth.client_secret:
+        values.add(launch.oauth.client_secret)
+    arguments = launch.command[1:]
+    for index, argument in enumerate(arguments):
+        name, separator, value = argument.partition("=")
+        if separator and _credential_name(name):
+            values.add(value)
+        elif (
+            argument.startswith("-")
+            and _credential_name(argument)
+            and index + 1 < len(arguments)
+        ):
+            values.add(arguments[index + 1])
+    # Authorization headers may be echoed without their Bearer/Basic scheme.
+    for value in tuple(values):
+        if match := re.fullmatch(r"(?i)(?:bearer|basic)\s+(\S+)", value):
+            values.add(match[1])
+    values.discard("")
+    return tuple(sorted(values, key=len, reverse=True))
+
+
+class LaunchRedactor:
+    """Snapshot the credentials used by a call, even if settings change meanwhile."""
+
+    def __init__(
+        self,
+        launch: LaunchCredentials,
+        *,
+        additional_values: Callable[[], Iterable[str]] | None = None,
+    ):
+        self._values = _credential_values(launch)
+        self._additional_values = additional_values
+        self._capture_additional()
+
+    def _capture_additional(self) -> None:
+        # The supplier belongs to the binding used at admission, never to a
+        # server lookup. Include tokens minted during a call without losing its
+        # earlier credentials when that binding is revoked or replaced.
+        if self._additional_values:
+            self._values = tuple(
+                sorted(
+                    {
+                        *self._values,
+                        *(value for value in self._additional_values() if value),
+                    },
+                    key=len,
+                    reverse=True,
+                )
+            )
+
+    def _plain(self, text: str) -> str:
+        self._capture_additional()
+        for value in self._values:
+            # ToolResult.text can contain prose followed by a serialized object.
+            # Scrub escaped copies too; pure JSON takes the typed path below.
+            text = text.replace(json.dumps(value, ensure_ascii=False)[1:-1], _HIDDEN)
+            text = text.replace(value, _HIDDEN)
+        # Payload text can contain opaque handles named token. Only the
+        # values selected from this call's launch configuration are secrets.
+        return text
+
+    def text(self, text: str) -> str:
+        """Redact JSON by value so substitutions never break its wire syntax."""
+        try:
+            data = json.loads(text)
+        except (ValueError, TypeError):
+            return self._plain(text)
+        scrubbed = self.data(data)
+        return text if scrubbed == data else json.dumps(scrubbed, ensure_ascii=False)
+
+    def data(self, value: Any) -> Any:
+        """Preserve schemas, numbers and media; redact known secrets in text leaves."""
+        if isinstance(value, str):
+            return self._plain(value)
+        if isinstance(value, list):
+            return [self.data(item) for item in value]
+        if isinstance(value, dict):
+            return {self._plain(key): self.data(item) for key, item in value.items()}
+        return value

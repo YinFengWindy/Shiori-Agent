@@ -80,7 +80,7 @@ def test_package_accepts_host_supported_display_and_distribution_metadata(
                     "peers": {
                         "react": "20.0.0",
                         "react-dom": "19.2.0",
-                        "@yinfengwindy/shiori-sdk": ">=4.0.0 <5.0.0",
+                        "@yinfengwindy/shiori-sdk": ">=4.0.0 <4.2.0",
                     }
                 }
             },
@@ -227,6 +227,43 @@ def test_sdk_constraint_blocks_install_and_an_installed_copy(contract_package):
     assert record.admission.code == "incompatible_sdk"
 
 
+def test_explicit_compatibility_line_admits_patch_and_rejects_next_line(
+    contract_package, monkeypatch
+):
+    """Both actual package gates honor explicit bounds without narrowing old ranges."""
+    from agent.plugin_host import manifest as manifest_module, frontend_contract
+
+    raw = yaml.safe_load(
+        (contract_package / "manifest.yaml").read_text(encoding="utf-8")
+    )
+    peers = {**raw["frontend"]["peers"], "@yinfengwindy/shiori-sdk": ">=4.1.0 <4.2.0"}
+    _change(contract_package, sdk=">=4.1.0 <4.2.0", frontend={"peers": peers})
+    for version in ("4.1.0", "4.1.9"):
+        monkeypatch.setattr(manifest_module, "__version__", version)
+        monkeypatch.setattr(frontend_contract, "__version__", version)
+        assert validate_package(contract_package).manifest.id == "external_demo"
+    monkeypatch.setattr(manifest_module, "__version__", "4.2.0")
+    monkeypatch.setattr(frontend_contract, "__version__", "4.2.0")
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    assert (caught.value.diagnostic.code, caught.value.diagnostic.field) == (
+        "incompatible_sdk",
+        "sdk",
+    )
+    # Intentional legacy wide ranges retain their original meaning. Opening the
+    # Python gate still leaves the frontend's independent bound in force.
+    _change(contract_package, sdk=">=4.0.0")
+    with pytest.raises(PackageContractError) as caught:
+        validate_package(contract_package)
+    assert (caught.value.diagnostic.code, caught.value.diagnostic.field) == (
+        "incompatible_runtime",
+        "frontend.peers.@yinfengwindy/shiori-sdk",
+    )
+    peers["@yinfengwindy/shiori-sdk"] = ">=4.0.0"
+    _change(contract_package, frontend={"peers": peers})
+    assert validate_package(contract_package).manifest.id == "external_demo"
+
+
 def test_missing_sdk_constraint_is_an_invalid_manifest(contract_package):
     path = contract_package / "manifest.yaml"
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -238,6 +275,7 @@ def test_missing_sdk_constraint_is_an_invalid_manifest(contract_package):
 
 
 def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
+    import json
     import tomllib
     from packaging.requirements import Requirement
     from packaging.utils import canonicalize_name
@@ -245,6 +283,17 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
     from agent.plugin_host.manifest import load_manifest
 
     runtime = __version__
+    generation, line, _patch = map(int, runtime.split("."))
+    compatible_patch = f"{generation}.{line}.999"
+    next_line = f"{generation}.{line + 1}.0"
+
+    def bounded(expression):
+        return (
+            satisfies(runtime, expression)
+            and satisfies(compatible_patch, expression)
+            and not satisfies(next_line, expression)
+        )
+
     projects: dict[str, str] = {}
     dependencies: dict[str, list[Requirement]] = {}
     for root in plugin_roots():
@@ -253,7 +302,24 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
                 continue
             manifest = load_manifest(directory)
             assert manifest is not None
-            assert satisfies(runtime, manifest.sdk), directory.name
+            assert bounded(manifest.sdk), (directory.name, manifest.sdk)
+            frontend = manifest.metadata.get("frontend", {})
+            peer_sets = (
+                [frontend.get("peers", {})] if isinstance(frontend, dict) else []
+            )
+            npm = directory / "package.json"
+            if npm.is_file():
+                peer_sets.append(
+                    json.loads(npm.read_text(encoding="utf-8")).get(
+                        "peerDependencies", {}
+                    )
+                )
+            for peers in peer_sets:
+                if "@yinfengwindy/shiori-sdk" in peers:
+                    assert bounded(peers["@yinfengwindy/shiori-sdk"]), (
+                        directory.name,
+                        peers,
+                    )
             project = tomllib.loads(
                 (directory / "pyproject.toml").read_text(encoding="utf-8")
             )["project"]
@@ -270,7 +336,10 @@ def test_repository_plugin_declarations_admit_the_installed_sdk_and_siblings():
                 if value.startswith("shiori-sdk")
             ]
             assert sdk and all(
-                runtime in requirement.specifier for requirement in sdk
+                runtime in requirement.specifier
+                and compatible_patch in requirement.specifier
+                and next_line not in requirement.specifier
+                for requirement in sdk
             ), directory.name
             dependencies[name] = [Requirement(value) for value in requirements]
 
@@ -318,7 +387,7 @@ async def test_trusted_package_relations_take_effect_only_after_approval(
     first = tmp_path / "builtins" / "first"
     (first / "backend").mkdir(parents=True)
     (first / "manifest.yaml").write_text(
-        "api: 4\nsdk: '>=4.0.0'\nid: first\n", encoding="utf-8"
+        "api: 4\nsdk: '>=4.0.0 <4.2.0'\nid: first\n", encoding="utf-8"
     )
     (first / "backend/plugin.py").write_text(
         "async def setup(ctx): ctx.expose('first')\n", encoding="utf-8"

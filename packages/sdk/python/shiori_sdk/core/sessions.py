@@ -70,7 +70,7 @@ class Presence(Protocol):
     The stored columns stay ``last_user_at`` and ``last_proactive_at``.
     ``record_initiated_sent`` writes ``last_proactive_at``. A ``role:`` key is
     used as-is; any other key follows ``metadata.role_id`` when that session
-    has one. This is the 4.0 baseline. 4.x cannot add methods here later.
+    has one. This is the 4.0 baseline. Required methods cannot be added within one A.B compatibility line.
     """
 
     def record_user_message(self, session_key: str, when: datetime) -> None:

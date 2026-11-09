@@ -28,7 +28,7 @@ plugins/example/
 
 ```yaml
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.1.0 <4.2.0"
 id: example
 version: '0.1.0'
 desc: 示例插件
@@ -130,7 +130,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
 
 ```yaml
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.1.0 <4.2.0"
 inject: [channels, accounts, kv, rpc]
 contributes:
   channels:

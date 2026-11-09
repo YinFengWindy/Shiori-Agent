@@ -6,14 +6,17 @@
   "extraPaths": [
     "apps/backend",
     "packages/sdk/python",
-    "packages/shiori-host-testing/src"
+    "packages/shiori-host-testing/src",
+    "packages/mcp-client/src"
   ],
   "include": [
     "packages/sdk/python",
     "packages/sdk/tests",
     "tests/backend",
     "plugins",
-    "tests/support"
+    "tests/support",
+    "packages/mcp-client/src",
+    "packages/mcp-client/tests"
   ],
   "exclude": [
     ".venv",

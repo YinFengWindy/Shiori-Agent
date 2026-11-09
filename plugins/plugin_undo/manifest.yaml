@@ -1,8 +1,8 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: plugin_undo
 display_name: 撤销回合
-version: 0.1.2
+version: 0.1.3
 desc: 撤销最近被动回合并清理关联记忆来源
 inject:
   - sessions

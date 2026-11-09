@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/YinFengWindy/Shiori-Agent/blob/main/packages/sdk/manifest.schema.json",
   "title": "Shiori plugin manifest (api: 4)",
-  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py 和 package_contract.py 为准。只接受 api: 4：其他值安装时被拒绝，已安装的在启动时 BLOCKED（unsupported_api）。sdk 是最低 SDK 约束，不满足时 BLOCKED（incompatible_sdk）。frontend 是唯一前端入口；编译产物携带 exports、css、peers。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、contributes.channels 要求 inject 含 channels、sdk 比较符语法）仍由解析代码判定。",
+  "description": "plugins/<id>/manifest.yaml 的现行格式。字段与取值以 apps/backend/agent/plugin_host/manifest.py 和 package_contract.py 为准。只接受 api: 4：其他值安装时被拒绝，已安装的在启动时 BLOCKED（unsupported_api）。sdk 是显式 SDK 兼容范围，不满足时 BLOCKED（incompatible_sdk）。frontend 是唯一前端入口；编译产物携带 exports、css、peers。schema 只描述字段形状；跨字段规则（渠道名与会话类型不重复、前缀互不包含、dependencies 与 optional_dependencies、inject 与 optional_inject 不重叠、入口文件存在且可解析、contributes.channels 要求 inject 含 channels、sdk 比较符语法）仍由解析代码判定。",
   "type": "object",
   "additionalProperties": false,
   "required": ["api", "sdk"],
@@ -13,7 +13,7 @@
       "const": 4
     },
     "sdk": {
-      "description": "最低 SDK 版本约束。空格分隔的 =、>、>=、<、<= 比较，逻辑与。基线为 >=4.0.0。",
+      "description": "显式 SDK 兼容范围。空格分隔的 =、>、>=、<、<= 比较，逻辑与。例如 >=4.1.0 <4.2.0；宿主按声明比较，不添加隐式上限。",
       "type": "string",
       "minLength": 1
     },

@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from shiori_sdk.mcp import McpSession
+from shiori_mcp_client import McpSession
 from shiori_sdk.processes import Processes
 from shiori_sdk.tools import ToolResult
 

@@ -12,7 +12,7 @@ Proactive 本质上是：
 
 1. **一套固定工具**（`plugins/proactive/backend/tools.py` 的 `TOOL_SCHEMAS`）：`get_alert_events`、`get_content_events`、`get_context_data`、`recall_memory`、`get_content`、`web_fetch`、`web_search`、`get_recent_chat`、`mark_interesting`、`mark_not_interesting`、`message_push`、`finish_turn`，外加共享的 `account_list` / `account_targets`
 2. **一段固定 system prompt**（角色身份 + 固定规则，在 `plugins/proactive/backend/turn/prompt_context.py` 的 `build_system_prompt()`）
-3. **一个 MCP 数据源池**：从你配置的 server 拉 alert / content / context
+3. **共享 MCP 服务器**：从你配置的 server 拉 alert / content / context
 
 每次 tick 做的事非常机械：**把 MCP server 返回的数据灌进 prompt → LLM 按 prompt 指令逐条判断 → 调用工具写分类结果 → 如果有内容值得推就 message_push 完事**。
 
@@ -73,7 +73,7 @@ proactive tick
 | 文件 | 维护方式 | 说明 |
 |------|---------|------|
 | `roles/roles.json` 里角色的 `proactive` | **你配**（桌面角色的「主动推送」） | 每个角色自己的开关、接收会话、推送策略（profile）、agent/drift 参数、overrides |
-| `plugin-data/mcp/mcp_servers.json` | **你写** | MCP server 启动命令和环境变量。也可以通过对话让 agent 调 `mcp_add` 工具写 |
+| `plugin-data/mcp/mcp_servers.json` | **MCP 插件写** | 服务器意图与工具选择；通过设置页或 `mcp_add` 管理，启动命令和环境变量保存在私有凭据文件 |
 | `proactive_sources.json` | **你写** | 声明哪个 MCP server 提供哪类数据（alert/content/context） |
 | `roles/<role-id>/PROACTIVE_CONTEXT.md` | **agent 维护** | 当前角色的推送规则面板。主 agent（被动回复时）通过对话帮你写和改。proactive agent 只读不写 |
 | `plugin-data/schedule/schedules.json` | **都行** | 建议让主 agent 调 `schedule` 工具增删改（系统插件 `schedule` 提供，默认启用），或在桌面里给角色建任务；手写时字段要求见下文 |
@@ -83,7 +83,7 @@ proactive tick
 
 ### 1. 开启 proactive（角色的「主动推送」）
 
-主动推送按角色配置。系统插件 `proactive` 在进程里只有一份服务（`plugins/proactive/backend/service.py`），本代发布时（`PROCESS_RESOURCES.on_published`）给每个角色建一个 loop，之后随角色创建、删除增减；循环至少每 60 秒重读一次该角色的设置：开关关闭后约 60 秒内停止 tick、断开 MCP 会话、停掉 feed 轮询并关闭 `proactive.db`；改了配置在下一次检查时生效，并重新计算下一次 tick 的时间。配置存在 `roles/roles.json` 里该角色的 `proactive` 对象，平时在桌面角色的「主动推送」里改：开关、接收会话、推送策略（profile），以及执行参数（每次推送最大步数、候选内容数、网页上下文字符数、空闲活动最大步数与最小间隔）。结构如下（用 TOML 写法示意）：
+主动推送按角色配置。系统插件 `proactive` 在进程里只有一份服务（`plugins/proactive/backend/service.py`），本代发布时（`PROCESS_RESOURCES.on_published`）给每个角色建一个 loop，之后随角色创建、删除增减；循环至少每 60 秒重读一次该角色的设置：开关关闭后约 60 秒内停止 tick、停掉 feed 轮询并关闭 `proactive.db`；改了配置在下一次检查时生效，并重新计算下一次 tick 的时间。配置存在 `roles/roles.json` 里该角色的 `proactive` 对象，平时在桌面角色的「主动推送」里改：开关、接收会话、推送策略（profile），以及执行参数（每次推送最大步数、候选内容数、网页上下文字符数、空闲活动最大步数与最小间隔）。结构如下（用 TOML 写法示意）：
 
 ```toml
 enabled = true
@@ -103,28 +103,17 @@ min_interval_hours = 3      # 默认 3，0 表示不限
 
 投递目标同样不在这里写死：每个角色在「主动推送」里勾选接收会话，每条主动消息只发到其中一个（桌面在场时发桌面，否则发最近对话过的外部会话）。
 
-### 2. 注册 MCP server（`~/.shiori/workspace/plugin-data/mcp/mcp_servers.json`）
+### 2. 注册 MCP server
 
-从旧版本升级时，宿主冷启动先迁入工作区根目录的 `mcp_servers.json`；已有新文件优先，旧文件核对后归档。主动推送和 MCP 插件都读取新位置。诊断日志也归入 `plugin-data/proactive/logs/`，角色状态与 `proactive_sources.json` 不搬动，详见[存储决策](../decisions/2026-11-04-plugin-storage-paths.md)。
+在「设置 → 插件」启用 MCP，打开「MCP 设置」并添加 stdio 服务器。启动命令填写 JSON 字符串数组，例如 `["python", "/path/to/server.py"]`；需要时填写工作目录和 JSON 格式环境变量。保存后自动连接，连接失败仍保留配置，可以编辑、测试连接、重连或删除。测试只初始化并发现工具，不调用业务工具。`mcp_add` / `mcp_remove` / `mcp_list` 仍可在对话中使用。
 
-```json
-{
-  "servers": {
-    "fitbit": {
-      "command": ["/path/to/fitbit-mcp/.venv/bin/python", "/path/to/fitbit-mcp/run_mcp.py"],
-      "env": {},
-      "cwd": "/path/to/fitbit-mcp"
-    },
-    "feed": {
-      "command": ["/path/to/feed-mcp/.venv/bin/python", "/path/to/feed-mcp/run_mcp.py"],
-      "env": {},
-      "cwd": "/path/to/feed-mcp"
-    }
-  }
-}
-```
+服务器 ID 固定，显示名可改。所有角色共享服务器与工具选择；选择模式下的空列表表示不允许任何工具。停用或取消选择立即拒绝后续调用，包括已拿到旧工具引用的调用。主动源的 get/poll/ack 和聊天使用相同连接与筛选；关闭某个角色的主动推送不会断开其他角色正在使用的服务器。
 
-MCP server 通过 stdio 与 agent 通信，启动时 `McpClientPool.connect_all()` 建立常驻连接。也可以用内置工具 `mcp_add` 让 agent 帮你加。
+`plugin-data/mcp/mcp_servers.json` 保存 schema v2 配置与私有凭据引用，`plugin-data/mcp/credentials/` 保存 argv/env。本机文件是明文，不是系统密钥库加密；POSIX 使用私有目录/文件权限，Windows 继承用户目录权限。读取界面和模型工具不返回已保存的值，编辑明确选择保留、替换或清空。
+
+旧 `{servers: {name: {command, env, cwd}}}` 自动迁为 stdio、启用、全部工具，保留服务器 ID；迁移不依赖连接成功。损坏文件不按空配置覆盖。旧根目录文件仍由启动迁移搬到插件目录。主动插件只读 `proactive_sources.json`，不读取 MCP 私有配置。
+
+独立安装 Python 插件时，主动插件的 MCP 集成使用 `shiori-plugin-proactive[mcp]`；manifest 的 `optional_dependencies: [mcp]` 控制运行时启用与重载关系。没有 MCP 插件时，主动循环的其他功能仍可运行。
 
 ### 3. 声明信息源（`~/.shiori/workspace/proactive_sources.json`）
 
@@ -268,7 +257,7 @@ tick_interval_s1 = 180         # 很饿时至少 3 分钟
 
 ```
 ProactiveLoop.run()
-  ├── McpClientPool.connect_all()         # 启动时连接所有 MCP server（常驻连接）
+  ├── MCP 插件已在发布/启用时连接服务器    # 各角色只获取当前导出，不创建独立会话
   ├── feed poll loop（后台）               # 周期性调用 poll_feeds 拉新内容
   └── tick loop（自适应频率）
        ├── _next_interval(score)           # 电量模型 → 下次 tick 间隔

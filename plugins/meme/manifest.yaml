@@ -1,8 +1,8 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: meme
 display_name: 表情包
-version: 0.1.2
+version: 0.1.3
 desc: 角色表情与 emoji 协议，注入可用表情并关联回复媒体
 inject:
   - resources

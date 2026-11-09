@@ -8,7 +8,7 @@ and then discarded changes nothing.
 
 A loop reads its role's ``proactive`` settings before its first tick and
 then at least every ``SETTINGS_CHECK_SECONDS``: a role whose switch is off
-does not tick and holds no state store or MCP sessions, a changed config
+does not tick and holds no state store, a changed config
 reschedules the next tick, and settings that do not load fail only that role.
 """
 
@@ -28,7 +28,7 @@ from shiori_sdk.core.markdown_memory import MarkdownMemory
 from shiori_sdk.core.proactive_host import ProactiveHost
 from shiori_sdk.core.sessions import Presence
 from shiori_sdk.memory.engine import MemoryEngine, MemoryQuery, MemoryQueryResult
-from shiori_sdk.processes import Processes
+from shiori_sdk.extensions import Dependencies
 from shiori_sdk.roles import Roles
 
 from .config import ProactiveConfig
@@ -56,7 +56,7 @@ class ProactiveBinding:
     host: ProactiveHost
     conversation: Conversation
     roles: Roles
-    processes: Processes
+    dependencies: Dependencies | None
     workspace: Path
     presence: Presence | None
     markdown: MarkdownMemory
@@ -293,7 +293,7 @@ class ProactiveService:
             return
         running.loop.rebind(
             sessions=_Sessions(binding.workspace),
-            processes=binding.processes,
+            dependencies=binding.dependencies,
             conversation=binding.conversation,
             roles=binding.roles,
             max_tokens=max_tokens,
@@ -319,7 +319,7 @@ class ProactiveService:
             roles=binding.roles,
             role_prompt_fn=_role_prompt(binding.host, role_id),
             state_path=binding.workspace / "roles" / role_id / "proactive.db",
-            processes=binding.processes,
+            dependencies=binding.dependencies,
             config_fn=_read_config(role_id),
             max_tokens=max_tokens,
             memory_store=_RoleMemory(binding.markdown, binding.memory_engine),

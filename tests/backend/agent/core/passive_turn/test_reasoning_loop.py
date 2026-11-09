@@ -1131,8 +1131,14 @@ async def test_mcp_image_and_sibling_tool_replies_reach_current_model_in_valid_o
     from copy import deepcopy
     import sys
 
-    from infra.process.mcp_client import McpClient
-    from plugins.mcp.backend.tool import McpToolWrapper
+    from agent.plugin_host.call_gate import PluginCallGate
+    from agent.plugin_host.core_keys import PluginBinding
+    from agent.plugin_host.manifest import load_manifest
+    from agent.tools.mcp_registration import HostMcpToolRegistration
+    from infra.process.plugin_capability import HostProcesses
+    from plugins.mcp.backend.registry import McpServerRegistry
+    from shiori_sdk.kernel import Scope
+    from shiori_sdk.testing.packages import plugin_directory
 
     image_data = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE3sAAAAASUVORK5CYII="
     script = tmp_path / "mcp_image.py"
@@ -1142,7 +1148,10 @@ for line in sys.stdin:
     message = json.loads(line)
     if 'id' not in message: continue
     method = message['method']
-    if method == 'initialize': result = {}
+    if method not in {'initialize', 'tools/list', 'tools/call'}:
+        print(json.dumps({'jsonrpc': '2.0', 'id': message['id'], 'error': {'code': -32601, 'message': 'Method not found'}}), flush=True)
+        continue
+    if method == 'initialize': result = {'protocolVersion': '2025-11-25', 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'reasoning-image-fixture', 'version': '1'}}
     elif method == 'tools/list': result = {'tools': [{'name': 'image', 'description': 'Screenshot', 'inputSchema': {'type': 'object', 'properties': {}}}]}
     else: result = {'content': [{'type': 'text', 'text': 'screenshot'}, {'type': 'image', 'mimeType': 'image/png', 'data': """
         + repr(image_data)
@@ -1151,12 +1160,22 @@ for line in sys.stdin:
 """,
         encoding="utf-8",
     )
-    client = McpClient("test_image", [sys.executable, "-u", str(script)])
+    tools = ToolRegistry()
+    scope = Scope("mcp")
+    manifest = load_manifest(plugin_directory("mcp"))
+    assert manifest is not None
+    registration = HostMcpToolRegistration(tools).for_plugin(
+        PluginBinding("mcp", "reasoning-image", manifest, scope, PluginCallGate("mcp"))
+    )
+    registry = McpServerRegistry(
+        tmp_path / "mcp_servers.json",
+        processes=HostProcesses(),
+        registration=registration,
+    )
     try:
-        infos = await client.connect()
-        tools = ToolRegistry()
-        image_tool = McpToolWrapper("test_image", client, infos[0])
-        tools.register(image_tool)
+        await registry.add("test_image", [sys.executable, "-u", str(script)])
+        image_tool = tools.get_tool("mcp_test_image__image")
+        assert image_tool is not None
         tools.register(CounterTool())
         responses = [
             LLMResponse(
@@ -1195,7 +1214,8 @@ for line in sys.stdin:
         assert '"element_token": "s00000001:1"' in messages[batch + 1]["content"]
         assert requests[0].get("model") == requests[1].get("model")
     finally:
-        await client.disconnect()
+        await registry.shutdown()
+        assert await scope.close() == []
 
 
 # ── #489 外部上下文工具白名单 ─────────────────────────────────────────────────

@@ -6,7 +6,8 @@
   "extraPaths": [
     "apps/backend",
     "packages/sdk/python",
-    "packages/shiori-host-testing/src"
+    "packages/shiori-host-testing/src",
+    "packages/mcp-client/src"
   ],
   "include": [
     "packages/sdk/python",
@@ -44,7 +45,9 @@
     "scripts/wheelhouse.py",
     "scripts/isolation_probe.py",
     "scripts/verify_host_distribution.py",
-    "scripts/verify_sdk.py"
+    "scripts/verify_sdk.py",
+    "packages/mcp-client/src",
+    "scripts/verify_mcp_client.py"
   ],
   "exclude": [
     ".venv",

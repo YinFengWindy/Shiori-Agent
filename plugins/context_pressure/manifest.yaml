@@ -1,7 +1,7 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: context_pressure
 display_name: 上下文压力收尾
-version: 0.1.2
+version: 0.1.3
 desc: 上下文压力过高时请求被动循环阶段性收尾
 category: system

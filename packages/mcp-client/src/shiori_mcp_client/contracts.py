@@ -1,8 +1,8 @@
-"""MCP session contracts; the host owns stdio and process cleanup."""
+"""MCP session contracts; the client library owns protocol and session cleanup."""
 
 from typing import Protocol
 from dataclasses import dataclass
-from .tools import ToolResult
+from shiori_sdk.tools import ToolResult
 
 
 class McpToolError(RuntimeError):
@@ -35,7 +35,7 @@ class McpToolInfo:
 
 
 class McpSession(Protocol):
-    """One owned stdio session with explicit startup, calls and awaited teardown."""
+    """One owned MCP session with explicit startup, calls and awaited teardown."""
 
     async def connect(self) -> list[McpToolInfo]: ...
     async def call(
@@ -46,3 +46,15 @@ class McpSession(Protocol):
         timeout: float | None = None,
     ) -> str | ToolResult: ...
     async def disconnect(self) -> None: ...
+
+
+class McpProtocolError(ValueError):
+    """Safe protocol failure without raw server responses or authentication data."""
+
+
+class McpHttpError(McpProtocolError):
+    """Safe HTTP status failure requiring explicit attention rather than retry."""
+
+
+class McpAuthenticationRequired(McpHttpError):
+    """An auth provider requires an explicit user login before reconnecting."""

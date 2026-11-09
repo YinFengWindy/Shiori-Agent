@@ -11,9 +11,15 @@ export function createRuntimePyinstallerArgs({
     "--distpath", runtimeRoot, "--workpath", workRoot, "--specpath", workRoot,
     "--paths", backendRoot, "--paths", stagingRoot,
     "--paths", join(repositoryRoot, "packages/sdk/python"),
+    "--paths", join(repositoryRoot, "packages/mcp-client/src"),
     // Package admission reads the distribution's direct runtime requirements.
     "--recursive-copy-metadata", "shiori-agent",
+    // The internal client closure is shared by the three builtin adapters.
+    ...(pluginModules.some((name) => ["mcp", "browser_use", "computer_use"].some((id) => name.startsWith(`plugins.${id}.`)))
+      ? ["--recursive-copy-metadata", "shiori-mcp-client"] : []),
     "--exclude-module", "shiori_sdk.testing",
+    "--exclude-module", "shiori_mcp_client.testing",
+    "--exclude-module", "shiori_mcp_client.testing_http",
     "--add-data", `${stagedPluginsDir}${delimiter}plugins`,
     "--add-data", `${browserRuntime}${delimiter}native/browser-use`,
     "--add-data", `${computerRuntime}${delimiter}native/computer-use`,

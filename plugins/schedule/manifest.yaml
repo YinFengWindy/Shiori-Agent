@@ -1,8 +1,8 @@
 api: 4
-sdk: ">=4.0.0"
+sdk: ">=4.0.0 <4.2.0"
 id: schedule
 display_name: 定时任务
-version: '0.1.0'
+version: '0.1.1'
 desc: 角色的定时提醒与定时回合。
 category: system
 inject:

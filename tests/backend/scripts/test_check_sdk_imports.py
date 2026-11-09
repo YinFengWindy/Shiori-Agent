@@ -175,7 +175,8 @@ def test_metadata_cannot_hide_host_requirements_in_unselected_extras(
 ) -> None:
     sdk = tmp_path / "packages/sdk/pyproject.toml"
     plugin = tmp_path / "plugins/demo/pyproject.toml"
-    for path in (sdk, plugin):
+    client = tmp_path / "packages/mcp-client/pyproject.toml"
+    for path in (sdk, plugin, client):
         path.parent.mkdir(parents=True)
     sdk.write_text(
         '[project]\nname="shiori-sdk"\ndependencies=["shiori-plugin-demo"]\n',
@@ -185,7 +186,24 @@ def test_metadata_cannot_hide_host_requirements_in_unselected_extras(
         '[project]\nname="shiori-plugin-demo"\n[project.optional-dependencies]\nhidden=["shiori-host-testing; sys_platform == \'missing\'"]\n',
         encoding="utf-8",
     )
+    client.write_text(
+        '[project]\nname="shiori-mcp-client"\ndependencies=["shiori-plugin-demo"]\n',
+        encoding="utf-8",
+    )
     errors = dependency_violations(tmp_path)
-    assert len(errors) == 2
+    assert len(errors) == 3
     assert any("shiori-plugin-demo" in error for error in errors)
     assert any("shiori-host-testing" in error for error in errors)
+
+
+def test_client_and_sdk_cannot_reverse_import_their_consumers(tmp_path):
+    (tmp_path / "plugins").mkdir()
+    paths = {
+        "packages/mcp-client/src/shiori_mcp_client/session.py": "from plugins.mcp.backend import models\nfrom infra.process import owned_spawn\n",
+        "packages/sdk/python/shiori_sdk/extension.py": "from shiori_mcp_client import McpSession\n",
+    }
+    for name, source in paths.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True)
+        path.write_text(source, encoding="utf-8")
+    assert set(scan(tmp_path)) == set(paths)

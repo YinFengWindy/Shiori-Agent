@@ -1,7 +1,69 @@
 {
   "plugin_id": "mcp",
   "dependencies": [],
-  "methods": [],
-  "registrations": [],
+  "methods": [
+    "operations.cancel",
+    "servers.delete",
+    "servers.list",
+    "servers.login",
+    "servers.logout",
+    "servers.reconnect",
+    "servers.refresh",
+    "servers.save",
+    "servers.set_enabled",
+    "servers.test"
+  ],
+  "registrations": [
+    {
+      "name": "operations.cancel",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 33
+    },
+    {
+      "name": "servers.delete",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    },
+    {
+      "name": "servers.list",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 21
+    },
+    {
+      "name": "servers.login",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    },
+    {
+      "name": "servers.logout",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    },
+    {
+      "name": "servers.reconnect",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    },
+    {
+      "name": "servers.refresh",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    },
+    {
+      "name": "servers.save",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    },
+    {
+      "name": "servers.set_enabled",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    },
+    {
+      "name": "servers.test",
+      "path": "plugins/mcp/backend/rpc.py",
+      "line": 32
+    }
+  ],
   "services": []
 }

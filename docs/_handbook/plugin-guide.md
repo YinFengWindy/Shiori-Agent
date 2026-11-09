@@ -24,7 +24,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | 字段 | 必填 | 值 |
 | --- | --- | --- |
 | `api` | 是 | 整数 `4`。`api: 2`、`"4"`、`4.0`、`5`、缺失都是 `unsupported_api`，并且最先检查 |
-| `sdk` | 是 | 最低 SDK 约束，语法见下节。缺失或写错是 `invalid_manifest` |
+| `sdk` | 是 | 显式 SDK 兼容范围，语法见下节。缺失或写错是 `invalid_manifest` |
 | `id` | 外部包必填 | `[a-z][a-z0-9_-]{0,63}`；内置包省略时取目录名 |
 | `version` | 外部包必填 | 完整 SemVer 2.0 |
 | `entry` | 外部包必填 | 包内 `.py` 后端入口；内置包默认 `backend/plugin.py` |
@@ -43,7 +43,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 ### `sdk` 与 `frontend.peers` 的比较语法
 
-两者用同一套小语法（`agent/plugin_host/versions.py`）：空格分隔的 `=`、`>`、`>=`、`<`、`<=` 比较，逻辑与；不带运算符的 SemVer 表示相等。例如 `>=4.0.0`、`>=4.0.0 <5.0.0`。**不支持** caret（`^`）、tilde（`~`）、通配、逗号、`||` 和连字符范围，`4` 这种不完整版本也不行。build 元数据不参与比较。宿主是预发布版本时，必须有一条比较项写的是同一 `主.次.补丁` 的预发布版本才算满足。
+两者用同一套小语法（`agent/plugin_host/versions.py`）：空格分隔的 `=`、`>`、`>=`、`<`、`<=` 比较，逻辑与；不带运算符的 SemVer 表示相等。例如 `>=4.1.0 <4.2.0`、`>=4.0.0 <4.2.0`。**不支持** caret（`^`）、tilde（`~`）、通配、逗号、`||` 和连字符范围，`4` 这种不完整版本也不行。build 元数据不参与比较。宿主是预发布版本时，必须有一条比较项写的是同一 `主.次.补丁` 的预发布版本才算满足。
 
 `sdk` 写错语法：安装和发现都是 `invalid_manifest`。语法对但不包含当前 SDK：安装被拒（`incompatible_sdk`），已装的包和内置包在名册里是 `BLOCKED` / `incompatible_sdk`，不中断启动。`frontend.peers` 写错语法是 `invalid_version_range`，宿主的 React 不满足是 `incompatible_runtime`，缺少 `react`、`react-dom` 或 `@yinfengwindy/shiori-sdk` 是 `missing_dependency`。
 
@@ -99,7 +99,7 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 | `conversation` | `CONVERSATION` | 宿主（P6b），每个代一份。`deliver_initiated_reply(InitiatedReply) -> InitiatedDelivery` 以会话所属角色投递一条主动回复，可带目标、媒体、心情、自然回复序列和工具事实，返回已落库的消息 id 与是否完整发出；`reply_state(role_id)` 读该代角色会话的心情目录和已存心情时间 |
 | `memory_optimizer` | `MEMORY_OPTIMIZER` | 系统插件 `memory_optimizer`（P6b）。只有 `active_run()`：正在整理的角色与开始时间。核心 `get` 它在任务面板列出记忆维护，`None` 时不列 |
 
-旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是外部插件，新装默认关闭，没启用时没有 `mcp_add`；`plugin-data/mcp/mcp_servers.json` 里已有服务器的工作区（旧根目录文件先由 bootstrap 迁入）会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
+旧的 `scene_observations` Key 在 4.0.0 删除。NovelAI 改为 `optional_inject: [scene]`，`get(SCENE)` 为空时不登记需求。场景插件经 `SCENE_HOST.on_published` 开始观察：本代已发布时（代内重载、代内启用）立即开始，否则等宿主发布本代。`mcp` 是内置功能插件，新装默认关闭，没启用时没有 `mcp_add`；`plugin-data/mcp/mcp_servers.json` 里已有服务器的工作区（旧根目录文件先由 bootstrap 迁入）会在启动时一次性写入 `[plugins.mcp] enabled = true`（见[生命周期](plugin-lifecycle.md)）。
 
 即时聊天的选用：插件在提供，并且角色 `runtime_config.natural_chat_enabled` 是布尔 `True`。插件关闭时不选用，回复是单条。`natural_chat_enabled` 仍在角色 JSON，不进 `config.toml`。
 
@@ -171,11 +171,19 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 
 ## 版本
 
-SDK 独立 semver，源只在 `packages/sdk/python/shiori_sdk/_version.py`。大版本是破坏性变更。4.x 内禁止给已有 Key 或 Protocol 加方法；新能力用新 Key 或新 Event。下一个大版本可以合并拆开的 Key，不要把 `SESSIONS_PRESENCE_V2` 这种名字一直留着。
+SDK 的自定义 `A.B.C` 中，A 是整体代际，B 允许破坏性 API 变更，C 用于同一 A.B 线内的兼容修复、功能与迁移。数值排序和区间语法保持原样，这不是标准 SemVer 的兼容承诺。源码版本只在 `packages/sdk/python/shiori_sdk/_version.py`。同一 A.B 线不能增加已有 Key/Protocol 的必需方法或删改既有调用契约；破坏性整理提升 B，可在新兼容线合并此前拆开的接口。详见 [版本规则](../decisions/2026-11-05-sdk-version-policy.md)。
+
+新插件使用显式 `sdk: ">=4.1.0 <4.2.0"`、Python `>=4.1.0,<4.2.0` 和 frontend peer `>=4.1.0 <4.2.0`，不使用 caret 代替上限。既有外部包的宽范围不会被宿主自动改写；作者需按实际测试的兼容线重发声明。
 
 npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版本。`node scripts/check_sdk_release.mjs --align` 只核对这三处。正式 tag 再跑完整检查：`plugin-changelog.md` 要有当前版本的 `## X.Y.Z` 条目，拒绝回退，也拒绝已发布 tag 上的同版本源码被改掉。没有 Unreleased 批次，也没有 `sync_sdk_version.mjs`。
 
-插件自己的 `version` 独立。SDK 升大版本不因此给每个插件升 patch。插件的 `shiori-sdk` 依赖要承认它实际要跑的 SDK；本仓库插件是 `>=4.0.0,<5`。
+插件自己的 `version` 独立。SDK 变更兼容线不因此给每个插件升 patch。插件的 `shiori-sdk` 依赖要承认它实际要跑的 SDK；MCP、Browser Use、Computer Use 使用 `>=4.1.0,<4.2.0`，其余只用未变接口的插件保留最低 4.0 并允许 `>=4.0.0,<4.2.0`。
+
+## SDK 4.1 的 MCP 迁移
+
+SDK 4.1.0 仍使用 manifest `api: 4`，与 SDK 版本分别管理。`PROCESSES` 只负责通用进程与管道所有权；`mcp(...)` 已删除。调用方声明内部 `shiori-mcp-client` 依赖，直接构造该库的 stdio/HTTP 会话，并把 `ctx.require(PROCESSES)` 注入 stdio 会话。`McpSession`、`McpToolInfo`、`McpToolError`、结果 decoder 与 `FakeMcpSession` 从 SDK 移到 `shiori_mcp_client`；测试支持随客户端库维护。
+
+客户端源码在 `packages/mcp-client/src/shiori_mcp_client`，由私有 wheelhouse 和冻结程序装配，不要求公开 PyPI 发布。MCP 插件继续拥有服务器配置、凭据、OAuth、工具筛选与管理界面；Browser Use 和 Computer Use 的会话不依赖 MCP 插件是否启用。proactive 每次解析 MCP 插件当前导出，共用其配置与准入。`MCP_TOOLS` 和通用 `ToolResult` 不变。现有 ZIP 安装不会解析 Python 依赖，冻结桌面的依赖更新仍需桌面构建。详见 [SDK 4.1 决策](../decisions/2026-11-05-mcp-client-boundary.md)。
 
 ## 4.0 基线里的插座
 
@@ -189,7 +197,7 @@ npm 包、宿主 `setup.py` 和 host-testing 的精确 pin 必须等于这个版
 
 角色命名空间在 `ROLES.plugin_settings(role_id, namespace)`。目前只有 `proactive`，其它名字抛 `KeyError`。宿主只保存不透明对象；主动插件负责校验和清理已退役的 `candidates`（#427）、`agent.model` 与 `drift.enabled`。核心 `roles.update` 不接受 proactive 字段。渲染侧的 `roleSettings` 槽已经存在，不是这次新加的。
 
-`CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。`CONVERSATION.reply_state(role_id)` 读该代角色会话的心情目录和已存心情时间，调用方在工作开始时抄进 `InitiatedReply`。部分回复已经落库后调用方被取消，仍返回已落库的部分，取消在下一次 `await` 时再抛出。`InitiatedReply` 与 `PROACTIVE_HOST` 一样，在 P6b-4b 主动循环接上之前仍可增删字段，4.0 发版时定稿。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口：自然回复作用域、补全、工具与 MCP、目标选择、会话历史和投递都从这里走；在已打开的自然计划里，`deliver` 经该计划发出本轮草稿。除 `PROACTIVE_HOST` 与 `InitiatedReply` 外，4.x 不能再给这些 Protocol 加方法；这两处在主动循环搬进插件之前仍可增删，4.0 发版时定稿。
+`CONVERSATION.deliver_initiated_reply(reply: InitiatedReply)` 由宿主按代提供，返回 `InitiatedDelivery`（已落库的消息 id 与 `complete`）。投递角色由 `session_key`（`role:<role_id>`）决定，目标必须属于该角色。`CONVERSATION.reply_state(role_id)` 读该代角色会话的心情目录和已存心情时间，调用方在工作开始时抄进 `InitiatedReply`。部分回复已经落库后调用方被取消，仍返回已落库的部分，取消在下一次 `await` 时再抛出。`InitiatedReply` 与 `PROACTIVE_HOST` 已在 4.0 基线定稿，后续变更按 A.B 兼容线规则管理。进程级循环用 `PROACTIVE_HOST.deliver`，它每次都走当前发布代；持有某一代 `CONVERSATION` 的插件只在那一代里投递。`InitiatedMessageCommitted` 带角色、渠道、会话、线程、消息 id、回复正文、所用工具和 `source`（插件发出的是 `InitiatedReply.source`，宿主推送是 `"push"`）。`RoleMarkdownMemory.read_recent_context` 读当前仍可见的近期语境。`PROACTIVE_HOST` 是主动回合的宿主端口：自然回复作用域、补全、工具与 MCP、目标选择、会话历史和投递都从这里走；在已打开的自然计划里，`deliver` 经该计划发出本轮草稿。同一 A.B 兼容线内不增加这些 Protocol 的必需方法；破坏性变更提升 B 并核对调用者。
 
 `RoleCreated` 与 `RoleDeleted` 成对：角色记录和会话创建成功后发出，创建失败不发。没有监听器也能创建。
 

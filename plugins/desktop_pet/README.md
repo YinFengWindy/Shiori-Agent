@@ -22,7 +22,7 @@
 
 形象插件拥有实际 surface，通用气泡视图、指针手势和菜单来自 `@yinfengwindy/shiori-pet` 构建时共享模块。语音手势和显示落点回报桌宠；语音输入、TTS 队列和直播输出仍只有一套。真实录音、解码与播放由宿主通用原语提供，ASR/TTS 模型由可选择的 provider 提供。
 
-SDK 4.0.1 的隐藏创建与 `surface.lifecycle` 事件支持模型准备和窗口失效处理。拖动、惯性和移动仍走原有通用 surface 原语；没有跨插件 React 挂载或新的插件层。
+SDK 4.1.1 的隐藏创建与 `surface.lifecycle` 事件支持模型准备和窗口失效处理。拖动、惯性和移动仍走原有通用 surface 原语；没有跨插件 React 挂载或新的插件层。
 
 ## 验证
 

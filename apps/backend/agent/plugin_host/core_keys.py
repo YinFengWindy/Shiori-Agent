@@ -79,6 +79,7 @@ class HostBuilt:
 PER_PLUGIN_PUBLIC_KEYS = frozenset(
     {
         "tools",
+        "mcp_tools",
         "channels",
         "accounts",
         "avatars",

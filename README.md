@@ -54,7 +54,7 @@ Shiori 以角色为中心组织人设、记忆、会话、素材与关系。你�
 2. 首次启动后，跟随「模型 → 角色 → 开始」引导：填写模型服务、API Key 与模型参数，创建第一个角色，再进入聊天。
 3. 需要其他能力时，在「设置 → 插件」启用对应插件；外部聊天账号在角色详情的「账号」中添加。
 
-**从 0.5.x 升级：** 0.5.6 内置 SDK 4，继续沿用角色、会话、记忆、插件数据和启用偏好，旧配置会按需迁入对应插件设置。旧外部插件代码不兼容：非 `api: 4` 的插件会被阻止加载，文件和数据保留。请使用作者重新构建的 SDK 4 版本，不能只修改 manifest 中的版本号。
+**从 0.5.x 升级：** 0.5.7 内置 SDK 4.1，继续沿用角色、会话、记忆、插件数据和启用偏好，旧配置会按需迁入对应插件设置。非 `api: 4` 的插件会被阻止加载，文件和数据保留。外部插件需由作者检查 SDK 4.1 兼容性并重新构建；使用已移除 MCP 接口的插件需要迁移代码，不能只修改 manifest 中的版本号。
 
 启动时会自动检查更新，也可以在「设置 → 关于」手动检查。Windows 上使用 Agent 的 shell 工具需要安装 PowerShell 7，并确保 `pwsh` 在 PATH 中。
 
@@ -122,20 +122,20 @@ pnpm run desktop:test --file RoleDetailPage.test.tsx
 
 ### 插件 SDK
 
-**SDK 4.0.0 已发布到 npm 和 PyPI。** 前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。仓库内开发使用同版本的 workspace 包。
+**SDK 4.1.0 已发布到 npm 和 PyPI。** 前端包为 [@yinfengwindy/shiori-sdk](https://www.npmjs.com/package/@yinfengwindy/shiori-sdk)，后端包为 [shiori-sdk](https://pypi.org/project/shiori-sdk/)（Python 3.12+）。仓库内开发使用同版本的 workspace 包。
 
 ```sh
-pnpm add -D "@yinfengwindy/shiori-sdk@^4.0.0"
-uv add "shiori-sdk>=4.0.0,<5"
+pnpm add -D "@yinfengwindy/shiori-sdk@>=4.1.0 <4.2.0"
+uv add "shiori-sdk>=4.1.0,<4.2.0"
 ```
 
-插件位于 `plugins/<id>/`：`manifest.yaml` 写 `api: 4` 和 `sdk: ">=4.0.0"`，`backend/` 放 Python 后端，`tests/` 放插件测试。前端由一个 `frontend.entry` 具名导出 `ui`、`background`、`surface`；SDK、React 和 React DOM 保留为 external，依赖范围写在 `package.json` 的 `peerDependencies`，构建时生成 `frontend.peers`。
+插件位于 `plugins/<id>/`：`manifest.yaml` 写 `api: 4` 和 `sdk: ">=4.1.0 <4.2.0"`，`backend/` 放 Python 后端，`tests/` 放插件测试。前端由一个 `frontend.entry` 具名导出 `ui`、`background`、`surface`；SDK、React 和 React DOM 保留为 external，依赖范围写在 `package.json` 的 `peerDependencies`，构建时生成 `frontend.peers`。
 
 在仓库根目录运行 `pnpm new-plugin example --ui` 可生成插件模板。后端 RPC 变更后运行 `pnpm rpc:generate`、`pnpm rpc:check`；`pnpm plugins:contract` 验证真实宿主下的插件生命周期。
 
-**SDK 4 是破坏性大版本。** 旧 capability 属性和 phase 接口改用 Key 与 typed event，旧 `runtime_api`、`renderer` 和 `peer_dependencies` 声明已移除。外部插件需要迁移代码、重新构建并验证。4.x 内已有 Key 不再新增方法，新能力使用新 Key 或新 Event；不设 Unreleased 批次。详见 [SDK 兼容说明](./packages/sdk/README.md#compatibility)。
+**SDK 使用自定义 A.B.C 规则：A 表示整体代际，B 允许破坏性 API 变更，C 用于同一 A.B 内的兼容更新。** SDK 4.1 移除了 `PROCESSES.mcp()` 及 MCP 专用类型；外部插件需要检查调用者、声明明确兼容范围并验证。同一 A.B 内不增加已有 Key/Protocol 的必需方法；兼容扩展仍遵守当前扩展面冻结，不设 Unreleased 批次。旧 capability、phase 等接口的迁移说明见 [SDK 兼容说明](./packages/sdk/README.md#compatibility)。
 
-桌面版本、SDK 版本和插件自身版本各自独立。SDK 大版本是破坏性变更。有包内容变化的已有插件在正式发版前只升一次 patch，新插件保留初始版本，未变插件不升号。插件 `version` 与 Python 包元数据保持一致。
+桌面版本、SDK 版本和插件自身版本各自独立。有包内容变化的已有插件在正式发版前只升一次 patch，新插件保留初始版本，未变插件不升号。插件 `version` 与 Python 包元数据保持一致。
 
 - [SDK README](./packages/sdk/README.md)：安装、React peer 与独立测试配置。
 - [插件教程](./docs/_handbook/plugins-tutorial.md)：从创建插件到开发界面。
