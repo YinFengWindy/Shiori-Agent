@@ -1,6 +1,6 @@
 # Fish Audio
 
-在插件管理中安装 `fish_audio-0.1.0.zip` 并启用，然后配置：
+Fish Audio 随 Shiori 提供，在插件管理中启用后配置：
 
 1. **插件设置 → Fish Audio**：保存 API Key，选择语音合成模型。默认 `s2.1-pro-free`；`transcribe-1-pro` 语音识别单独计费。
 2. **角色详情 → Fish Audio 声音**：填写这个角色已有的 Fish 声音 ID，调整语速，等待保存后试听。每个角色独立保存声音。
