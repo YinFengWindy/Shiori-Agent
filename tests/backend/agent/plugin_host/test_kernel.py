@@ -396,6 +396,7 @@ _EXPECTED_TOP_LEVEL_PLUGINS = {
     "pet_codex_sprite",
     "pet_2d",
     "feishu",
+    "fish_audio",
     "gpt_sovits_tts",
     "grok_bot",
     "herdr",

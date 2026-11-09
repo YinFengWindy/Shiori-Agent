@@ -4,7 +4,7 @@ id: fish_audio
 display_name: Fish Audio
 version: 0.1.0
 desc: Fish Audio 云端语音合成与语音识别
-distribution: external
+distribution: builtin
 default_enabled: false
 entry: backend/plugin.py
 inject:
