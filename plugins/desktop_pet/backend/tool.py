@@ -13,7 +13,7 @@ from shiori_sdk.rpc import RpcCapability
 from shiori_sdk.roles import Roles
 
 from .pet_state import RolePetStateStore
-from .models import RolePetState
+from .providers import PetProviders
 
 _COOLDOWN_SECONDS = 3.0
 _POSITION_TARGETS = frozenset(
@@ -66,10 +66,12 @@ class DesktopPetActionTool(Tool):
         self,
         *,
         role_store: Roles,
+        providers: PetProviders,
         rpc: RpcCapability,
         tool_registry: ToolsCapability,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        self._providers = providers
         self._role_store = role_store
         self._state = RolePetStateStore(role_store)
         self._rpc = rpc
@@ -109,7 +111,7 @@ class DesktopPetActionTool(Tool):
         role = self._state.get_role(role_id)
         if role is None or not role.desktop_pet_enabled:
             return _rejected("pet_not_enabled")
-        package = self._selected_package(role)
+        package = self._selected_model(role.id, role.selected_model)
         if package is None:
             return _rejected("pet_not_bound_to_role")
 
@@ -123,7 +125,7 @@ class DesktopPetActionTool(Tool):
             if clean_animation not in _MOVE_ANIMATIONS:
                 return _rejected("invalid_animation")
         elif clean_action == "play":
-            if not clean_name or clean_name not in package.actions:
+            if not clean_name or clean_name not in package["actions"]:
                 return _rejected("action_not_supported")
         else:
             return _rejected("invalid_action")
@@ -150,7 +152,6 @@ class DesktopPetActionTool(Tool):
                     "name": clean_name,
                     "target": clean_target,
                     "animation": clean_animation,
-                    "state": package.actions.get(clean_name, ""),
                 },
             )
             if not dispatched:
@@ -185,30 +186,24 @@ class DesktopPetActionTool(Tool):
             return f"{self.description} 桌宠状态：不可用（角色不存在）。", []
         if not role.desktop_pet_enabled:
             return f"{self.description} 桌宠状态：已关闭。", []
-        package = self._selected_package(role)
+        package = self._selected_model(role.id, role.selected_model)
         if package is None:
             return f"{self.description} 桌宠状态：已开启，但尚未绑定桌宠包。", []
-        action_names = list(package.actions)
-        action_hint = (
-            "、".join(f"{name}（{state}）" for name, state in package.actions.items())
-            or "无已声明动作"
-        )
+        action_names = list(package["actions"])
+        action_hint = "、".join(package["actions"]) or "无已声明动作"
         return (
-            f"{self.description} 桌宠状态：已开启；当前桌宠包：{package.display_name}；"
+            f"{self.description} 桌宠状态：已开启；当前桌宠包：{package['display_name']}；"
             f"可用动作：{action_hint}。",
             action_names,
         )
 
-    @staticmethod
-    def _selected_package(role: RolePetState):
-        return next(
-            (
-                item
-                for item in role.pet_packages
-                if item.id == role.selected_pet_package_id
-            ),
-            None,
-        )
+    def _selected_model(self, role_id, selection):
+        if selection is None:
+            return None
+        try:
+            return self._providers.model(role_id, selection)
+        except (KeyError, ValueError, FileNotFoundError):
+            return None
 
 
 def _rejected(reason: str, *, action_id: str = "") -> str:

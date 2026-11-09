@@ -9,7 +9,9 @@ import pytest
 from shiori_sdk.testing.roles import FakeRoles
 from shiori_sdk.testing.tools import FakeTools
 from shiori_sdk.testing.memory_context import FakeRpc
-from plugins.desktop_pet.backend.models import RolePetPackage
+from unittest.mock import Mock
+from plugins.desktop_pet.backend.providers import PetProviders
+from plugins.desktop_pet.backend.api import PetModelProvider
 from plugins.desktop_pet.backend.pet_state import RolePetStateStore
 from plugins.desktop_pet.backend.tool import DesktopPetActionTool
 
@@ -19,25 +21,24 @@ def _build_tool(
 ) -> tuple[DesktopPetActionTool, FakeTools]:
     store = FakeRoles(tmp_path / "workspace")
     role = store.create_role(role_id="mira", name="Mira", system_prompt="test")
-    RolePetStateStore(store).replace_packages(
-        role.id,
-        [
-            RolePetPackage(
-                id="pet-1",
-                format="codex-sprite@1",
-                display_name="Pet",
-                manifest_path="assets/mira/pets/pet-1/pet.json",
-                spritesheet_path="assets/mira/pets/pet-1/spritesheet.webp",
-                imported_at="2026-07-25T00:00:00+08:00",
-                actions={"greeting": "waving"},
-            )
-        ],
+    provider = Mock(spec=PetModelProvider)
+    provider.reference = {"plugin_id": "test_provider", "service_id": "models"}
+    provider.get_model.return_value = {
+        "id": "pet-1",
+        "display_name": "Pet",
+        "actions": ["greeting"],
+        "body": {"width": 192, "height": 208},
+    }
+    providers = PetProviders(store)
+    providers.register(provider)
+    RolePetStateStore(store).select_model(
+        role.id, {"provider": provider.reference, "model_id": "pet-1"}
     )
-    RolePetStateStore(store).select_package(role.id, "pet-1")
     RolePetStateStore(store).set_enabled(role.id, True)
     registry = FakeTools()
     tool = DesktopPetActionTool(
         role_store=store,
+        providers=providers,
         rpc=FakeRpc(),
         tool_registry=registry,
         clock=lambda: clock_value[0],
@@ -201,7 +202,8 @@ async def test_no_connected_transport_does_not_consume_cooldown_or_turn(tmp_path
 
         async def emit(self, name, payload):
             assert name == "action"
-            assert payload["state"] == "waving"
+            assert payload["name"] == "greeting"
+            assert "state" not in payload
             return self.connected
 
     rpc = Rpc()

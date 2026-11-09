@@ -42,13 +42,15 @@ Windows 自动发版的每日检查已暂停（插件系统重构 P1–P8 / D26�
 
 桌宠语音的 Electron 主进程控制、隐藏 renderer 采集/播放与 Python provider 协调边界见 [桌宠语音交互](voice.md)。语音业务归桌宠插件；主进程不拥有语音业务，`apps/desktop/src/voice/ipc.ts` 只接收隐藏音频 renderer 的采集就绪/数据/停止/错误、设备列表与播放完成回执，并交给对应原生资源所有者（录音器、`native/audioPlayer.ts`）。
 
+桌宠形象由独立插件提供：`desktop_pet` 拥有绑定、气泡、语音和直播，`pet_codex_sprite` 拥有精灵素材与实际 surface，二者通过模型服务和带实例身份的呈现回报协作。共享气泡、拖动与菜单在 `packages/desktop-pet`。候选形象隐藏加载，成功后才交接；宿主 `surface.lifecycle` 事件报告真实窗口关闭或 renderer 失效。参见[插件边界决策](../../decisions/2026-11-09-desktop-pet-2d-providers.md)。
+
 ## 数据流
 
 renderer 发出请求，经 preload/主进程 bridge 到 Python `request_dispatcher.py`，再由 `DesktopBridgeRequestRouter` 交给单一领域 handler；handler 调用 owning service，presenter 将结果转换为共享类型。后端事件沿反方向更新 renderer state。Electron 与 Python bridge 的 JSON-lines stdio 协议固定使用 UTF-8：`DesktopBridgeServer.serve_stdio()` 会在首次读写前重配置 stdin/stdout/stderr，避免 Windows 活动代码页（例如 CP936）在关闭全局 UTF-8 时破坏中文 payload。图片等本地资产通过专门的 registry/transport 暴露，不直接把任意文件路径交给视图。Story 生成的背景和 CG 资源使用资源模型的 `path` 字段进入授权集合，由插件宿主服务 `host.assets.url()`（preload 本地资产缓存）转换成 `shiori-asset://` URL 后再渲染；资源文件本身仍由 `LocalAssetRegistry` 和资产协议校验。
 
 Story 插件（`plugins/story/`）依赖 NovelAI，进入其全屏插件导航页（`navPage.presentation: "fullscreen"`）时才挂载 `StoryPage`、`useStoryController` 和 `useStoryWorkspacePresentation`，业务 RPC 与事件统一经 `plugin.story.*` 分发；首次读取故事列表的过程直接呈现主菜单加载页，不额外再发起一次主菜单加载。主菜单阶段只有“Read story list”和“Prepare menu”两项，进入已保存剧情时依次使用“Read story”“Restore progress”和“Prepare stage”，不把“Complete”当作额外阶段。加载页的标题、阶段、状态、进度和重试文案统一使用英文。每个真实阶段至少保持 900ms：当前阶段显示旋转箭头，阶段完成后才切到下一阶段并显示勾选；进入 `menu-ready` 或 `opening-ready` 后再短暂停留 420ms，把全部真实阶段显示为勾选，等待阶段保持静止。游戏页左上角时间信息右侧同步显示持久化的当前场景中文名。Director 每次提交同时产生持久化的 `current_scene`（稳定 `key`、中文 `name` 与实际在场 `character_ids`），每个 Story 视觉资源保存 `sceneKey`；舞台只接受属于当前场景的资源，场景切换后不会继续显示上一场景 CG。当前场景的 `character` CG 只显示 CG；当前场景的 `scene` CG 在正式角色属于该场景时叠加当前差分立绘；当前场景没有可用 CG 时使用纯黑舞台，不显示菜单默认背景或角色立绘。同一场景已有成功的角色 CG 后，后续自动角色视觉请求不再重复创建资源，继续显示当前角色 CG；只有新的 `scene` 视觉资源才会把舞台切回无角色场景 CG。载入剧情列表在标题下显示持久化的当前故事日期、时间段和中文场景名。Director 和 Story 读模型都会拒绝或兜底非中文场景名，界面不会显示内部英文 key。进入 Story 时会等待开场 `background` 资源完成；后续 Director 在重要视觉节点返回 `visual_prompt` 后异步创建 `cg` 资源，不阻塞已提交剧情。两类资源共用 Story 图片生成链路，完成后都进入 Story visual gallery；失败可单独重试且不影响已提交剧情。CG 重试和重新生成都会先把资源持久化为 `generating` 并广播状态，但保留该资源最近一次成功的 `path`，因此同一场景的当前 CG 会一直显示到新图完成；生成成功后再原地写入新路径，生成失败则保留旧图并持久化错误码。加载页不提供额外返回入口，错误状态只保留重试操作。阶段仍由真实 bridge 操作推进，而不是用展示层计时器伪造完成状态。
 
-桌宠拖拽不经过 Python bridge：桌宠 surface（`plugins/desktop_pet/surface/useCodexPetInteraction.ts`）在按下时调用 `surface.beginDrag(偏移)`，此后由主进程 `DesktopSurfaceHost`（`apps/desktop/src/surface/host.ts`）以 60Hz 跟随原生光标写窗口位置，renderer 不逐帧上报坐标；surface 只用指针水平位移切换 Codex 图集的 `running-left` / `running-right` 行并采样松手速度，`surface.endDrag(velocity)` 后由主进程做惯性滑行。窗口停稳后主进程把 settle 转发给插件后台，桌宠 `DesktopPetController.handleSettled()` 按角色与显示器保存位置。右键菜单项由插件 `petMenu.ts` 定义，主进程只负责弹出原生菜单；未发生拖动的双击才恢复主窗口。
+桌宠拖拽不经过 Python bridge：桌宠 surface（`packages/desktop-pet/src/usePetInteraction.ts`）在按下时调用 `surface.beginDrag(偏移)`，此后由主进程 `DesktopSurfaceHost`（`apps/desktop/src/surface/host.ts`）以 60Hz 跟随原生光标写窗口位置，renderer 不逐帧上报坐标；surface 只用指针水平位移切换 Codex 图集的 `running-left` / `running-right` 行并采样松手速度，`surface.endDrag(velocity)` 后由主进程做惯性滑行。窗口停稳后主进程把 settle 转发给插件后台，精灵提供者将 settle 回报桌宠，桌宠按角色与显示器保存位置。右键菜单项由插件 `PetShell.tsx` 定义，主进程只负责弹出原生菜单；未发生拖动的双击才恢复主窗口。
 
 角色通过 `pet_action` 操控桌宠时，工具 schema 会按当前回合的角色和渠道动态投影桌宠状态：桌面端角色可看到桌宠开关、当前绑定桌宠包和包声明的动作名及其精灵状态；外部渠道会明确标记为不可用。动作名来自角色素材包的 `actions` 映射，工具执行层仍会再次校验角色绑定、开关、渠道和动作支持情况。
 
@@ -78,6 +80,6 @@ bridge 连接、会话存储和角色执行锁在进程内保持稳定。聊天�
 - 修改共享类型：检查 Python models/presenter、`apps/desktop/src/bridge/shared.ts`、renderer `shared/types.ts`。
 - 修改会话切换：检查 bridge 事件优先级、Session cache、聊天消息连续性和导航历史。
 - 修改角色 CRUD：复用统一刷新/派生状态流程，避免各页面重复“调用、刷新、同步、导航”。
-- 修改桌宠拖拽：同步检查桌宠 surface 的 `useCodexPetInteraction`、主进程 `DesktopSurfaceHost` 的拖拽/惯性原语与 settle 转发，以及 `DesktopPetController.handleSettled()`，并验证窗口位置会按角色与显示器保存。
+- 修改桌宠拖拽：同步检查共享 surface 外壳的 `usePetInteraction`、主进程 `DesktopSurfaceHost` 的拖拽/惯性原语与 settle 转发，以及 桌宠呈现回报处理，并验证窗口位置会按角色与显示器保存。
 - 修改桌宠绑定或托盘开关：同步检查插件 RPC `binding.get` 与 `background/binding.ts` 的解析、桌宠插件设置持久化，以及经 `ctx.tray.setEntry` 贡献的托盘条目（主进程 `tray/registry.ts` 只保存插件条目）。
 - 修改屏幕识别：检查 `screen_perception` 插件工具注册与卸载、角色会话中的 `role_id`、渠道回合、截图获取和视觉模型选择。桌宠开关与回复状态不决定屏幕工具是否可用。

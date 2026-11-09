@@ -18,6 +18,7 @@ export type {
   SurfacePlacement,
   SurfaceSettleReason,
   SurfaceSpec,
+  SurfaceLifecyclePayload,
   SurfaceWorkArea,
 } from "./contract/surface";
 export type { PluginBackgroundSettled } from "./contract/background";

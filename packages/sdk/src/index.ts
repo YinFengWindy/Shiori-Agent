@@ -192,8 +192,10 @@ export type {
   SurfacePlacement,
   SurfaceSettleReason,
   SurfaceSpec,
+  SurfaceLifecyclePayload,
   SurfaceWorkArea,
 } from "./contract/surface";
+export { surfaceLifecycleEvent } from "./contract/surface";
 export type { PluginSurfaceContribution, PluginSurfaceModule } from "./contract/surfaceModule";
 export type {
   BackgroundCtx,

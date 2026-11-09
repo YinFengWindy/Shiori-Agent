@@ -13,11 +13,12 @@ class FakeWindow implements SurfaceWindowHandle {
   readonly id = FakeWindow.nextId++;
   bounds = { x: 0, y: 0, width: body.width, height: body.height };
   destroyed = false;
+  shown = 0;
   setBounds(bounds: typeof this.bounds) { this.bounds = bounds; }
   getBounds() { return this.bounds; }
   isDestroyed() { return this.destroyed; }
   destroy() { this.destroyed = true; }
-  showInactive() {}
+  showInactive() { this.shown += 1; }
   hide() {}
   setIgnoreMouseEvents() {}
   send() {}
@@ -174,4 +175,14 @@ test("interaction declarations are explicit, validated and revoked independently
   assert.equal(surfaces.interactionTargets()[0]?.roleId, "a");
   ipc.send(surfaceChannels.setInteraction, { ...key, target: null });
   assert.deepEqual(surfaces.interactionTargets(), []);
+});
+
+test("the create IPC preserves hidden preparation through renderer readiness", () => {
+  const { ipc, windows } = setup();
+  ipc.invoke(surfaceChannels.create, { ...key, spec: { ...spec, visible: false } });
+  ipc.windowId = windows[0].id;
+  ipc.send(surfaceChannels.ready, {});
+  assert.equal(windows[0].shown, 0);
+  ipc.send(surfaceChannels.show, key);
+  assert.equal(windows[0].shown, 1);
 });

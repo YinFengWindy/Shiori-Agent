@@ -1,57 +1,18 @@
+import { isRecord, readPetModelReference, type PetModelReference } from "@yinfengwindy/shiori-pet";
 import type { DesktopPetBinding, DesktopPetSettings } from "./types";
-
-function asFiniteCoordinate(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-/**
- * Parses persisted desktop-pet data and normalizes unusable enable states.
- *
- * The file I/O this used to sit next to is gone: since #181-C the pet's
- * settings live in `ctx.store`, which the host reads and writes on the
- * plugin's behalf. What is left here is pure, which is also what makes it
- * testable without a filesystem.
- */
+/** Reads device preferences and upgrades the old sprite selection mirror in memory. */
 export function normalizeDesktopPetSettings(value: unknown): DesktopPetSettings {
-  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const source = isRecord(value) ? value : {};
   const roleId = typeof source.roleId === "string" && source.roleId.trim() ? source.roleId.trim() : null;
-  const packageId = typeof source.packageId === "string" && source.packageId.trim() ? source.packageId.trim() : null;
+  const legacy: PetModelReference | null = typeof source.packageId === "string" && source.packageId.trim() ? { provider: { plugin_id: "pet_codex_sprite", service_id: "models" }, model_id: source.packageId.trim() } : null;
+  const model = readPetModelReference(source.model) ?? legacy;
   const positions: DesktopPetSettings["positions"] = {};
-  if (source.positions && typeof source.positions === "object") {
-    for (const [key, position] of Object.entries(source.positions as Record<string, unknown>)) {
-      if (!position || typeof position !== "object") continue;
-      const point = position as Record<string, unknown>;
-      const x = asFiniteCoordinate(point.x);
-      const y = asFiniteCoordinate(point.y);
-      if (x !== null && y !== null) positions[key] = { x, y };
-    }
+  if (isRecord(source.positions)) for (const [key, position] of Object.entries(source.positions)) {
+    if (isRecord(position) && typeof position.x === "number" && Number.isFinite(position.x) && typeof position.y === "number" && Number.isFinite(position.y)) positions[key] = { x: position.x, y: position.y };
   }
-  return {
-    // A stored `visible` only counts when there is something to show: a role
-    // whose package was deleted must not come back as a blank pet window.
-    visible: Boolean(source.visible ?? source.enabled) && Boolean(roleId && packageId),
-    roleId,
-    packageId,
-    positions,
-  };
+  return { visible: Boolean(source.visible ?? source.enabled) && Boolean(roleId && model), roleId, model, positions };
 }
-
-/**
- * The change that binding one role/package makes, as a patch.
- *
- * A patch rather than a whole settings object on purpose. Its callers compute
- * it, then cross an `await` (creating the surface) before saving, and a settle
- * pushed in from the host during that gap writes a new position. Returning a
- * full object here would carry the pre-drag `positions` along and quietly undo
- * that write; a patch cannot, because it does not mention `positions` at all.
- */
-export function desktopPetBindingPatch(
-  binding: DesktopPetBinding,
-  visible: boolean,
-): Pick<DesktopPetSettings, "visible" | "roleId" | "packageId"> {
-  return {
-    visible,
-    roleId: binding.roleId,
-    packageId: binding.package.id,
-  };
+/** Patches selection without overwriting positions changed while a model was loading. */
+export function desktopPetBindingPatch(binding: DesktopPetBinding, visible: boolean): Pick<DesktopPetSettings, "visible" | "roleId" | "model"> {
+  return { visible, roleId: binding.role_id, model: { provider: binding.provider, model_id: binding.model.id } };
 }

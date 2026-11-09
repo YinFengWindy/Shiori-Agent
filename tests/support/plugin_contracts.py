@@ -38,6 +38,7 @@ PLUGINS = frozenset(
         "context_pressure",
         "default_memory",
         "desktop_pet",
+        "pet_codex_sprite",
         "feishu",
         "fish_audio",
         "gpt_sovits_tts",

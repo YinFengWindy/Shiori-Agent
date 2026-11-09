@@ -21,8 +21,8 @@ test("standalone plugin program excludes host sources and rejects the ambient gl
     : getSourceFile(name, languageVersion, onError, shouldCreate);
   const program = ts.createProgram([...parsed.fileNames, probe], parsed.options, host);
   const files = program.getSourceFiles().map((file) => file.fileName.replaceAll("\\", "/"));
-  assert.ok(files.some((name) => name.endsWith("/plugins/desktop_pet/surface/DesktopPetSurface.tsx")));
-  assert.ok(files.some((name) => name.endsWith("/plugins/desktop_pet/surface/DesktopPetSurface.test.tsx")));
+  assert.ok(files.some((name) => name.endsWith("/plugins/pet_codex_sprite/surface/SpriteSurface.tsx")));
+  assert.ok(files.some((name) => name.endsWith("/plugins/pet_codex_sprite/surface/SpriteSurface.test.tsx")));
   assert.equal(files.some((name) => name.includes("/apps/desktop/")), false, "a host source or ambient declaration leaked into the plugin program");
   const source = program.getSourceFile(probe);
   assert.ok(source);

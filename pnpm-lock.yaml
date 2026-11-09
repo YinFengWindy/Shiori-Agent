@@ -20,6 +20,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.5(@types/react@19.2.18)
+      '@yinfengwindy/shiori-pet':
+        specifier: workspace:*
+        version: link:packages/desktop-pet
       '@yinfengwindy/shiori-sdk':
         specifier: workspace:*
         version: link:packages/sdk
@@ -220,6 +223,18 @@ importers:
       typescript:
         specifier: ^5.8.0
         version: 5.9.3
+
+  packages/desktop-pet:
+    dependencies:
+      '@phosphor-icons/react':
+        specifier: ^2.1.10
+        version: 2.1.10(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@yinfengwindy/shiori-sdk':
+        specifier: workspace:^
+        version: link:../sdk
+      react:
+        specifier: ^19.2.5
+        version: 19.2.8
 
   packages/sdk:
     dependencies:

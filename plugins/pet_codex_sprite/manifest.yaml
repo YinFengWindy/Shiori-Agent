@@ -1,0 +1,16 @@
+api: 4
+sdk: ">=4.1.1 <4.2.0"
+id: pet_codex_sprite
+display_name: Codex 精灵图
+version: 0.1.0
+desc: 桌宠的 Codex 精灵图形象、素材与透明窗口
+dependencies: [desktop_pet]
+inject:
+  - dependencies
+  - workspace
+  - roles
+  - events
+  - rpc
+  - services
+frontend:
+  entry: frontend.ts

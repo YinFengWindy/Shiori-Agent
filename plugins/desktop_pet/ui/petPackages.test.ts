@@ -1,63 +1,36 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { noPetPackages, readPetPackages } from "./petPackages";
+import { petModelKey } from "@yinfengwindy/shiori-pet";
+import { readPetPackages } from "./petPackages";
 
-const url = (path: string) => `shiori-asset://local/${path}`;
+const sprite = { plugin_id: "pet_codex_sprite", service_id: "models" };
+const other = { plugin_id: "other", service_id: "models" };
 
-test("a pets.list response becomes rows with displayable preview URLs", () => {
+test("identical model ids remain separate selections across appearance providers", () => {
   const parsed = readPetPackages({
-    selected_package_id: "pet-1",
+    selected_model: { provider: other, model_id: "cat" }, providers: [],
     packages: [
-      { id: "pet-1", display_name: "小猫", preview_abs: "C:/roles/mira/preview.png" },
-      { id: "pet-2", display_name: "小狗", preview_abs: null },
+      { id: "cat", provider: sprite, display_name: "精灵猫", preview_abs: "C:/private/cat.png" },
+      { id: "cat", provider: other, display_name: "另一只猫", preview_abs: null },
     ],
-  }, url);
-
-  assert.deepEqual(parsed, {
-    selectedPackageId: "pet-1",
-    packages: [
-      { id: "pet-1", displayName: "小猫", previewUrl: "shiori-asset://local/C:/roles/mira/preview.png" },
-      // No preview file: an empty URL, so the component renders the placeholder
-      // rather than a broken image.
-      { id: "pet-2", displayName: "小狗", previewUrl: "" },
-    ],
-  });
+  }, () => "shiori-asset://local/opaque");
+  assert.ok(parsed.selectedModel);
+  assert.notEqual(petModelKey(parsed.packages[0].reference), petModelKey(parsed.selectedModel));
+  assert.equal(petModelKey(parsed.packages[1].reference), petModelKey(parsed.selectedModel));
+  assert.doesNotMatch(JSON.stringify(parsed), /C:\/private/);
 });
 
-test("the row carries only what the resolver returned, never the path itself", () => {
-  // An opaque resolver, like the real one: the granted URL is a token, and the
-  // path does not survive inside it. With a stub that echoes the path back
-  // (`shiori-asset://local/${path}`) this assertion would pass no matter what
-  // the parser did, which is why that stub is not used here.
-  const parsed = readPetPackages({
-    packages: [{ id: "pet-1", display_name: "小猫", preview_abs: "C:/roles/mira/preview.png" }],
-  }, () => "shiori-asset://local/token-1");
-
-  assert.deepEqual(parsed.packages, [
-    { id: "pet-1", displayName: "小猫", previewUrl: "shiori-asset://local/token-1" },
-  ]);
-  assert.doesNotMatch(JSON.stringify(parsed), /C:\/roles/);
+test("an unavailable provider does not erase the saved model reference", () => {
+  const selected_model = { provider: sprite, model_id: "cat" };
+  const parsed = readPetPackages({ selected_model, providers: [], packages: [] }, () => "");
+  assert.deepEqual(parsed.selectedModel, selected_model);
 });
 
-test("a malformed row is dropped rather than rendered with holes in it", () => {
-  const parsed = readPetPackages({
-    selected_package_id: "",
-    packages: [
-      null,
-      "nope",
-      { display_name: "没有 id" },
-      { id: "", display_name: "空 id" },
-      { id: "pet-1" },
-    ],
-  }, url);
-
-  assert.equal(parsed.selectedPackageId, null);
-  // The only survivor falls back to its id for a label rather than `undefined`.
-  assert.deepEqual(parsed.packages, [{ id: "pet-1", displayName: "pet-1", previewUrl: "" }]);
-});
-
-test("anything that is not a pets.list response reads as no packages", () => {
-  for (const value of [null, undefined, "nope", 7, [], {}, { packages: "nope" }]) {
-    assert.deepEqual(readPetPackages(value, url), noPetPackages, JSON.stringify(value ?? null));
-  }
+test("malformed provider identity and import policy fail instead of selecting a guessed owner", () => {
+  assert.throws(() => readPetPackages({ selected_model: null, providers: [], packages: [
+    { id: "cat", display_name: "没有提供者" },
+  ] }, () => ""), /提供者/);
+  assert.throws(() => readPetPackages({ selected_model: null, packages: [], providers: [
+    { ...sprite, label: "精灵图", import: { namespace: "pets", max_file_bytes: -1, label: "ZIP", extensions: ["zip"] } },
+  ] }, () => ""), /导入配置/);
 });

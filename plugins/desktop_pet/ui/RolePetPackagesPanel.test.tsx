@@ -29,10 +29,16 @@ function RolePetPackagesPanel({ pickFiles = async () => [], ...props }: Omit<Plu
 
 type Call = { method: string; payload: Record<string, unknown> | undefined };
 
+const provider = { plugin_id: "pet_codex_sprite", service_id: "models" };
+const providers = [{ ...provider, label: "Codex 精灵图", import: {
+  namespace: "pet_codex_sprite-pets", max_file_bytes: 32 * 1024 * 1024,
+  extensions: ["zip"], label: "Codex Pet Package",
+} }];
 const listPayload = {
-  selected_package_id: "mira-pet",
+  selected_model: { provider, model_id: "mira-pet" },
+  providers,
   packages: [{
-    id: "mira-pet",
+    id: "mira-pet", provider,
     display_name: "Mira Pet",
     preview_abs: "C:/workspace/mira/preview.webp",
   }],
@@ -40,7 +46,7 @@ const listPayload = {
 
 function fakeClient(answers: Record<string, unknown>, calls: Call[]): PluginRpcClient {
   return createFakePluginClient({
-    background: { call: async <T,>() => { calls.push({ method: "background.sync", payload: undefined }); return undefined as T; } },
+    background: { call: async <T,>(name: string, payload?: Record<string, unknown>) => { calls.push({ method: `background.${name}`, payload }); return undefined as T; } },
     call: <T,>(method: string, payload?: Record<string, unknown>) => {
       calls.push({ method, payload });
       const answer = answers[method];
@@ -90,7 +96,7 @@ it("shows it is loading until the first answer, and an empty library once it arr
     await view.render(<RolePetPackagesPanel roleId="mira" disabled={false} client={client} onRoleDataChanged={() => undefined} />);
     assert.ok(view.container.querySelector('[role="status"]'));
     assert.doesNotMatch(view.container.textContent ?? "", /暂无桌宠素材包/);
-    await act(async () => { answer?.({ selected_package_id: null, packages: [] }); await Promise.resolve(); });
+    await act(async () => { answer?.({ selected_model: null, packages: [], providers }); await Promise.resolve(); });
     assert.equal(view.container.querySelector('[role="status"]'), null);
     assert.match(view.container.textContent ?? "", /暂无桌宠素材包/);
   } finally { await view.cleanup(); }
@@ -116,7 +122,7 @@ it("asks for the open role's packages, and for no role asks for nothing", async 
   } finally { await view.cleanup(); }
 });
 
-it("selecting a package tells the host to re-read the role and the pet to re-resolve", async () => {
+it("selecting a package prepares it in the background before refreshing the saved role", async () => {
   const calls: Call[] = [];
   let roleDataChanged = 0;
   const view = await mountTestComponent(null);
@@ -134,14 +140,12 @@ it("selecting a package tells the host to re-read the role and the pet to re-res
     await act(async () => { await Promise.resolve(); });
 
     assert.deepEqual(calls.at(-2), {
-      method: "pets.select",
-      payload: { role_id: "mira", package_id: "mira-pet" },
+      method: "background.select",
+      payload: { role_id: "mira", provider, model_id: "mira-pet" },
     });
-    // Both are load-bearing: without the first the host's capability toggle
-    // stays greyed out after a successful select; without the second the pet on
-    // screen keeps rendering the old package.
     assert.equal(roleDataChanged, 1);
-    assert.equal(calls.at(-1)?.method, "background.sync");
+    assert.equal(calls.at(-1)?.method, "pets.list");
+    assert.equal(calls.some((call) => call.method === "pets.select"), false);
   } finally { await view.cleanup(); }
 });
 
@@ -178,7 +182,7 @@ it("removing a package waits for confirmation, then tells the host to re-read th
   try {
     await view.render(<RolePetPackagesPanel
       roleId="mira" disabled={false}
-      client={fakeClient({ "pets.remove": { selected_package_id: null, packages: [] } }, calls)}
+      client={fakeClient({ "pets.remove": { selected_model: null, packages: [], providers } }, calls)}
       onRoleDataChanged={() => { roleDataChanged += 1; }}
     />);
     await act(async () => { await Promise.resolve(); });
@@ -199,7 +203,7 @@ it("removing a package waits for confirmation, then tells the host to re-read th
 
     assert.deepEqual(calls.at(-2), {
       method: "pets.remove",
-      payload: { role_id: "mira", package_id: "mira-pet" },
+      payload: { role_id: "mira", provider, model_id: "mira-pet" },
     });
     // Removing the selected package makes the backend clear
     // `desktop_pet_enabled` too. Without this the role form keeps a stale
@@ -215,8 +219,8 @@ it("a response for the previous role is discarded rather than shown under the ne
   const slowClient: PluginRpcClient = createFakePluginClient({
     call: <T,>() => new Promise<T>((resolve) => {
       releaseFirst = () => resolve({
-        selected_package_id: "old-pet",
-        packages: [{ id: "old-pet", display_name: "旧角色的包", preview_abs: null }],
+        selected_model: { provider, model_id: "old-pet" }, providers,
+        packages: [{ id: "old-pet", provider, display_name: "旧角色的包", preview_abs: null }],
       } as T);
     }),
   });
@@ -243,7 +247,7 @@ it("a response for the previous role is discarded rather than shown under the ne
 });
 
 
-it("imports through the injected picker and retains the pets.import role/source contract", async () => {
+it("imports through the selected provider policy and retains role isolation", async () => {
   const calls: Call[] = [];
   const selected: unknown[] = [];
   let refreshed = 0;
@@ -257,7 +261,7 @@ it("imports through the injected picker and retains the pets.import role/source 
     await act(async () => { button.click(); });
     assert.equal(selected.length, 1);
     assert.deepEqual(calls.at(-1), { method: "pets.import", payload: {
-      role_id: "mira", source: "/private/imports/desktop_pet-pets/selected.zip",
+      role_id: "mira", provider, source: "/private/imports/desktop_pet-pets/selected.zip",
     } });
     assert.equal(refreshed, 1);
   } finally { await view.cleanup(); }

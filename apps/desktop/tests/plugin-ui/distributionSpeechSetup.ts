@@ -22,9 +22,10 @@ export async function prepareSpeech(app: SpeechApp, url: string, assets: { pet: 
   const reference = await app.pluginCall("gpt_sovits_tts", "reference.import", { role_id: "speech-fixture", source });
   const voiceReference = { asset: reference.asset, prompt_text: "这是参考音频。", prompt_lang: "zh" };
   await app.pluginCall("gpt_sovits_tts", "role.set", { role_id: "speech-fixture", voice: { text_lang: "zh", speed: 1, default: voiceReference, moods: { happy: voiceReference, sad: voiceReference } } });
-  const petSource = await app.pick(assets.pet, "desktop_pet-pets", "zip");
-  await app.pluginCall("desktop_pet", "pets.import", { role_id: "speech-fixture", source: petSource });
-  await app.pluginCall("desktop_pet", "pets.select", { role_id: "speech-fixture", package_id: "speech-fixture" });
+  const provider = { plugin_id: "pet_codex_sprite", service_id: "models" };
+  const petSource = await app.pick(assets.pet, "pet_codex_sprite-pets", "zip");
+  await app.pluginCall("desktop_pet", "pets.import", { role_id: "speech-fixture", provider, source: petSource });
+  await app.pluginCall("desktop_pet", "pets.select", { role_id: "speech-fixture", provider, model_id: "speech-fixture" });
   await app.call("roles.update", { role_id: "speech-fixture", plugin_drafts: { desktop_pet: { enabled: true } } });
   await app.pluginCall("desktop_pet", "sync", { forceVisible: true }, true);
   const page = app.page!;

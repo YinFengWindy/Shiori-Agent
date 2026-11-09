@@ -7,6 +7,7 @@
     "bilibili.login.poll",
     "bilibili.login.start",
     "binding.get",
+    "binding.preview",
     "bubble.dismiss",
     "live.config.get",
     "live.config.set",
@@ -48,7 +49,12 @@
     {
       "name": "binding.get",
       "path": "plugins/desktop_pet/backend/plugin.py",
-      "line": 72
+      "line": 74
+    },
+    {
+      "name": "binding.preview",
+      "path": "plugins/desktop_pet/backend/plugin.py",
+      "line": 77
     },
     {
       "name": "bubble.dismiss",
@@ -98,22 +104,22 @@
     {
       "name": "pets.import",
       "path": "plugins/desktop_pet/backend/plugin.py",
-      "line": 80
+      "line": 85
     },
     {
       "name": "pets.list",
       "path": "plugins/desktop_pet/backend/plugin.py",
-      "line": 75
+      "line": 80
     },
     {
       "name": "pets.remove",
       "path": "plugins/desktop_pet/backend/plugin.py",
-      "line": 81
+      "line": 86
     },
     {
       "name": "pets.select",
       "path": "plugins/desktop_pet/backend/plugin.py",
-      "line": 82
+      "line": 87
     },
     {
       "name": "voice.context.get",

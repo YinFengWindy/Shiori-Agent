@@ -1,72 +1,12 @@
-import type { DesktopPetActionState, DesktopPetBinding } from "./types";
-
-const actionStates = new Set<string>([
-  "idle",
-  "running-right",
-  "running-left",
-  "waving",
-  "jumping",
-]);
-
-/**
- * Turns a `desktop_pet.binding.get` response into a binding, or `null`.
- *
- * `null` covers every "nothing to show" case in one answer — no pet-enabled
- * role, no selected package, a package whose spritesheet the host would not
- * grant — because the only caller does the same thing for all of them: hide
- * the pet. Before #181-C this parsing sat in `main.ts` and read the core
- * `roles.list` payload directly; it now reads the plugin's own RPC, which is
- * the only bridge namespace background code can reach.
- *
- * `resolveAssetUrl` is `ctx.assets.url`. A granted path becomes an opaque
- * `shiori-asset://` URL; an ungranted one is `null`, and is treated as no
- * binding at all rather than as a pet with a broken image.
- */
-export function readDesktopPetBinding(
-  value: unknown,
-  resolveAssetUrl: (path: string) => string | null,
-): DesktopPetBinding | null {
-  if (!value || typeof value !== "object") return null;
-  const binding = (value as { binding?: unknown }).binding;
-  if (!binding || typeof binding !== "object") return null;
-  const source = binding as { role_id?: unknown; package?: unknown; actions?: unknown };
-  if (typeof source.role_id !== "string" || !source.role_id) return null;
-  if (!source.package || typeof source.package !== "object") return null;
-  const packageValue = source.package as {
-    id?: unknown;
-    display_name?: unknown;
-    spritesheet_abs?: unknown;
-  };
-  if (typeof packageValue.id !== "string" || !packageValue.id) return null;
-  if (typeof packageValue.display_name !== "string") return null;
-  if (typeof packageValue.spritesheet_abs !== "string") return null;
-  const spritesheetUrl = resolveAssetUrl(packageValue.spritesheet_abs);
-  if (!spritesheetUrl) return null;
-  return {
-    roleId: source.role_id,
-    package: {
-      id: packageValue.id,
-      displayName: packageValue.display_name,
-      spritesheetUrl,
-    },
-    actions: readActions(source.actions),
-  };
-}
-
-/**
- * Keeps only action states the sprite atlas can actually play.
- *
- * The backend validates these on package import, but a package file edited by
- * hand afterwards would reach here unchecked, and an unknown state would leave
- * the pet frozen mid-action with nothing on screen to explain it.
- */
-function readActions(value: unknown): Record<string, DesktopPetActionState> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const result: Record<string, DesktopPetActionState> = {};
-  for (const [name, state] of Object.entries(value)) {
-    if (typeof state === "string" && actionStates.has(state)) {
-      result[name] = state as DesktopPetActionState;
-    }
-  }
-  return result;
+import { isRecord, nonempty, readPetModelReference, type PetBinding } from "@yinfengwindy/shiori-pet";
+/** Reads only provider-neutral binding data; missing providers are backend errors. */
+export function readDesktopPetBinding(value: unknown): PetBinding | null {
+  if (!isRecord(value)) throw new Error("桌宠绑定响应无效");
+  if (value.binding === null) return null;
+  const binding = value.binding;
+  if (!isRecord(binding) || !nonempty(binding.role_id) || !isRecord(binding.model)) throw new Error("桌宠绑定无效");
+  const model = binding.model;
+  const reference = readPetModelReference({ provider: binding.provider, model_id: model.id });
+  if (!reference || !nonempty(model.display_name) || !isRecord(model.body) || typeof model.body.width !== "number" || typeof model.body.height !== "number" || !Number.isFinite(model.body.width) || !Number.isFinite(model.body.height) || model.body.width <= 0 || model.body.height <= 0 || !Array.isArray(model.actions) || !model.actions.every(nonempty)) throw new Error("桌宠模型描述无效");
+  return { role_id: binding.role_id, provider: reference.provider, model: { id: reference.model_id, display_name: model.display_name, body: { width: model.body.width, height: model.body.height }, actions: model.actions, ...(typeof model.preview_abs === "string" ? { preview_abs: model.preview_abs } : {}) } };
 }

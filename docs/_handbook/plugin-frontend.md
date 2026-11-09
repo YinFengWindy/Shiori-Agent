@@ -89,6 +89,10 @@ UI 组件、surface 和后台模块都收到注入的 `client`（`PluginRpcClien
 
 ## surface
 
+SDK 4.1.1 起，`surfaces.create` 的 `SurfaceSpec.visible` 可设为 `false`：窗口准备期间保持隐藏，`ready()` 只重放状态，由 background 显式 `show()` 交接。默认值仍是 `true`。
+
+background 可订阅 `surfaceLifecycleEvent`（`surface.lifecycle`），按 `SurfaceLifecyclePayload` 的 `plugin_id`、`surface_id` 和 `window_id` 识别自己的实例。`unavailable` 表示 renderer 重载/崩溃而失去就绪状态，`closed` 表示窗口已销毁；提供者应撤销相应实例的加载或展示，不用心跳推测宿主已知的窗口生命周期。
+
 surface 组件收到 `SurfaceHandle`（`PluginSurfaceComponentProps`）。`onRoleActivity(listener)` 只给交互目标可用的 surface 推送 `SurfaceRoleActivity`（`roleId`、`sessionKey`、`phase`、`notify`），目标变化时推 `null`。窗口隐藏、关闭、重载或崩溃都会撤销交互目标。原始后端事件订阅和 `window.miraDesktop` 不是插件 API。语音手势、播放队列等归插件自己（桌宠）。
 
 ## 测试入口

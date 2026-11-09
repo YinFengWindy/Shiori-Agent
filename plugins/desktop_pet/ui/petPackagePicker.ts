@@ -1,15 +1,7 @@
 import type { NativeFilePickerOptions, PluginHostServices } from "@yinfengwindy/shiori-sdk";
 
-/** Pet package format and staging policy belongs to this plugin. */
-export const petPackagePickerOptions: NativeFilePickerOptions = {
-  namespace: "desktop_pet-pets",
-  filters: [{ name: "Codex Pet Package", extensions: ["zip"] }],
-  multiple: false,
-  maxFileBytes: 32 * 1024 * 1024,
-};
-
 /** Returns a private staged ZIP path or null when native selection is cancelled. */
-export async function pickPetPackageFile(pickFiles: PluginHostServices["pickFiles"]) {
-  const [source] = await pickFiles(petPackagePickerOptions);
+export async function pickPetPackageFile(pickFiles: PluginHostServices["pickFiles"], options: NativeFilePickerOptions) {
+  const [source] = await pickFiles(options);
   return source ?? null;
 }

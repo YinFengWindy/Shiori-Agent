@@ -1,0 +1,27 @@
+{
+  "plugin_id": "pet_codex_sprite",
+  "dependencies": [
+    "desktop_pet"
+  ],
+  "methods": [
+    "presentation.ready"
+  ],
+  "registrations": [
+    {
+      "name": "presentation.ready",
+      "path": "plugins/pet_codex_sprite/backend/plugin.py",
+      "line": 33
+    }
+  ],
+  "services": [
+    {
+      "service_id": "models",
+      "contract": "shiori.pet-models.v1",
+      "methods": [
+        "get",
+        "list",
+        "present"
+      ]
+    }
+  ]
+}

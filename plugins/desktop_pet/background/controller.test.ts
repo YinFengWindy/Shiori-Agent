@@ -1,299 +1,154 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { PluginBackgroundSettled, SurfaceInteractionTarget } from "@yinfengwindy/shiori-sdk";
+import type { PetBinding, PetPresentationRequest, PetProviderReport } from "@yinfengwindy/shiori-pet";
+import { DesktopPetController } from "./controller";
+import { normalizeDesktopPetSettings } from "./settings";
 import { deferred } from "@yinfengwindy/shiori-sdk/testing";
-import { DesktopPetController, desktopPetSurfaceId, desktopPetAgentMoveDurationMs, type DesktopPetSurfaces } from "./controller";
-import { desktopPetBody, type DesktopPetBinding, type DesktopPetSettings } from "./types";
 
-const workArea = { x: 0, y: 0, width: 1920, height: 1080 };
-const binding: DesktopPetBinding = {
-  roleId: "role-1",
-  package: { id: "pet-1", displayName: "Pet", spritesheetUrl: "shiori-asset://local/pet-1" },
-  actions: { greeting: "waving" },
-};
-
-function harness(initial: Partial<DesktopPetSettings> = {}) {
-  const creates: Parameters<DesktopPetSurfaces["create"]>[] = [];
-  const positions: Parameters<DesktopPetSurfaces["setPosition"]>[] = [];
-  const moves: Parameters<DesktopPetSurfaces["moveTo"]>[] = [];
-  const posts: unknown[] = [];
-  const states: unknown[] = [];
-  const targets: (SurfaceInteractionTarget | null)[] = [];
-  const destroyed: string[] = [];
-  const saves: DesktopPetSettings[] = [];
-  const errors: string[] = [];
-  let nextBinding: DesktopPetBinding | null = binding;
-  let createGate: Promise<void> = Promise.resolve();
-  let bindingGate: Promise<void> = Promise.resolve();
-  let areaGate: Promise<void> = Promise.resolve();
-  let saveGate: Promise<void> = Promise.resolve();
-  const surfaces: DesktopPetSurfaces = {
-    create: async (...args) => { creates.push(args); await createGate; return { x: 100, y: 200, displayId: "display-1" }; },
-    destroy: async (id) => { destroyed.push(id); },
-    setPosition: (...args) => { positions.push(args); },
-    moveTo: (...args) => { moves.push(args); },
-    post: (_id, value) => { posts.push(value); },
-    setState: (_id, value) => { states.push(value); },
-    setInteraction: (_id, target) => { targets.push(target); },
-    workArea: async () => { await areaGate; return workArea; },
-  };
+const provider = { plugin_id: "sprite", service_id: "models" };
+const binding: PetBinding = { role_id: "r", provider, model: { id: "first", display_name: "One", body: { width: 200, height: 300 }, actions: ["wave"] } };
+async function flush() { for (let i = 0; i < 30; i++) await Promise.resolve(); }
+function harness(timeoutMs = 100) {
+  const commands: PetPresentationRequest[] = [];
+  const visible = new Set<string>();
+  const committed: string[] = [];
+  const targets: string[] = [];
+  const errors: unknown[] = [];
+  let answer: PetBinding | null = binding;
+  let hold = false;
+  let rejectPrepare = false;
+  let rejectCommit = false;
+  let unavailable = false;
+  let largestVisible = 0;
+  let delayedKind: "hidden" | "shown" | null = null;
+  let delayedReport: { command: PetPresentationRequest; kind: "hidden" | "shown" } | null = null;
+  let commitGate: Promise<void> = Promise.resolve();
+  let committing = false;
   const controller = new DesktopPetController({
-    surfaces,
-    settings: { visible: false, roleId: null, packageId: null, positions: {}, ...initial },
-    saveSettings: async (value) => { saves.push(value); await saveGate; },
-    resolveBinding: async () => { await bindingGate; return nextBinding; },
-    onError: (operation) => { errors.push(operation); },
+    settings: normalizeDesktopPetSettings(null), timeoutMs,
+    saveSettings: async () => {}, resolveBinding: async () => answer,
+    preview: async (roleId, ref) => ({ ...binding, role_id: roleId, provider: ref.provider, model: { ...binding.model, id: ref.model_id } }),
+    select: async (_roleId, ref) => { committing = true; await commitGate; if (rejectCommit) throw new Error("save failed"); committed.push(ref.model_id); },
+    onError: (_op, error) => errors.push(error),
+    services: {
+      list: async () => ({ services: [] }),
+      call: async <T,>(_service: unknown, _method: string, payload?: Record<string, unknown>) => {
+        const command = payload as PetPresentationRequest;
+        commands.push(command);
+        if (unavailable) throw new Error("provider unavailable");
+        if (command.op === "prepare" && rejectPrepare) { report(command, "failed"); }
+        else if (command.op === "prepare" && !hold) report(command, "ready");
+        else if (command.op === "show") { visible.add(command.lease_id); largestVisible = Math.max(largestVisible, visible.size); complete(command, "shown"); }
+        else if (command.op === "hide") { visible.delete(command.lease_id); complete(command, "hidden"); }
+        else if (command.op === "close") { visible.delete(command.lease_id); report(command, "closed"); }
+        return { accepted: true } as T;
+      },
+    },
   });
-  return {
-    controller, creates, positions, moves, posts, states, targets, destroyed, saves, errors,
-    setBinding: (value: DesktopPetBinding | null) => { nextBinding = value; },
-    holdCreate: (value: Promise<void>) => { createGate = value; },
-    holdBinding: (value: Promise<void>) => { bindingGate = value; },
-    holdArea: (value: Promise<void>) => { areaGate = value; },
-    holdSave: (value: Promise<void>) => { saveGate = value; },
+  const report = (command: PetPresentationRequest, kind: PetProviderReport["kind"]) => controller.report({ ...command, kind, error: kind === "failed" ? "load failed" : undefined });
+  const complete = (command: PetPresentationRequest, kind: "hidden" | "shown") => {
+    if (kind === delayedKind) { delayedKind = null; delayedReport = { command, kind }; }
+    else report(command, kind);
   };
+  controller.watchTarget((role) => targets.push(role));
+  return { controller, commands, visible, committed, targets, errors, report, maxVisible: () => largestVisible,
+    delay: (kind: "hidden" | "shown") => { delayedKind = kind; }, delayed: () => delayedReport,
+    release: () => { if (delayedReport) { report(delayedReport.command, delayedReport.kind); delayedReport = null; } },
+    holdCommit: (promise: Promise<void>) => { commitGate = promise; }, committing: () => committing,
+    hold: (value: boolean) => { hold = value; }, fail: () => { rejectPrepare = true; }, failCommit: () => { rejectCommit = true; },
+    available: (value: boolean) => { unavailable = !value; }, binding: (value: PetBinding | null) => { answer = value; } };
 }
+const selection = (model_id: string) => ({ role_id: "r", provider, model_id });
 
-const flush = async () => { for (let step = 0; step < 8; step++) await Promise.resolve(); };
-const move = { role_id: "role-1", channel: "desktop", kind: "move", target: "bottom_right", animation: "run" };
-function settled(reason: PluginBackgroundSettled["reason"], x = 500): PluginBackgroundSettled {
-  return { reason, displayId: "display-1", placement: { anchor: { x, y: 400 }, bodyOffset: { x: 0, y: 0 }, workArea } };
-}
-
-test("show creates the declared body, retains content and declares the role independently of persistence", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  assert.deepEqual(pet.creates, [[desktopPetSurfaceId, { body: desktopPetBody }, { x: Number.MAX_SAFE_INTEGER, y: Number.MAX_SAFE_INTEGER }]]);
-  assert.deepEqual(pet.states, [{ load: { package: binding.package, state: "idle" }, reply: { text: "", paused: false, persistent: false } }]);
-  assert.deepEqual(pet.targets.at(-1), { roleId: "role-1", available: true });
-  assert.equal(pet.controller.isRunning, true);
-});
-
-test("a reply arriving during create remains retained after restore", async () => {
-  const pet = harness();
-  const gate = deferred<void>();
-  pet.holdCreate(gate.promise);
-  const showing = pet.controller.show();
-  await flush();
-  pet.controller.replies.handleEvent({ id: "reply", type: "event", method: "chat.done", payload: { role_id: "role-1", reply: "正在启动时的回复" } });
-  gate.resolve();
-  await showing;
-  await pet.controller.restore();
-  assert.deepEqual(pet.states.at(-1), { load: { package: binding.package, state: "idle" }, reply: { text: "正在启动时的回复", paused: false, persistent: false } });
+test("same-role handover keeps output binding and never displays two models", async () => {
+  const pet = harness(); await pet.controller.show();
+  pet.controller.replies.show({ source: "live" }, "r", "直播回复", { kind: "hold" });
+  pet.hold(true);
+  const switching = pet.controller.select(selection("second")); await flush();
+  assert.equal(pet.visible.size, 1); assert.deepEqual(pet.committed, []);
+  const prepare = pet.commands.filter((command) => command.op === "prepare").at(-1)!;
+  pet.report(prepare, "ready"); await switching;
+  assert.deepEqual(pet.committed, ["second"]); assert.deepEqual(pet.targets, ["r"]);
+  assert.equal(pet.maxVisible(), 1);
+  assert.equal(pet.commands.filter((command) => command.op === "update").at(-1)?.state?.reply.text, "直播回复");
   await pet.controller.terminate();
 });
-
-test("disable during create destroys the eventual window without declaring or saving visible state", async () => {
-  const pet = harness();
-  const gate = deferred<void>();
-  pet.holdCreate(gate.promise);
-  const showing = pet.controller.show();
-  await flush();
-  const stopping = pet.controller.terminate();
-  gate.resolve();
-  await Promise.all([showing, stopping]);
-  assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
-  assert.deepEqual(pet.targets, []);
-  assert.deepEqual(pet.states, []);
-  assert.deepEqual(pet.saves, []);
-});
-
-test("reply updates retain the package alongside the bubble", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  pet.controller.replies.setLocked(true);
-  assert.deepEqual(pet.states.at(-1), { load: { package: binding.package, state: "idle" }, reply: { text: "Windows 已锁定", paused: true, persistent: true } });
+test("a failed candidate keeps the old selection and active window", async () => {
+  const pet = harness(); await pet.controller.show(); const previous = [...pet.visible]; pet.fail();
+  await assert.rejects(pet.controller.select(selection("broken")), /load failed/);
+  assert.deepEqual([...pet.visible], previous); assert.deepEqual(pet.committed, []); assert.deepEqual(pet.targets, ["r"]);
   await pet.controller.terminate();
 });
-
-test("restore applies only the remembered position for the returned display", async () => {
-  for (const display of ["display-1", "display-other"]) {
-    const pet = harness({ visible: true, roleId: "role-1", packageId: "pet-1", positions: { [`role-1:${display}`]: { x: 510, y: 800 } } });
-    await pet.controller.restore();
-    assert.deepEqual(pet.positions, display === "display-1" ? [[desktopPetSurfaceId, { x: 510, y: 800 }]] : []);
-  }
-});
-
-test("only drag, momentum and requested move settlements persist positions", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  pet.saves.length = 0;
-  for (const reason of ["create", "position", "extension", "ready"] as const) pet.controller.handleSettled(settled(reason));
-  assert.equal(pet.saves.length, 0);
-  for (const reason of ["drag", "momentum", "move"] as const) pet.controller.handleSettled(settled(reason));
-  assert.equal(pet.saves.length, 3);
-  assert.deepEqual(pet.saves.at(-1)?.positions["role-1:display-1"], { x: 500, y: 400 });
-});
-
-test("hide immediately revokes interaction and then destroys the surface", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  const hiding = pet.controller.hide();
-  assert.equal(pet.targets.at(-1), null);
-  await hiding;
-  assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
-  assert.equal(pet.controller.isRunning, false);
-  assert.equal(pet.controller.currentSettings.visible, false);
-});
-
-test("new hide intent retires an older binding read without re-admitting or saving visible state", async () => {
-  for (const hideViaSync of [false, true]) {
-    const pet = harness();
-    await pet.controller.show();
-    pet.saves.length = 0;
-    const bindingReady = deferred<void>();
-    const saveReady = deferred<void>();
-    pet.holdBinding(bindingReady.promise);
-    pet.holdSave(saveReady.promise);
-    const syncing = pet.controller.sync();
-    await flush();
-    const hiding = hideViaSync ? pet.controller.sync(false) : pet.controller.hide();
-    assert.equal(pet.targets.at(-1), null);
-    const afterHide = pet.targets.length;
-    bindingReady.resolve();
-    await flush();
-    assert.ok(pet.targets.slice(afterHide).every((target) => target === null));
-    assert.deepEqual(pet.saves.map((settings) => settings.visible), [false]);
-    const showingAgain = pet.controller.show();
-    await flush();
-    assert.ok(pet.targets.slice(afterHide).every((target) => target === null));
-    saveReady.resolve();
-    await Promise.all([syncing, hiding, showingAgain]);
-    assert.deepEqual(pet.targets.at(-1), { roleId: "role-1", available: true });
-    assert.equal(pet.controller.currentSettings.visible, true);
-  }
-});
-
-test("hide during create never publishes the obsolete show and a later show still works", async () => {
-  const pet = harness();
-  const created = deferred<void>();
-  pet.holdCreate(created.promise);
-  const showing = pet.controller.show();
-  await flush();
-  const hiding = pet.controller.hide();
-  created.resolve();
-  await Promise.all([showing, hiding]);
-  assert.deepEqual(pet.targets, []);
-  assert.deepEqual(pet.states, []);
-  assert.deepEqual(pet.saves.map((settings) => settings.visible), [false]);
-  assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
-  await pet.controller.show();
-  assert.equal(pet.creates.length, 2);
-  assert.deepEqual(pet.targets.at(-1), { roleId: "role-1", available: true });
-});
-
-test("hide retires already queued show requests before they open a window", async () => {
-  const pet = harness();
-  const showing = pet.controller.show();
-  const hiding = pet.controller.hide();
-  await Promise.all([showing, hiding]);
-  assert.deepEqual(pet.creates, []);
-  assert.deepEqual(pet.targets, []);
-  assert.deepEqual(pet.saves.map((settings) => settings.visible), [false]);
-});
-
-test("forced hide still refreshes role-save binding metadata after reclaiming the window", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  const bindingReady = deferred<void>();
-  pet.holdBinding(bindingReady.promise);
-  pet.setBinding(null);
-  const hiding = pet.controller.sync(false);
-  await flush();
-  assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
-  assert.equal(pet.targets.at(-1), null);
-  bindingReady.resolve();
-  await hiding;
-  assert.equal(pet.controller.currentSettings.visible, false);
-  assert.equal(pet.controller.currentSettings.roleId, null);
-  assert.equal(pet.controller.currentSettings.packageId, null);
-});
-
-test("disable destroys a running surface and a pending binding never opens one", async () => {
-  const pet = harness();
-  await pet.controller.show();
+test("a failed selection write restores the old window without overlap", async () => {
+  const pet = harness(); await pet.controller.show(); const previous = [...pet.visible]; pet.failCommit();
+  await assert.rejects(pet.controller.select(selection("second")), /save failed/);
+  assert.deepEqual([...pet.visible], previous); assert.equal(pet.maxVisible(), 1); assert.deepEqual(pet.committed, []);
   await pet.controller.terminate();
-  assert.deepEqual(pet.destroyed, [desktopPetSurfaceId]);
-  const pending = harness();
-  const gate = deferred<void>();
-  pending.holdBinding(gate.promise);
-  const showing = pending.controller.show();
-  const stopping = pending.controller.terminate();
-  gate.resolve();
-  await Promise.all([showing, stopping]);
-  assert.deepEqual(pending.creates, []);
-  assert.deepEqual(pending.targets, []);
+});
+test("hide revokes a pending prepare and a late ready cannot reopen it", async () => {
+  const pet = harness(); pet.hold(true);
+  const showing = pet.controller.show(); const rejected = assert.rejects(showing, /撤销/); await flush();
+  const prepare = pet.commands.find((command) => command.op === "prepare")!;
+  await pet.controller.hide(); await rejected; pet.report(prepare, "ready"); await flush();
+  assert.equal(pet.visible.size, 0); assert.equal(pet.controller.currentSettings.visible, false); assert.deepEqual(pet.targets, []);
+  await pet.controller.terminate();
+});
+test("timeout closes the candidate and ignores stale readiness", async () => {
+  const pet = harness(5); pet.hold(true);
+  await assert.rejects(pet.controller.show(), /超时/);
+  const prepare = pet.commands.find((command) => command.op === "prepare")!; pet.report(prepare, "ready"); await flush();
+  assert.equal(pet.visible.size, 0); assert.equal(pet.commands.at(-1)?.op, "close"); await pet.controller.terminate();
+});
+test("provider availability retries startup but cannot undo a later hide", async () => {
+  const pet = harness(); pet.available(false); await assert.rejects(pet.controller.restore(), /unavailable/);
+  pet.available(true); await pet.controller.available("sprite"); assert.equal(pet.visible.size, 1);
+  await pet.controller.hide(); await pet.controller.available("sprite"); assert.equal(pet.visible.size, 0);
+  await pet.controller.terminate();
+});
+test("provider loss retires only the matching role and lease", async () => {
+  const pet = harness(); await pet.controller.show(); const prepare = pet.commands[0];
+  pet.controller.report({ ...prepare, lease_id: "old", kind: "lost" }); assert.equal(pet.controller.isRunning, true);
+  pet.report(prepare, "lost"); await flush(); assert.equal(pet.controller.isRunning, false); assert.deepEqual(pet.targets, ["r", ""]);
+  assert.equal(pet.controller.currentSettings.model?.model_id, "first"); await pet.controller.terminate();
 });
 
-test("rebinding reuses the window and replaces its role target", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  const replacement = { ...binding, roleId: "role-2", package: { ...binding.package, id: "pet-2" } };
-  pet.setBinding(replacement);
-  await pet.controller.sync(true);
-  assert.equal(pet.creates.length, 1);
-  assert.deepEqual(pet.states.at(-1), { load: { package: replacement.package, state: "idle" }, reply: { text: "", paused: false, persistent: false } });
-  assert.deepEqual(pet.targets.slice(-2), [null, { roleId: "role-2", available: true }]);
-});
-
-test("a missing binding destroys the surface and clears saved selection", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  pet.setBinding(null);
-  await pet.controller.sync();
-  assert.equal(pet.controller.isRunning, false);
-  assert.equal(pet.controller.currentSettings.roleId, null);
-  assert.equal(pet.controller.currentSettings.packageId, null);
-  assert.equal(pet.controller.currentSettings.visible, false);
-  assert.equal(pet.targets.at(-1), null);
-});
-
-test("declared play actions are transient and never replace retained animation state", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  const previous = pet.states.at(-1);
-  pet.controller.handleAgentAction({ ...move, kind: "play", name: "greeting" });
-  assert.deepEqual(pet.posts, [{ state: "waving", transient: true }]);
-  assert.equal(pet.states.at(-1), previous);
-});
-
-test("agent corner and centre moves delegate animation to the host and persist only the landing", async () => {
-  const pet = harness();
-  await pet.controller.show();
-  pet.saves.length = 0;
-  pet.controller.handleAgentAction(move);
-  await flush();
-  assert.deepEqual(pet.moves, [[desktopPetSurfaceId, { x: 1920, y: 1080 }, desktopPetAgentMoveDurationMs]]);
-  assert.deepEqual(pet.posts, [{ state: "running-right", transient: true }]);
-  assert.equal(pet.saves.length, 0);
-  pet.controller.handleSettled(settled("move"));
-  assert.equal(pet.saves.length, 1);
-  pet.controller.handleAgentAction({ ...move, target: "center" });
-  await flush();
-  assert.deepEqual(pet.moves.at(-1), [desktopPetSurfaceId, { x: (1920 - desktopPetBody.width) / 2, y: (1080 - desktopPetBody.height) / 2 }, desktopPetAgentMoveDurationMs]);
-});
-
-test("foreign role and stopped-surface actions are ignored", async () => {
-  const pet = harness();
-  pet.controller.handleAgentAction(move);
-  await pet.controller.show();
-  pet.controller.handleAgentAction({ ...move, role_id: "other" });
-  await flush();
-  assert.deepEqual(pet.moves, []);
-});
-
-test("work-area replies cannot move a hidden or rebound target", async () => {
-  for (const change of ["hide", "rebind"] as const) {
-    const pet = harness();
-    await pet.controller.show();
+test("a newer selection of the old model restores visibility after an interrupted handover", async (context) => {
+  for (const boundary of ["hidden", "shown", "commit"] as const) await context.test(boundary, async () => {
+    const pet = harness(); await pet.controller.show(); const original = [...pet.visible];
     const gate = deferred<void>();
-    pet.holdArea(gate.promise);
-    pet.controller.handleAgentAction(move);
-    if (change === "hide") await pet.controller.hide();
-    else { pet.setBinding({ ...binding, roleId: "role-2" }); await pet.controller.sync(); }
-    gate.resolve();
+    if (boundary === "commit") pet.holdCommit(gate.promise); else pet.delay(boundary);
+    const switching = pet.controller.select(selection("second"));
+    // A newer UI context can accept another request while the first context has
+    // disconnected; provider effects and backend writes already accepted continue.
+    const interrupted = switching.catch(() => {});
     await flush();
-    assert.deepEqual(pet.moves, []);
-    assert.deepEqual(pet.errors, []);
-  }
+    if (boundary === "commit") assert.equal(pet.committing(), true);
+    else assert.ok(pet.delayed());
+    const selectingOriginal = pet.controller.select(selection("first"));
+    if (boundary === "commit") gate.resolve(); else pet.release();
+    await Promise.all([interrupted, selectingOriginal]);
+    assert.deepEqual([...pet.visible], original, "the original lease must be visible after reselecting it");
+    assert.equal(pet.controller.isRunning, true);
+    assert.equal(pet.controller.currentSettings.visible, true);
+    assert.equal(pet.controller.currentSettings.model?.model_id, "first");
+    assert.equal(pet.committed.at(-1), "first");
+    assert.equal(pet.maxVisible(), 1);
+    assert.deepEqual(pet.targets, ["r"], "model handover must not restart shared speech/live ownership");
+    await pet.controller.terminate();
+  });
+});
+
+test("an explicit hide during handover cannot be undone by old-window recovery", async () => {
+  const pet = harness(); await pet.controller.show(); pet.delay("hidden");
+  const switching = pet.controller.select(selection("second"));
+  const interrupted = switching.catch(() => {});
+  await flush(); assert.ok(pet.delayed());
+  const hiding = pet.controller.hide(); pet.release();
+  await Promise.all([interrupted, hiding]);
+  assert.equal(pet.visible.size, 0);
+  assert.equal(pet.controller.isRunning, false);
+  assert.equal(pet.controller.currentSettings.visible, false);
+  assert.equal(pet.commands.filter((command) => command.op === "show").length, 1);
+  assert.deepEqual(pet.committed, []);
+  await pet.controller.terminate();
 });

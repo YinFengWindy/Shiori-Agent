@@ -6,6 +6,7 @@ import type {
   SurfaceSettleReason,
   SurfaceExtension,
   SurfaceSpec,
+  SurfaceLifecyclePayload,
   SurfaceWorkArea,
 } from "@yinfengwindy/shiori-sdk/contract";
 import { noSurfaceExtension, type SurfaceBounds, type SurfacePoint } from "./contract.js";
@@ -78,6 +79,8 @@ export type DesktopSurfaceHostOptions = {
    */
   /** A target, readiness or visibility changed; consumers must revalidate active input. */
   onInteractionChanged?(): void;
+  /** Reports authoritative window loss without polling a renderer for liveness. */
+  onLifecycle?(payload: SurfaceLifecyclePayload): void;
   onSettled?(key: SurfaceKey, placement: SurfacePlacement, reason: SurfaceSettleReason): void;
   /** Opens a native context menu over a surface; resolves the chosen id, or null. */
   showContextMenu?(
@@ -202,7 +205,7 @@ export class DesktopSurfaceHost {
       moveTimer: null,
       retained: null,
       interaction: null,
-      visible: true,
+      visible: spec.visible ?? true,
       ready: false,
     };
     this.surfaces.set(id, record);
@@ -216,6 +219,7 @@ export class DesktopSurfaceHost {
       record.ready = false;
       this.stopInteractions(record);
       this.options.onInteractionChanged?.();
+      this.options.onLifecycle?.({ plugin_id: key.pluginId, surface_id: key.surfaceId, window_id: window.id, status: "unavailable" });
     });
     if (spec.clickThrough) window.setIgnoreMouseEvents(true, { forward: true });
     const applied = this.applyAnchor(record, anchor);
@@ -608,6 +612,7 @@ export class DesktopSurfaceHost {
     this.stopInteractions(record);
     this.surfaces.delete(surfaceKeyId(record.key));
     this.options.onInteractionChanged?.();
+    this.options.onLifecycle?.({ plugin_id: record.key.pluginId, surface_id: record.key.surfaceId, window_id: record.window.id, status: "closed" });
   }
 
   private require(key: SurfaceKey): SurfaceRecord {

@@ -1,36 +1,40 @@
-"""Persisted pet-state validation is owned by the plugin model."""
+"""Persisted intent survives provider absence and reads old selections."""
 
-from plugins.desktop_pet.backend.models import RolePetPackage, RolePetState
+import pytest
+from plugins.desktop_pet.backend.models import RolePetState
+
+REFERENCE = {
+    "provider": {"plugin_id": "test_provider", "service_id": "models"},
+    "model_id": "model",
+}
 
 
-def test_foreign_or_missing_selection_cannot_restore_enabled_pet():
-    package = RolePetPackage(
-        "pet",
-        "codex-sprite@1",
-        "Pet",
-        "assets/mira/pets/pet/pet.json",
-        "assets/mira/pets/pet/spritesheet.webp",
-        "today",
+def test_reference_survives_without_provider_metadata():
+    value = {"selected_model": REFERENCE, "desktop_pet_enabled": True}
+    state = RolePetState.from_dict("role", value)
+    assert state.to_dict() == value
+    assert (
+        RolePetState.from_dict(
+            "role", {"selected_model": None, "desktop_pet_enabled": True}
+        ).desktop_pet_enabled
+        is False
     )
-    for selected in ("another-package", None):
-        state = RolePetState.from_dict(
-            "mira",
-            {
-                "pet_packages": [package.to_dict()],
-                "selected_pet_package_id": selected,
-                "desktop_pet_enabled": True,
-            },
+
+
+def test_legacy_selection_is_projected_without_changing_source():
+    value = {
+        "pet_packages": [{"id": "pet"}],
+        "selected_pet_package_id": "pet",
+        "desktop_pet_enabled": True,
+    }
+    state = RolePetState.from_dict("role", value)
+    assert state.selected_model == {
+        "provider": {"plugin_id": "pet_codex_sprite", "service_id": "models"},
+        "model_id": "pet",
+    }
+    assert state.desktop_pet_enabled
+    assert "selected_model" not in value
+    with pytest.raises(ValueError):
+        RolePetState.from_dict(
+            "role", {"selected_model": {"provider": {}, "model_id": "pet"}}
         )
-        assert state.selected_pet_package_id is None
-        assert state.desktop_pet_enabled is False
-        assert state.pet_packages == [package]
-    restored = RolePetState.from_dict(
-        "mira",
-        {
-            "pet_packages": [package.to_dict()],
-            "selected_pet_package_id": "pet",
-            "desktop_pet_enabled": True,
-        },
-    )
-    assert restored.desktop_pet_enabled is True
-    assert RolePetState.from_dict("mira", restored.to_dict()) == restored
