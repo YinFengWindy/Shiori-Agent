@@ -51,6 +51,8 @@ export const pluginUiPeerExports: Record<string, string[]> = {
     "settingsGroupStackClass", "settingsInputClass",
     // Runtime API 3.1.1 (#734): the events that end a chat turn.
     "chatTerminalEventMethods", "isChatTerminalEvent",
+    // SDK 4.1.1: authoritative surface lifecycle events for presentation providers.
+    "surfaceLifecycleEvent",
     // Runtime API 3.1.1 (#720): the compact icon-only button.
     "compactIconButtonClass",
     // Unreleased (#827): the shared secondary sidebar shell.

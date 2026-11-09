@@ -3,6 +3,7 @@ import test from "node:test";
 import type { PetBinding, PetPresentationRequest, PetProviderReport } from "@yinfengwindy/shiori-pet";
 import { DesktopPetController } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
+import { deferred } from "@yinfengwindy/shiori-sdk/testing";
 
 const provider = { plugin_id: "sprite", service_id: "models" };
 const binding: PetBinding = { role_id: "r", provider, model: { id: "first", display_name: "One", body: { width: 200, height: 300 }, actions: ["wave"] } };
@@ -19,11 +20,15 @@ function harness(timeoutMs = 100) {
   let rejectCommit = false;
   let unavailable = false;
   let largestVisible = 0;
+  let delayedKind: "hidden" | "shown" | null = null;
+  let delayedReport: { command: PetPresentationRequest; kind: "hidden" | "shown" } | null = null;
+  let commitGate: Promise<void> = Promise.resolve();
+  let committing = false;
   const controller = new DesktopPetController({
     settings: normalizeDesktopPetSettings(null), timeoutMs,
     saveSettings: async () => {}, resolveBinding: async () => answer,
     preview: async (roleId, ref) => ({ ...binding, role_id: roleId, provider: ref.provider, model: { ...binding.model, id: ref.model_id } }),
-    select: async (_roleId, ref) => { if (rejectCommit) throw new Error("save failed"); committed.push(ref.model_id); },
+    select: async (_roleId, ref) => { committing = true; await commitGate; if (rejectCommit) throw new Error("save failed"); committed.push(ref.model_id); },
     onError: (_op, error) => errors.push(error),
     services: {
       list: async () => ({ services: [] }),
@@ -33,16 +38,23 @@ function harness(timeoutMs = 100) {
         if (unavailable) throw new Error("provider unavailable");
         if (command.op === "prepare" && rejectPrepare) { report(command, "failed"); }
         else if (command.op === "prepare" && !hold) report(command, "ready");
-        else if (command.op === "show") { visible.add(command.lease_id); largestVisible = Math.max(largestVisible, visible.size); report(command, "shown"); }
-        else if (command.op === "hide") { visible.delete(command.lease_id); report(command, "hidden"); }
+        else if (command.op === "show") { visible.add(command.lease_id); largestVisible = Math.max(largestVisible, visible.size); complete(command, "shown"); }
+        else if (command.op === "hide") { visible.delete(command.lease_id); complete(command, "hidden"); }
         else if (command.op === "close") { visible.delete(command.lease_id); report(command, "closed"); }
         return { accepted: true } as T;
       },
     },
   });
   const report = (command: PetPresentationRequest, kind: PetProviderReport["kind"]) => controller.report({ ...command, kind, error: kind === "failed" ? "load failed" : undefined });
+  const complete = (command: PetPresentationRequest, kind: "hidden" | "shown") => {
+    if (kind === delayedKind) { delayedKind = null; delayedReport = { command, kind }; }
+    else report(command, kind);
+  };
   controller.watchTarget((role) => targets.push(role));
   return { controller, commands, visible, committed, targets, errors, report, maxVisible: () => largestVisible,
+    delay: (kind: "hidden" | "shown") => { delayedKind = kind; }, delayed: () => delayedReport,
+    release: () => { if (delayedReport) { report(delayedReport.command, delayedReport.kind); delayedReport = null; } },
+    holdCommit: (promise: Promise<void>) => { commitGate = promise; }, committing: () => committing,
     hold: (value: boolean) => { hold = value; }, fail: () => { rejectPrepare = true; }, failCommit: () => { rejectCommit = true; },
     available: (value: boolean) => { unavailable = !value; }, binding: (value: PetBinding | null) => { answer = value; } };
 }
@@ -98,4 +110,45 @@ test("provider loss retires only the matching role and lease", async () => {
   pet.controller.report({ ...prepare, lease_id: "old", kind: "lost" }); assert.equal(pet.controller.isRunning, true);
   pet.report(prepare, "lost"); await flush(); assert.equal(pet.controller.isRunning, false); assert.deepEqual(pet.targets, ["r", ""]);
   assert.equal(pet.controller.currentSettings.model?.model_id, "first"); await pet.controller.terminate();
+});
+
+test("a newer selection of the old model restores visibility after an interrupted handover", async (context) => {
+  for (const boundary of ["hidden", "shown", "commit"] as const) await context.test(boundary, async () => {
+    const pet = harness(); await pet.controller.show(); const original = [...pet.visible];
+    const gate = deferred<void>();
+    if (boundary === "commit") pet.holdCommit(gate.promise); else pet.delay(boundary);
+    const switching = pet.controller.select(selection("second"));
+    // A newer UI context can accept another request while the first context has
+    // disconnected; provider effects and backend writes already accepted continue.
+    const interrupted = switching.catch(() => {});
+    await flush();
+    if (boundary === "commit") assert.equal(pet.committing(), true);
+    else assert.ok(pet.delayed());
+    const selectingOriginal = pet.controller.select(selection("first"));
+    if (boundary === "commit") gate.resolve(); else pet.release();
+    await Promise.all([interrupted, selectingOriginal]);
+    assert.deepEqual([...pet.visible], original, "the original lease must be visible after reselecting it");
+    assert.equal(pet.controller.isRunning, true);
+    assert.equal(pet.controller.currentSettings.visible, true);
+    assert.equal(pet.controller.currentSettings.model?.model_id, "first");
+    assert.equal(pet.committed.at(-1), "first");
+    assert.equal(pet.maxVisible(), 1);
+    assert.deepEqual(pet.targets, ["r"], "model handover must not restart shared speech/live ownership");
+    await pet.controller.terminate();
+  });
+});
+
+test("an explicit hide during handover cannot be undone by old-window recovery", async () => {
+  const pet = harness(); await pet.controller.show(); pet.delay("hidden");
+  const switching = pet.controller.select(selection("second"));
+  const interrupted = switching.catch(() => {});
+  await flush(); assert.ok(pet.delayed());
+  const hiding = pet.controller.hide(); pet.release();
+  await Promise.all([interrupted, hiding]);
+  assert.equal(pet.visible.size, 0);
+  assert.equal(pet.controller.isRunning, false);
+  assert.equal(pet.controller.currentSettings.visible, false);
+  assert.equal(pet.commands.filter((command) => command.op === "show").length, 1);
+  assert.deepEqual(pet.committed, []);
+  await pet.controller.terminate();
 });

@@ -5,7 +5,7 @@ import { desktopPetBindingPatch } from "./settings";
 import { PetPresentationTransport } from "./presentation";
 import type { DesktopPetSettings } from "./types";
 
-type Instance = { binding: PetBinding; leaseId: string };
+type Instance = { binding: PetBinding; leaseId: string; shown: boolean };
 /** Desktop-owned policy, with format-specific effects behind services. */
 export type DesktopPetControllerOptions = {
   services: PluginRpcClient["services"];
@@ -39,7 +39,7 @@ export class DesktopPetController {
     this.transport = new PetPresentationTransport(options.services, (report) => this.providerReport(report), options.timeoutMs);
     this.replies = new ReplyBubbleController((reply) => { this.state = { ...this.state, reply }; this.publish(); });
   }
-  get isRunning() { return this.active !== null; }
+  get isRunning() { return this.active?.shown ?? false; }
   get currentSettings() { return this.settings; }
   get visibleRoleId() { return this.target; }
   /** A model change within the same role does not restart speech or live output. */
@@ -122,36 +122,53 @@ export class DesktopPetController {
   }
   private async load(binding: PetBinding, epoch: number, commit?: () => Promise<unknown>) {
     const previous = this.active;
-    if (previous && bindingKey(previous.binding) === bindingKey(binding) && previous.binding.role_id === binding.role_id) { if (commit) await commit(); return; }
+    if (previous && bindingKey(previous.binding) === bindingKey(binding) && previous.binding.role_id === binding.role_id) {
+      // Identity survives a reversible handover hide. It does not prove that the
+      // old window is still visible when a newer intent selects the same model.
+      if (!previous.shown) await this.showInstance(previous);
+      if (!this.current(epoch)) return;
+      if (commit) await commit();
+      return;
+    }
     if (previous && previous.binding.role_id !== binding.role_id) await this.closeActive();
     const old = this.active;
-    const next: Instance = { binding, leaseId: crypto.randomUUID() };
+    const next: Instance = { binding, leaseId: crypto.randomUUID(), shown: false };
     this.preparing = next;
-    let oldHidden = false;
     try {
       const ready = await this.transport.request(binding, next.leaseId, "prepare", { state: this.state });
       if (!this.current(epoch)) return;
       const position = ready.placement ? this.settings.positions[`${binding.role_id}:${ready.placement.displayId}`] : undefined;
-      if (old) { await this.transport.request(old.binding, old.leaseId, "hide"); oldHidden = true; }
+      if (old) {
+        // The provider may hide before its completion reaches us. Retire the
+        // visibility claim before waiting, including timeout/interruption paths.
+        old.shown = false;
+        await this.transport.request(old.binding, old.leaseId, "hide");
+      }
       if (!this.current(epoch)) return;
-      await this.transport.request(binding, next.leaseId, "show", { state: this.state, ...(position ? { position } : {}) });
+      await this.showInstance(next, position);
       if (!this.current(epoch)) return;
       if (commit) await commit();
       if (!this.current(epoch)) return;
       this.active = next; this.preparing = null;
       this.bind(binding.role_id); this.publish();
       if (old) await this.close(old);
-    } catch (error) {
-      if (oldHidden && old && this.current(epoch)) {
-        await this.close(next);
-        try { await this.transport.request(old.binding, old.leaseId, "show", { state: this.state }); }
-        catch (restoreError) { this.failure(old, restoreError); }
-      }
-      throw error;
     } finally {
       if (this.preparing === next) this.preparing = null;
-      if (this.active !== next) await this.close(next);
+      if (this.active !== next) {
+        // A new intent also aborts this handover without throwing. Always close
+        // its candidate before restoring the old window, preserving one visible
+        // instance. An explicit hide/disable revokes target and must stay hidden.
+        await this.close(next);
+        if (old && this.active === old && !old.shown && !this.disposed && this.target === old.binding.role_id) {
+          try { await this.showInstance(old); }
+          catch (restoreError) { this.failure(old, restoreError); }
+        }
+      }
     }
+  }
+  private async showInstance(instance: Instance, position?: { x: number; y: number }) {
+    await this.transport.request(instance.binding, instance.leaseId, "show", { state: this.state, ...(position ? { position } : {}) });
+    instance.shown = true;
   }
   private publish() {
     const active = this.active;
@@ -181,7 +198,10 @@ export class DesktopPetController {
     this.epoch += 1;
     this.retryProvider = null;
     if (this.preparing) this.transport.cancel(this.preparing.leaseId);
-    if (revoke) this.bind("");
+    if (revoke) {
+      this.bind("");
+      if (this.active) this.transport.cancel(this.active.leaseId);
+    }
     return this.epoch;
   }
   private current(epoch: number) { return !this.disposed && this.epoch === epoch; }
@@ -192,6 +212,7 @@ export class DesktopPetController {
   }
   private async closeActive() { const active = this.active; this.active = null; this.bind(""); if (active) await this.close(active); }
   private async close(instance: Instance) {
+    instance.shown = false;
     this.transport.cancel(instance.leaseId);
     try { await this.transport.request(instance.binding, instance.leaseId, "close"); }
     catch (error) { this.options.onError("presentation.close", error); }
