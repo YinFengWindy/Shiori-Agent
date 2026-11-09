@@ -33,7 +33,7 @@ describe("desktop CSP", () => {
     assert.doesNotMatch(policy, /script-src[^;]*'unsafe-inline'/);
     assert.match(policy, /script-src[^;]*shiori-plugin:/);
     assert.match(policy, /script-src[^;]*'sha256-/);
-    assert.doesNotMatch(policy, /script-src[^;]*(unsafe-eval|file:|https:|data:|blob:)/);
+    assert.doesNotMatch(policy, /script-src[^;]*('unsafe-eval'|file:|https:|data:|blob:)/);
     assert.match(policy, /connect-src 'self'/);
     assert.doesNotMatch(policy, /connect-src[^;]*shiori-asset:/);
     assert.match(policy, /object-src 'none'/);

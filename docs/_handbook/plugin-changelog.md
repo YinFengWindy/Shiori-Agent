@@ -2,6 +2,11 @@
 
 SDK 源版本是 `packages/sdk/python/shiori_sdk/_version.py`。现行自定义 A.B.C 规则中，A 是代际、B 可破坏、C 是同一 A.B 线内的兼容更新；详见 [版本规则](../decisions/2026-11-05-sdk-version-policy.md)。这里只记定版变更，不设 Unreleased 批次。4.0 及更早条目保留其发布时的历史约定。
 
+## 4.1.3
+
+- 前端构建支持本地 `?url` 静态资源及 `?worker&url` 独立 Worker。内置构建资源由 `shiori-plugin://host/assets/` 的固定目录提供；外部插件继续按 token、路径与已批准内容快照校验。
+- 插件资源增加 WASM 和 `.task` 模型类型；CSP 为本地 Worker 和 WebAssembly 增加明确许可，不开放远程脚本或 JavaScript `unsafe-eval`。没有新增 Key、Protocol 方法或运行层。
+
 ## 4.1.2
 
 - 新增 `nativeAudioPlaybackEvent`（`native.audio.playback`）和 `NativeAudioPlaybackPayload`。仅播放所属的 background 实例通过已有 `hostEvents.on` 接收实际开始、RMS 音量与结束；事件携带 owner、generation、playback_id 和可选 request_id，结束包含原因。

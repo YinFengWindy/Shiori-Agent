@@ -46,6 +46,7 @@
     "typecheck:plugins": "tsc -p plugins/tsconfig.json"
   },
   "devDependencies": {
+    "@mediapipe/tasks-vision": "1.2.2",
     "@phosphor-icons/react": "^2.1.10",
     "@types/node": "26.6.3",
     "@types/react": "^19.2.14",

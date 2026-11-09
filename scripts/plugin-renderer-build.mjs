@@ -2,6 +2,7 @@ import { build } from "esbuild";
 import { frontendExports } from "./plugin-frontend.mjs";
 import { readFile } from "node:fs/promises";
 import { packageFile } from "./plugin-package-files.mjs";
+import { pluginRendererAssets } from "./plugin-renderer-assets.mjs";
 
 /** Compile independent ESM entries while preserving the host's SDK/React identities. */
 export async function buildPluginRenderer(source, destination, manifest) {
@@ -12,6 +13,7 @@ export async function buildPluginRenderer(source, destination, manifest) {
       absWorkingDir: source, entryPoints: [packageFile(source, manifest.frontend.entry)],
       outfile: packageFile(destination, entry), bundle: true, format: "esm", platform: "browser", target: "es2022",
       jsx: "automatic", metafile: true,
+      plugins: [pluginRendererAssets(destination)],
       external: ["react", "react-dom", "react/*", "react-dom/*", "@yinfengwindy/shiori-sdk"],
       loader: { ".svg": "file", ".png": "file", ".jpg": "file", ".webp": "file", ".woff2": "file" },
       assetNames: "assets/[name]-[hash]",

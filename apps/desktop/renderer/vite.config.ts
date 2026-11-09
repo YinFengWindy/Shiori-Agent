@@ -12,6 +12,20 @@ const repositoryRoot = resolve(desktopRoot, "..", "..");
 export default defineConfig({
   root: here,
   base: "./",
+  assetsInclude: ["**/*.task"],
+  experimental: {
+    renderBuiltUrl(filename, { hostType }) {
+      // WASM fetch and classic-worker importScripts cannot depend on file://
+      // fetch support. HTML/CSS and ordinary renderer assets keep their paths.
+      if (hostType === "js" && filename.startsWith("assets/runtime/")) {
+        return `shiori-plugin://host/${filename}`;
+      }
+      return { relative: true };
+    },
+  },
+  worker: {
+    rollupOptions: { output: { entryFileNames: "assets/runtime/[name]-[hash].js" } },
+  },
   plugins: [react(), builtinPluginEntries(resolve(repositoryRoot, "plugins"))],
   server: {
     fs: {
@@ -24,6 +38,9 @@ export default defineConfig({
   build: {
     outDir: resolve(desktopRoot, "renderer-dist"),
     emptyOutDir: true,
+    // Runtime loaders must remain addressable files even when a small fixture
+    // would otherwise be embedded as a data URL by Vite.
+    assetsInlineLimit: (path) => /\.(?:m?js|wasm|task)$/.test(path) ? false : undefined,
     rollupOptions: {
       input: {
         main: resolvePath(here, "index.html"),
@@ -42,6 +59,11 @@ export default defineConfig({
         pluginHost: resolvePath(here, "plugin-host.html"),
       },
       output: {
+        assetFileNames(asset) {
+          return asset.names.some((name) => /\.(?:m?js|wasm|task)$/.test(name))
+            ? "assets/runtime/[name]-[hash][extname]"
+            : "assets/[name]-[hash][extname]";
+        },
         manualChunks(id) {
           if (id.includes("node_modules/@phosphor-icons/")) return "icons-vendor";
           if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/") || id.includes("node_modules/scheduler/")) return "react-vendor";

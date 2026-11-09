@@ -9,6 +9,10 @@ export type PetProviderOptions<Load extends PetProviderLoad> = {
   pluginId: string;
   prepare: (identity: PetPresentationIdentity, command: Record<string, unknown>, assetUrl: (path: string) => string | null) => Load;
   action?: (load: Load, command: Record<string, unknown>, moveDirection?: "left" | "right") => unknown;
+  /** Optional provider resource handover; hidden candidates never receive shown=true. */
+  visibility?: (load: Load, shown: boolean, surfaceId: string) => void | Promise<void>;
+  /** Handles provider-private surface messages before common model/gesture routing. */
+  message?: (load: Load, value: unknown, surfaceId: string) => boolean | Promise<boolean>;
   report: (value: PetProviderReport) => Promise<unknown>;
 };
 const fallbackPosition = { x: Number.MAX_SAFE_INTEGER, y: Number.MAX_SAFE_INTEGER };
@@ -37,6 +41,8 @@ export class PetProviderController<Load extends PetProviderLoad> {
       if (value.op === "update") { this.ctx.surfaces.setState(instance.surfaceId, instance.load); return; }
       if (value.op === "hide") {
         instance.shown = false;
+        if (this.options.visibility) await this.options.visibility(instance.load, false, instance.surfaceId);
+        if (!this.owns(instance)) return;
         this.ctx.surfaces.setInteraction(instance.surfaceId, null);
         this.ctx.surfaces.hide(instance.surfaceId);
         await this.send(identity, "hidden"); return;
@@ -47,6 +53,8 @@ export class PetProviderController<Load extends PetProviderLoad> {
         this.ctx.surfaces.setState(instance.surfaceId, instance.load);
         this.ctx.surfaces.setInteraction(instance.surfaceId, { roleId: identity.role_id, available: true });
         this.ctx.surfaces.show(instance.surfaceId); instance.shown = true;
+        if (this.options.visibility) await this.options.visibility(instance.load, true, instance.surfaceId);
+        if (!this.owns(instance)) return;
         await this.send(identity, "shown"); return;
       }
       if (value.op === "action") { await this.action(instance, value.command); return; }
@@ -94,7 +102,11 @@ export class PetProviderController<Load extends PetProviderLoad> {
     this.ctx.surfaces.setState(surfaceId, load);
   }
   private async message(instance: Instance<Load>, value: unknown) {
-    if (!this.owns(instance) || !isRecord(value)) return;
+    if (!isRecord(value)) return;
+    // Private teardown acknowledgements may arrive after a lease was revoked.
+    // The optional owner validates its own request/session identity.
+    if (this.options.message && await this.options.message(instance.load, value, instance.surfaceId)) return;
+    if (!this.owns(instance)) return;
     if (value.kind === "model.ready" || value.kind === "model.failed") {
       if (value.lease_id !== instance.load.lease_id) return;
       if (value.kind === "model.failed") { await this.close(instance.load.lease_id); await this.send(instance.load, "failed", { error: typeof value.error === "string" ? value.error : "形象图加载失败" }); return; }
@@ -135,8 +147,8 @@ export class PetProviderController<Load extends PetProviderLoad> {
     const instance = this.instances.get(leaseId);
     this.instances.delete(leaseId);
     if (!instance) return;
-    await instance.created.catch(() => {});
-    await this.ctx.surfaces.destroy(instance.surfaceId);
+    try { if (this.options.visibility) await this.options.visibility(instance.load, false, instance.surfaceId); }
+    finally { await instance.created.catch(() => {}); await this.ctx.surfaces.destroy(instance.surfaceId); }
   }
   private async send(identity: PetPresentationIdentity, kind: PetProviderReport["kind"], extra: Partial<PetProviderReport> = {}) {
     await this.options.report({ ...extra, request_id: identity.request_id, lease_id: identity.lease_id, role_id: identity.role_id, model_id: identity.model_id, kind });

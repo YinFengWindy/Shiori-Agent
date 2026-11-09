@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { app, BrowserWindow, powerMonitor, protocol, session, shell } from "electron";
 import { PluginUiResources } from "./plugins/uiResources.js";
 import { pluginUiScheme } from "./plugins/uiContract.js";
@@ -31,7 +31,7 @@ import { createDesktopMessageNotifications } from "./notifications/electron.js";
 import { NotificationActivation } from "./notifications/activation.js";
 import { notificationChannels } from "./notifications/contract.js";
 import { windowsNotificationIdentity } from "./notifications/windowsIdentity.js";
-import { desktopNotificationIcon } from "./paths.js";
+import { desktopNotificationIcon, rendererDist } from "./paths.js";
 import { createDesktopTray } from "./tray/menu.js";
 import { PluginTrayRegistry } from "./tray/registry.js";
 import { trayChannels } from "./tray/ipc.js";
@@ -259,7 +259,7 @@ void app.whenReady().then(async () => {
     process.env.SHIORI_RENDERER_DEV_SERVER_URL,
   );
   registerLocalAssetProtocol(protocol, localAssets);
-  const pluginUiResources = new PluginUiResources(resolve(privateWorkspaceRoot, "plugins"));
+  const pluginUiResources = new PluginUiResources(resolve(privateWorkspaceRoot, "plugins"), resolve(dirname(rendererDist), "assets"));
   protocol.handle(pluginUiScheme, (request) => pluginUiResources.load(request.url));
   void startBridge(bridge);
   const currentVersion = !app.isPackaged && process.env.SHIORI_DEV_VERSION || app.getVersion();

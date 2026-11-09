@@ -4,6 +4,8 @@ import { animateScene, createScene, createSceneMotion } from "./scene";
 import { paintMouth } from "./mouth";
 import { clamp } from "./lids";
 import { AvatarWebGL } from "./webgl";
+import { FacePoseTracker } from "./facePose";
+import type { FaceSample } from "../../capture/contracts";
 
 /** Loads images through img-src grants; no model path is evaluated as code or fetched as a script. */
 export function loadAvatarImage(url: string, signal: AbortSignal): Promise<HTMLImageElement> {
@@ -35,6 +37,7 @@ export class AvatarRenderer {
   private mouthValue = 0;
   private playbackId: string | null = null;
   private lastPainted = -1;
+  private readonly face = new FacePoseTracker();
   private constructor(canvas: HTMLCanvasElement, private readonly model: AvatarModel, private readonly fail: (error: unknown) => void) {
     this.meshes = createScene(model); this.motion = createSceneMotion(this.meshes); this.gpu = new AvatarWebGL(canvas, model.width, model.height);
   }
@@ -58,7 +61,7 @@ export class AvatarRenderer {
         if (image instanceof HTMLImageElement && (image.naturalWidth !== mesh.layer.w || image.naturalHeight !== mesh.layer.h)) throw new Error(`模型图层尺寸不匹配 ${mesh.layer.name}`);
         renderer.gpu.add(mesh, image);
       }
-      renderer.gpu.draw(renderer.meshes, 1);
+      renderer.gpu.draw(renderer.meshes, { left: 1, right: 1 });
       renderer.frameId = requestAnimationFrame((time) => renderer.frame(time));
       return renderer;
     } catch (error) { loading.abort(); renderer.dispose(); throw error; }
@@ -70,15 +73,27 @@ export class AvatarRenderer {
     if (id !== this.playbackId || !audio) this.mouthValue = 0;
     this.playbackId = id; this.amplitude = audio ? clamp(audio.amplitude * 4) : 0;
   }
+  /** Camera samples are local to this renderer and one explicitly started session. */
+  startFaceSession(sessionId: string, mirror: boolean) { this.face.start(sessionId, mirror); }
+  /** Retires late frames as soon as the camera or its lease stops. */
+  stopFaceSession(sessionId: string) { this.face.stop(sessionId); }
+  /** Accepts ordered samples; stale inference cannot drive a new session. */
+  faceSample(sample: FaceSample) { this.face.accept(sample); }
+  /** Replaces only the in-memory neutral posture. */
+  calibrateFace() { return this.face.calibrate(); }
   /** Stops future frames and frees textures/buffers, including after context loss. */
   dispose() { if (this.disposed) return; this.disposed = true; cancelAnimationFrame(this.frameId); this.gpu.dispose(); this.mouthCanvas.width = 0; this.mouthCanvas.height = 0; }
   private frame(time: number) {
     if (this.disposed) return;
     try {
       const elapsed = this.previousTime === null ? 0 : Math.min(0.05, Math.max(0, (time - this.previousTime) / 1000)); this.previousTime = time; this.simulationSeconds += elapsed;
-      this.mouthValue += (this.amplitude - this.mouthValue) * (1 - Math.exp(-elapsed / (this.amplitude > this.mouthValue ? 0.035 : 0.06)));
+      const face = this.face.sample(time, elapsed);
+      // Ownership follows the real playback ID, so a silent TTS segment still
+      // suppresses camera mouth motion while head and eyes continue tracking.
+      const mouthTarget = this.playbackId !== null ? this.amplitude : face?.mouth ?? 0;
+      this.mouthValue += (mouthTarget - this.mouthValue) * (1 - Math.exp(-elapsed / (mouthTarget > this.mouthValue ? 0.035 : 0.06)));
       if (this.mouthValue < 0.003) this.mouthValue = 0;
-      const openness = animateScene(this.model, this.meshes, this.motion, this.simulationSeconds, elapsed, this.reducedMotion.matches, this.mouthValue);
+      const openness = animateScene(this.model, this.meshes, this.motion, this.simulationSeconds, elapsed, this.reducedMotion.matches, this.mouthValue, face);
       if (Math.abs(this.mouthValue - this.lastPainted) > 0.001) {
         paintMouth(this.mouthCanvas, this.model.mouth, this.mouthValue); this.lastPainted = this.mouthValue;
         const index = this.meshes.findIndex((mesh) => mesh.part === "mouth"); this.gpu.mouth(index, this.mouthCanvas);

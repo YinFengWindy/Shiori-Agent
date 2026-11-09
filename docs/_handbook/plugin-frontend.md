@@ -37,7 +37,9 @@ React、React DOM 和 SDK 主入口是宿主提供的对等依赖，不打进插
 
 ## 资源授权与加载
 
-只有唯一、已启用、`ACTIVE` 的工作区候选拿到资源授权。主进程的 `plugins.list` 回复里带授权后的入口与 CSS URL（`shiori-plugin:` 协议），资源处理器再核对路径和宿主记住的启动时文件哈希，只提供 `.mjs`、`.js`、`.css`、常见图片和字体；新增或改动的脚本、样式、资源一律拒绝。CSP 只放行这个协议和 import map 的哈希，生产环境不加 `unsafe-inline` 脚本或 `unsafe-eval`。替换插件代码后要重启应用。
+只有唯一、已启用、`ACTIVE` 的工作区候选拿到资源授权。主进程的 `plugins.list` 回复里带授权后的入口与 CSS URL（`shiori-plugin:` 协议），资源处理器再核对路径和宿主记住的启动时文件哈希，只提供 `.mjs`、`.js`、`.css`、`.wasm`、`.task`、常见图片和字体；新增或改动的脚本、样式、资源一律拒绝。CSP 允许本地 Worker 与 WebAssembly（`wasm-unsafe-eval`），生产环境不加 `unsafe-inline` 脚本或普通 `unsafe-eval`。替换插件代码后要重启应用。
+
+SDK 4.1.3 起，前端构建支持 `文件?url` 原样资源和 `文件?worker&url` 独立 classic Worker。插件用 `new URL(导入的地址, import.meta.url).href` 取得绝对地址，并把运行时资源地址传给 Worker；Worker 自身不能依赖宿主 React/SDK 对等模块或 ESM 的 `import.meta`。外部插件产物位于 `renderer/assets/`，继续经过插件 token 和内容快照校验；内置生产资源通过 `shiori-plugin://host/assets/` 从固定构建目录读取。摄像头等资源仍由插件在实际挂载与用户操作后申请，停止或卸载时释放；后台模块保持无 DOM。
 
 名册初载、桥接重连、`runtime.applied`、`plugins.changed`、`plugins.reloaded` 和启停开关走同一条串行刷新路径。某个入口导入、样式或导出校验失败时，宿主撤掉这个插件已渲染的部分，在插件管理页显示 `UI FAILED`，并经 `plugins.activation.report` 回报后端，后端把整个插件回滚到 `FAILED` / `RESTART_REQUIRED` 并重新发布名册，其它窗口随之拆掉过期的贡献；其它插件不受影响。
 
