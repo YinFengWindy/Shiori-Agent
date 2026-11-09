@@ -15,7 +15,7 @@ export function FaceCaptureSettings({ client, host }: PluginSettingsSectionCompo
     };
     void poll(); return () => { active = false; if (timer) clearTimeout(timer); };
   }, [client]);
-  const command = async (name: string, payload: Record<string, unknown> = {}) => {
+  const command = async (name: "capture.configure" | "capture.start" | "capture.stop" | "capture.devices" | "capture.calibrate", payload: Record<string, unknown> = {}) => {
     setBusy(true); setError("");
     try { setStatus(await client.background.call<CaptureStatus>(name, payload)); }
     catch (cause) { setError(errorMessage(cause)); }
