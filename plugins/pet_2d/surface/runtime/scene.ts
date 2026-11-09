@@ -4,6 +4,7 @@ import { clamp, deformLid, lidLineMesh, lidLinePoint, smooth } from "./lids";
 import { createHairMotion, hairDisplacement, stepHair } from "./hair";
 import { geometryLimits, imageGrid, lidLineGrid, mouthTextureSize } from "./geometry";
 import type { FacePose } from "./facePose";
+import { defaultAnimationSettings, type AnimationSettings } from "../../shared/animation";
 
 /** Independently measured eyelids, selected per mesh and per stencil mask. */
 export type EyeOpenness = { left: number; right: number };
@@ -52,7 +53,7 @@ export function createScene(model: AvatarModel): Mesh[] {
 }
 
 /** Tracks motion separately from immutable package data. */
-export function createSceneMotion(meshes: Mesh[]) { return meshes.map((mesh) => mesh.pins ? createHairMotion(mesh.pins) : null); }
+export function createSceneMotion(meshes: Mesh[]) { return { seconds: 0, hair: meshes.map((mesh) => mesh.pins ? createHairMotion(mesh.pins) : null) }; }
 /** Neutral blend opacity uses baked eyelid parts rather than generic closed-eye sprites. */
 export function meshOpacity(mesh: Mesh, openness: number): number {
   if (!mesh.layer.visible) return 0;
@@ -68,23 +69,32 @@ export function meshOpacity(mesh: Mesh, openness: number): number {
   return alpha * mesh.layer.opacity;
 }
 /** Deterministic blink with a short closed interval and slower reopening. */
-export function eyeOpenness(seconds: number): number {
-  const phase = seconds % 4.1; if (phase < 3.65) return 1;
-  if (phase < 3.76) return 1 - smooth((phase - 3.65) / 0.11);
-  if (phase < 3.81) return 0;
-  return smooth((phase - 3.81) / 0.24);
+export function eyeOpenness(seconds: number, interval = 4.1): number {
+  const phase = seconds % interval - (interval - 0.45); if (phase < 0) return 1;
+  if (phase < 0.11) return 1 - smooth(phase / 0.11);
+  if (phase < 0.16) return 0;
+  return smooth((phase - 0.16) / 0.24);
 }
 /** Applies local eyelids, constrained hair and coherent breathing/head motion to the meshes. */
-export function animateScene(model: AvatarModel, meshes: Mesh[], motion: ReturnType<typeof createSceneMotion>, seconds: number, elapsed: number, reduced: boolean, mouthOpen: number, face: FacePose | null = null): EyeOpenness {
-  const idleOpen = reduced ? 1 : eyeOpenness(seconds), anchors = model.anchors;
+export function animateScene(model: AvatarModel, meshes: Mesh[], motion: ReturnType<typeof createSceneMotion>, seconds: number, elapsed: number, reduced: boolean, mouthOpen: number, face: FacePose | null = null, settings: AnimationSettings = defaultAnimationSettings()): EyeOpenness {
+  const idleOpen = reduced ? 1 : eyeOpenness(seconds, settings.blinkInterval), anchors = model.anchors;
   const eyes = face ? { left: face.eyeLeft, right: face.eyeRight } : { left: idleOpen, right: idleOpen };
-  const breath = reduced ? 0 : 0.5 + 0.5 * Math.sin(seconds * Math.PI * 2 / 3.4), headBreath = reduced ? 0 : 0.5 + 0.5 * Math.sin(seconds * Math.PI * 2 / 3.4 - 0.6);
-  const roll = face?.roll ?? (reduced ? 0 : 0.012 * Math.sin(seconds * 0.71)), yaw = face ? Math.sin(face.yaw) * 24 * anchors.faceScale : reduced ? 0 : 2.5 * Math.sin(seconds * 0.47);
+  // Integrating speed keeps slider changes continuous; blink timing stays independent.
+  motion.seconds += elapsed * settings.motionSpeed;
+  const time = motion.seconds, sway = reduced ? 0 : settings.idleSway;
+  const breath = reduced ? 0 : settings.breathing * (0.5 + 0.5 * Math.sin(time * Math.PI * 2 / 3.4));
+  const breathLift = breath * 7 * anchors.faceScale;
+  const bodyRoll = sway * 0.014 * Math.sin(time * 0.59);
+  const roll = face?.roll ?? sway * 0.022 * Math.sin(time * 0.71);
+  const yaw = face ? Math.sin(face.yaw) * 24 * anchors.faceScale : sway * 12 * anchors.faceScale * Math.sin(time * 0.47);
   const pitch = face ? Math.sin(face.pitch) * 18 * anchors.faceScale : 0;
   for (let index = 0; index < meshes.length; index++) {
-    const mesh = meshes[index], name = baseName(mesh.layer.name), springs = motion[index];
+    const mesh = meshes[index], name = baseName(mesh.layer.name), springs = motion.hair[index];
     const openness = mesh.layer.side === "R" ? eyes.right : eyes.left;
-    if (springs) stepHair(springs, seconds, elapsed, anchors.faceScale, !reduced);
+    if (springs) {
+      const headDrive = mesh.layer.group === "head" ? yaw + roll * (anchors.neck.cy - anchors.face.cy) : yaw * 0.16;
+      stepHair(springs, time, elapsed, anchors.faceScale, !reduced, { displacement: headDrive + bodyRoll * (anchors.body.cy - anchors.face.cy), strength: settings.hairSway, stiffness: settings.hairStiffness, damping: settings.hairDamping });
+    }
     const eye = mesh.lid?.side === "L" ? anchors.eyeL : anchors.eyeR;
     for (let at = 0; at < mesh.base.length; at += 2) {
       let x = mesh.base[at], y = mesh.base[at + 1]; const vertex = at / 2;
@@ -97,23 +107,22 @@ export function animateScene(model: AvatarModel, meshes: Mesh[], motion: ReturnT
       if (mesh.layer.group === "head") {
         const dx = (x - anchors.neck.cx) * (face ? Math.cos(face.yaw * 0.45) : 1), dy = (y - anchors.neck.cy) * (face ? Math.cos(face.pitch * 0.4) : 1);
         x = anchors.neck.cx + dx * Math.cos(roll) - dy * Math.sin(roll) + yaw * mesh.layer.depth;
-        y = anchors.neck.cy + dx * Math.sin(roll) + dy * Math.cos(roll) - headBreath * 1.6 * anchors.faceScale + pitch * mesh.layer.depth;
+        y = anchors.neck.cy + dx * Math.sin(roll) + dy * Math.cos(roll) - breathLift + pitch * mesh.layer.depth;
       } else {
         const influence = clamp((anchors.body.cy - y) / Math.max(1, anchors.body.cy - anchors.neck.cy));
-        x += yaw * 0.16 * influence; y -= breath * 2 * anchors.faceScale * influence;
+        x += yaw * 0.16 * influence; y -= breathLift * influence;
         if (name === "neck") {
-          if (face) {
-            const weight = smooth((anchors.neck.cy - y) / Math.max(1, anchors.neck.cy - anchors.face.y1));
-            const dx = x - anchors.neck.cx, dy = y - anchors.neck.cy;
-            x += (dx * Math.cos(roll) - dy * Math.sin(roll) - dx + yaw) * weight;
-            y += (dx * Math.sin(roll) + dy * Math.cos(roll) - dy + pitch) * weight;
-          } else {
-            const weight = smooth((anchors.neck.cy - y) / Math.max(1, anchors.neck.cy - anchors.face.cy)); x += yaw * weight;
-          }
+          const weight = smooth((anchors.neck.cy - y) / Math.max(1, anchors.neck.cy - anchors.face.y1));
+          const dx = x - anchors.neck.cx, dy = y + breathLift - anchors.neck.cy;
+          x += (dx * Math.cos(roll) - dy * Math.sin(roll) - dx + yaw) * weight;
+          y += (dx * Math.sin(roll) + dy * Math.cos(roll) - dy + pitch) * weight;
         }
-        if (name === "topwear") x = anchors.neck.cx + (x - anchors.neck.cx) * (1 + breath * 0.003);
+        if (name === "topwear") x = anchors.neck.cx + (x - anchors.neck.cx) * (1 + breath * 0.012 * influence);
       }
-      mesh.positions[at] = x; mesh.positions[at + 1] = y;
+      // A common body pivot keeps sleeves, clothing and head moving together.
+      const bodyX = x - anchors.body.cx, bodyY = y - anchors.body.cy;
+      mesh.positions[at] = anchors.body.cx + bodyX * Math.cos(bodyRoll) - bodyY * Math.sin(bodyRoll);
+      mesh.positions[at + 1] = anchors.body.cy + bodyX * Math.sin(bodyRoll) + bodyY * Math.cos(bodyRoll);
     }
   }
   return eyes;

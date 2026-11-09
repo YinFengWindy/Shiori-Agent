@@ -3,17 +3,20 @@ import { clamp } from "./lids";
 
 /** Two damped responses per baked strand preserve both root stiffness and soft tips. */
 export type HairMotion = { stiff: { position: number; velocity: number; offset: number }; soft: { position: number; velocity: number; offset: number }; phase: number }[];
+/** Local head/body displacement drives inertia; wind and response stay tunable. */
+export type HairDrive = { displacement: number; strength: number; stiffness: number; damping: number };
 /** Creates private simulation state; the immutable bake is never modified. */
 export function createHairMotion(pins: HairPins): HairMotion { return pins.strands.map((_, index) => ({ stiff: { position: 0, velocity: 0, offset: 0 }, soft: { position: 0, velocity: 0, offset: 0 }, phase: index * 1.37 + pins.layer })); }
 /** Integrates springs in bounded substeps so a delayed frame cannot explode the mesh. */
-export function stepHair(motion: HairMotion, seconds: number, elapsed: number, faceScale: number, enabled: boolean) {
+export function stepHair(motion: HairMotion, seconds: number, elapsed: number, faceScale: number, enabled: boolean, drive: HairDrive = { displacement: 0, strength: 1, stiffness: 1, damping: 1 }) {
   const dt = Math.min(0.05, Math.max(0, elapsed)), steps = Math.max(1, Math.ceil(dt * 120));
   for (const strand of motion) {
-    const target = enabled ? (1.8 * Math.sin(seconds * 0.8 + strand.phase) + Math.sin(seconds * 1.9 + strand.phase * 2.3)) * faceScale : 0;
+    const wind = (3.6 * Math.sin(seconds * 0.8 + strand.phase) + 2 * Math.sin(seconds * 1.9 + strand.phase * 2.3)) * faceScale;
+    const target = drive.displacement + wind;
     for (const [spring, stiffness, damping, gain, maximum] of [[strand.stiff, 75, 11, 1.35, 20], [strand.soft, 24, 2.8, 1.65, 26]] as const) {
-      if (!enabled) { spring.position = 0; spring.velocity = 0; spring.offset = 0; continue; }
-      for (let i = 0; i < steps; i++) { spring.velocity += (-stiffness * (spring.position - target) - damping * spring.velocity) * dt / steps; spring.position += spring.velocity * dt / steps; }
-      spring.offset = clamp(-(spring.position - target) * gain, -maximum * faceScale, maximum * faceScale);
+      if (!enabled || drive.strength === 0) { spring.position = target; spring.velocity = 0; spring.offset = 0; continue; }
+      for (let i = 0; i < steps; i++) { spring.velocity += (-stiffness * drive.stiffness * (spring.position - target) - damping * drive.damping * spring.velocity) * dt / steps; spring.position += spring.velocity * dt / steps; }
+      spring.offset = clamp(((spring.position - target) * gain + wind * 0.55) * drive.strength, -maximum * faceScale, maximum * faceScale);
     }
   }
 }
