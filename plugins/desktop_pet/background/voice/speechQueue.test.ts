@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { deferred } from "@yinfengwindy/shiori-sdk/testing";
 import type { BackgroundCtx, NativeAudio } from "@yinfengwindy/shiori-sdk";
-import type { PetPresentationState } from "@yinfengwindy/shiori-pet";
+import type { PetPresentationState } from "../../provider";
 import { PetSpeechQueue } from "./speechQueue";
 
 const flush = async () => { for (let i = 0; i < 20; i++) await Promise.resolve(); };

@@ -3,7 +3,7 @@ import { CheckCircleIcon, TrashIcon } from "@phosphor-icons/react";
 import { compactGhostButtonClass, compactPressableClass, cx, iconButtonClass, PetalIcon, UploadIcon, usePluginHostServices, type PluginRoleAssetsComponentProps } from "@yinfengwindy/shiori-sdk";
 import type { PetPackageRow } from "./petPackages";
 import { usePetPackages } from "./usePetPackages";
-import { petModelKey } from "@yinfengwindy/shiori-pet";
+import { petModelKey } from "../provider";
 
 /** The 24px bordered delete tile on a package card; always shown, so keyboard and touch users reach it. */
 const removeButtonClass = cx(

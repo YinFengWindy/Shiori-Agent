@@ -22,7 +22,7 @@
 
 现有 [SurfaceRoot](../../apps/desktop/renderer/src/surface/SurfaceRoot.tsx) 按窗口所属插件加载该插件的 surface 组件；[前端入口](../../packages/sdk/src/contract/frontend.ts) 只提供 `ui/background/surface`。现有 JSON 服务不能传递 React 组件。
 
-因此采用已存在的 surface 所有权：桌宠决定显示谁、在哪里显示及展示什么回复；选中的形象插件负责具体窗口和绘制。气泡视图、拖动、菜单与语音手势的通用前端部分提取为一个构建时共享模块，两个形象插件复用。它不是新的运行时插件层，业务状态继续由桌宠持有。共享代码不通过跨插件源码相对 import 获取。
+因此采用已存在的 surface 所有权：桌宠决定显示谁、在哪里显示及展示什么回复；选中的形象插件负责具体窗口和绘制。气泡视图、拖动、菜单与语音手势的通用前端部分提取为一个构建时共享模块，两个形象插件复用。它不是新的运行时插件层，业务状态继续由桌宠持有。共享代码不通过跨插件源码相对 import 获取。2026-11-11 修订：该模块归桌宠，作为桌宠对形象插件的导出随桌宠版本发布，不放在 `packages/`，见[插件之间的代码复用归属](2026-11-11-plugin-code-sharing.md)。
 
 为防止准备窗口首帧闪现，既有 `SurfaceSpec` 增加可选 `visible`（默认 `true`）；宿主发布 `surface.lifecycle` 事件报告实际窗口关闭或 renderer 不可用。两项以 SDK 4.1.1 提供，避免用心跳猜测窗口存活，不增加已有 Protocol 方法。
 

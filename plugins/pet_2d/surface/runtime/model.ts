@@ -1,4 +1,4 @@
-import { isRecord } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../../shared/isRecord";
 import { meshVertexCount } from "./geometry";
 
 /** An image rectangle in the prepared canvas coordinate system. */

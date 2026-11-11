@@ -2,7 +2,7 @@ import React, { act } from "react";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createFakePluginClient, createFakeSurfaceHandle, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
-import { emptyPetReply } from "@yinfengwindy/shiori-pet";
+import { emptyPetReply } from "@shiori-plugin/desktop_pet/provider";
 import { SpriteSurface } from "./SpriteSurface";
 
 test("surface bootstrap is not model readiness, and image failure reports the current lease", async () => {

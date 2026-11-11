@@ -1,5 +1,5 @@
 import { surfaceLifecycleEvent, type PluginBackgroundContribution } from "@yinfengwindy/shiori-sdk";
-import { PetProviderController } from "@yinfengwindy/shiori-pet";
+import { PetProviderController } from "@shiori-plugin/desktop_pet/provider";
 import { prepareAvatar } from "./presentation";
 import { CaptureCoordinator } from "./capture";
 import { AnimationCoordinator } from "./animation";

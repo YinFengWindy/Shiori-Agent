@@ -1,5 +1,6 @@
 import { errorMessage, type BackgroundCtx, type NativeAudio } from "@yinfengwindy/shiori-sdk";
-import { isRecord, type PetPresentationState } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../../provider/guards";
+import type { PetPresentationState } from "../../provider";
 import { cancelledResult, failedResult, succeededResult, type OutputResult, type PetReplySource, type ReplyOwner } from "../replyOutput";
 
 /** The handle a running job uses to learn whether it is still wanted and to play audio. */

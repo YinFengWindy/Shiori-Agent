@@ -1,5 +1,6 @@
 import type { PluginBackgroundSettled, PluginRpcClient } from "@yinfengwindy/shiori-sdk";
-import { isRecord, readPresentationIdentity, type PetBinding, type PetGesture, type PetPresentationRequest, type PetProviderReport } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../provider/guards";
+import { readPresentationIdentity, type PetBinding, type PetGesture, type PetPresentationRequest, type PetProviderReport } from "../provider";
 
 type Pending = { request: PetPresentationRequest; expected: PetProviderReport["kind"]; resolve: (report: PetProviderReport) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> };
 /** Pending completion belongs to desktop_pet; service acceptance is not renderer readiness. */

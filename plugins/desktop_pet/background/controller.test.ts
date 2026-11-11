@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { PetBinding, PetPresentationRequest, PetProviderReport } from "@yinfengwindy/shiori-pet";
+import type { PetBinding, PetPresentationRequest, PetProviderReport } from "../provider";
 import { DesktopPetController } from "./controller";
 import { normalizeDesktopPetSettings } from "./settings";
 import { deferred } from "@yinfengwindy/shiori-sdk/testing";

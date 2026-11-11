@@ -1,0 +1,15 @@
+{
+  "name": "@shiori-plugin/desktop_pet",
+  "version": "0.1.4",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./provider": "./provider/index.ts",
+    "./provider/styles.css": "./provider/styles.css"
+  },
+  "peerDependencies": {
+    "react": ">=19.2.0 <20.0.0",
+    "react-dom": ">=19.2.0 <20.0.0",
+    "@yinfengwindy/shiori-sdk": ">=4.1.2 <4.2.0"
+  }
+}

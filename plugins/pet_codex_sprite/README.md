@@ -12,6 +12,6 @@ Codex 精灵图形象提供者，依赖 `desktop_pet` 和 SDK 4.1.1。桌宠管�
 
 服务契约为 `shiori.pet-models.v1`，服务 ID 为 `models`。后端先检查 background 就绪再接受呈现请求，background 在图片真正加载后回报桌宠。surface 以隐藏状态准备，桌宠决定交接；切换、关闭及崩溃按实例身份释放资源。
 
-本插件不建立 TTS 或直播队列，不依赖其它形象插件。公共视图和交互使用 `@yinfengwindy/shiori-pet`，精灵动作行名仅在本插件解释。
+本插件不建立 TTS 或直播队列，不依赖其它形象插件。公共视图和交互使用桌宠导出的 `@shiori-plugin/desktop_pet/provider`，精灵动作行名仅在本插件解释。
 
-独立 Python 安装需同时提供 `shiori-plugin-desktop-pet>=0.1.4`；参见 `TESTING.md`。前端打包使用固定 workspace 依赖，将共享模块打入插件，React 和 Shiori SDK 保持宿主 peer。
+独立 Python 安装需同时提供 `shiori-plugin-desktop-pet>=0.1.4`；参见 `TESTING.md`。前端打包时把桌宠的 provider 导出打入插件，React 和 Shiori SDK 保持宿主 peer。

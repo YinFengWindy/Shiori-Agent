@@ -1,4 +1,4 @@
-import type { PetBinding, PetModelReference } from "@yinfengwindy/shiori-pet";
+import type { PetBinding, PetModelReference } from "../provider";
 /** Resolved provider-neutral desktop pet binding. */
 export type DesktopPetBinding = PetBinding;
 /** Device-local window position. */

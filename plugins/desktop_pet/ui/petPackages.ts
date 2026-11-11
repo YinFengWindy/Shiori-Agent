@@ -1,5 +1,6 @@
 import type { NativeFilePickerOptions, PluginServiceReference } from "@yinfengwindy/shiori-sdk";
-import { isRecord, readPetModelReference, readPetProviderReference, type PetModelReference } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../provider/guards";
+import { readPetModelReference, readPetProviderReference, type PetModelReference } from "../provider";
 
 /** A model offered by one installed appearance provider. */
 export type PetPackageRow = {

@@ -1,5 +1,6 @@
 import type { BackgroundCtx } from "@yinfengwindy/shiori-sdk";
-import { emptyPetReply, isRecord, PetProviderController, readPresentationState, type PetProviderReport } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../shared/isRecord";
+import { emptyPetReply, PetProviderController, readPresentationState, type PetProviderReport } from "@shiori-plugin/desktop_pet/provider";
 import { readSpriteState, type SpritePresentation } from "../shared/presentation";
 import type { SpriteState } from "../surface/spriteContract";
 

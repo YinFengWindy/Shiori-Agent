@@ -1,4 +1,5 @@
-import { isRecord, nonempty, readPetModelReference, type PetBinding } from "@yinfengwindy/shiori-pet";
+import { isRecord, nonempty } from "../provider/guards";
+import { readPetModelReference, type PetBinding } from "../provider";
 /** Reads only provider-neutral binding data; missing providers are backend errors. */
 export function readDesktopPetBinding(value: unknown): PetBinding | null {
   if (!isRecord(value)) throw new Error("桌宠绑定响应无效");

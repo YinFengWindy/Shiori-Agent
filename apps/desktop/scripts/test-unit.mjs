@@ -77,7 +77,8 @@ const testRoots = [
   resolve(desktopRoot, "tests", "integration"),
   // 插件 SDK（#440）的源码与单测同目录并列
   resolve(repoRoot, "packages", "sdk", "src"),
-  resolve(repoRoot, "packages", "desktop-pet", "src"),
+  // 桌宠导出给形象插件的 provider 套件（不在 ui/surface/background 里）
+  resolve(repoRoot, "plugins", "desktop_pet", "provider"),
   ...(await pluginTestRoots()),
 ];
 

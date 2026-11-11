@@ -1,5 +1,5 @@
 import { useEffect, type RefObject } from "react";
-import { isRecord } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../shared/isRecord";
 import type { SurfaceHandle } from "@yinfengwindy/shiori-sdk";
 import { readAnimationSettings } from "../shared/animation";
 import type { AvatarRenderer } from "./runtime/renderer";

@@ -1,7 +1,7 @@
 import React from "react";
 import { useCallback, useEffect, useState } from "react";
 import type { PluginSurfaceComponentProps } from "@yinfengwindy/shiori-sdk";
-import { PetShell } from "@yinfengwindy/shiori-pet";
+import { PetShell } from "@shiori-plugin/desktop_pet/provider";
 import { readSpritePresentation, readSpriteState, type SpritePresentation } from "../shared/presentation";
 import { CodexSpritePetRenderer } from "./CodexSpritePetRenderer";
 import { usePetActivityState } from "./usePetActivityState";

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLatestRef, type PluginSurfaceComponentProps, type SurfaceHandle } from "@yinfengwindy/shiori-sdk";
-import { PetShell, readPresentationIdentity, readPresentationState, type PetPresentationState } from "@yinfengwindy/shiori-pet";
+import { PetShell, readPresentationIdentity, readPresentationState, type PetPresentationState } from "@shiori-plugin/desktop_pet/provider";
 import { finite, parseAvatarModel, record, type AvatarModel } from "./runtime/model";
 import { AvatarRenderer } from "./runtime/renderer";
 import { useFaceCapture } from "../capture/useFaceCapture";
