@@ -188,7 +188,7 @@ restyle 之前的一批变量名仍然存在，它们都已指回语义层，渲
 - `text-gradient-accent` —— 渐变文字（内部用 strong 版，浅色版做文字会看不见）
 - `scrollbar-stable` —— 只做 `scrollbar-gutter: stable`（给滚动条预留车道，内容开始滚动时不左右跳），只用在竖向滚动区；滚动条外观见下一节
 - `scrollbar-native` —— 整棵子树退回系统滚动条，目前只有 story 插件的根用（它不在 restyle 范围内）
-- `story-*` —— 不在 `styles.css` 里，而在 story 插件自己的 `plugins/story/ui/story.css`：story 模块专属的玻璃底与文字可读性描边，**尚未 token 化**，别往其他模块搬
+- `story-*` —— 不在 `styles.css` 里，而在 story 插件自己的 `plugins/story/ui/story.css`：story 模块专属的玻璃底与文字可读性描边，别往其他模块搬
 
 ## 滚动条
 
@@ -353,4 +353,4 @@ Phosphor 在 `vite.config.ts` 的 `manualChunks` 里被单独拆成 `icons-vendo
   但前提是新代码不绕过语义层——每一处写死颜色都是将来暗色主题的一处返工。
 - **`--font-brand` 槽位空着**：MiSans / HarmonyOS Sans SC 还没定，字体栈目前从系统层起步（`tokens.css` 的 `--font-sans` 定义）。
 - **legacy 别名仍在服役**：`tailwind.config.ts` 的 legacy 色名还在，少量代码仍在用（如 `styles.css` 的 body / pre 基层规则、主区域的 `bg-[var(--chat-bg)]`、SDK `SettingsToggleCard` 的 `bg-primary`）。
-- **story 模块自成一套**：`plugins/story/ui/story.css` 里 `story-*` 类的玻璃底、描边、阴影都是写死值，没有接入 token。
+- **story 模块自成一套**：故事插件用自己的调色（深酒红 + 玫瑰纸面 + 舞台金），不接宿主语义层；颜色、阴影集中在 `plugins/story/ui/story.css` 的 `--story-*` 组件 token（作用域 `.story-root`，注释带对比度），组件经 `plugins/story/ui/storyStyles.ts` 的共享类名引用，焦点样式仍走宿主全局规则。将来做暗色主题时这套需要单独覆盖。
