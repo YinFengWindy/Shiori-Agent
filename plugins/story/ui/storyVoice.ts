@@ -108,18 +108,23 @@ export class StoryVoicePlayer {
   /** Plays `audio` after stopping any earlier line; resolves when it ends or is stopped. */
   async play(audio: StoryVoiceAudio, signal: AbortSignal): Promise<void> {
     this.stop();
+    if (signal.aborted) return;
     this.context ??= new AudioContext();
     if (!this.gain) {
       this.gain = this.context.createGain();
       this.gain.connect(this.context.destination);
     }
     this.gain.gain.value = this.volume;
-    const buffer = await this.context.decodeAudioData(decodeBase64(audio.audio_base64));
+    const context = this.context;
+    const gain = this.gain;
+    // Checked after every await: a line switched away while decoding or resuming must never start.
+    const buffer = await context.decodeAudioData(decodeBase64(audio.audio_base64));
     if (signal.aborted) return;
-    if (this.context.state === "suspended") await this.context.resume();
-    const source = this.context.createBufferSource();
+    if (context.state === "suspended") await context.resume();
+    if (signal.aborted || this.context !== context) return;
+    const source = context.createBufferSource();
     source.buffer = buffer;
-    source.connect(this.gain);
+    source.connect(gain);
     await new Promise<void>((resolveEnded) => {
       const finish = () => {
         signal.removeEventListener("abort", stopOnAbort);
@@ -129,6 +134,7 @@ export class StoryVoicePlayer {
       const stopOnAbort = () => this.stop();
       source.onended = finish;
       signal.addEventListener("abort", stopOnAbort, { once: true });
+      this.stop();
       this.current = { source, finish };
       source.start();
     });
