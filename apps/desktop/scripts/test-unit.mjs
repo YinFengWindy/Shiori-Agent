@@ -127,7 +127,7 @@ const batches = batchByArgumentLength(testFiles.map((path) => relative(repoRoot,
  */
 function runBatch(files, summaryPath, env) {
   return new Promise((resolveBatch, rejectBatch) => {
-    const child = spawn(
+    const child = runningBatch = spawn(
       process.execPath,
       [tsxCli, "--tsconfig", rendererTsconfig, `--import=${testLoader}`, "--test",
         `--test-concurrency=${testConcurrency}`,
@@ -139,9 +139,33 @@ function runBatch(files, summaryPath, env) {
       { cwd: repoRoot, stdio: "inherit", env },
     );
     child.on("error", rejectBatch);
-    child.on("exit", (code, signal) => resolveBatch({ code, signal }));
+    child.on("exit", (code, signal) => {
+      runningBatch = undefined;
+      resolveBatch({ code, signal });
+    });
   });
 }
+
+/** The batch process currently running, if any. */
+let runningBatch;
+/** The interrupt this runner received, once it has received one. */
+let interruptSignal;
+
+/**
+ * An interrupt must not end this process straight away: the run directory
+ * holds the prebundled dependencies and the compile cache, and exiting before
+ * the `finally` below removes it leaves the whole thing in the temp directory
+ * on every Ctrl+C. Record the signal, pass it to the running batch (Ctrl+C
+ * already reaches it through the terminal; a signal sent to this process
+ * alone does not), start no further batch, clean up, then end with that
+ * signal.
+ */
+function onInterrupt(signal) {
+  interruptSignal ??= signal;
+  runningBatch?.kill(signal);
+}
+const interruptSignals = ["SIGINT", "SIGTERM"];
+for (const signal of interruptSignals) process.on(signal, onInterrupt);
 
 // Holds this run's prebundled dependencies and per-batch summaries.
 const runDir = await mkdtemp(join(tmpdir(), "shiori-desktop-test-"));
@@ -158,13 +182,15 @@ try {
     NODE_COMPILE_CACHE: process.env.NODE_COMPILE_CACHE ?? join(runDir, "compile-cache"),
   };
   for (const [index, files] of batches.entries()) {
+    if (interruptSignal) break;
     const label = `batch ${index + 1}/${batches.length}`;
     if (batches.length > 1) console.log(`\n[desktop:test] ${label}: ${files.length} files`);
     const summaryPath = join(runDir, `batch-${index + 1}.json`);
     const { code, signal } = await runBatch(files, summaryPath, childEnv);
     if (signal) {
-      // Forward an interrupt (e.g. Ctrl+C) instead of starting the next batch.
-      process.kill(process.pid, signal);
+      // The batch was killed (an interrupt, or e.g. the OOM killer): stop
+      // instead of starting the next batch, and end with the same signal.
+      interruptSignal ??= signal;
       break;
     }
     const counts = JSON.parse(await readFile(summaryPath, "utf-8"));
@@ -174,6 +200,11 @@ try {
   }
 } finally {
   await rm(runDir, { recursive: true, force: true });
+}
+
+if (interruptSignal) {
+  for (const signal of interruptSignals) process.off(signal, onInterrupt);
+  process.kill(process.pid, interruptSignal);
 }
 
 const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);

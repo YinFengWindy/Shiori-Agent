@@ -107,7 +107,7 @@ function packageEntries(manifest) {
  * code needing it loads, and so it does with the bundle.
  */
 function bundledPackageResolution(externalNames) {
-  const escaped = externalNames.map((name) => name.replace(/[.*+?^${}()|[\]\/]/g, "\$&"));
+  const escaped = externalNames.map((name) => name.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&"));
   const external = new RegExp(`^(?:${escaped.join("|")})(?:/|$)`);
   const nested = Symbol("shiori-test-resolution");
   return {
