@@ -57,7 +57,7 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         except StorySimulationError as exc:
             raise PluginRpcError(exc.code, str(exc)) from exc
 
-    read_methods = {"list", "get", "cg.list"}
+    read_methods = {"list", "get", "cg.list", "voice.get"}
     for method in (
         "list",
         "get",
@@ -69,6 +69,8 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         "continue",
         "cg.retry",
         "cg.regenerate",
+        "voice.save",
+        "voice.get",
     ):
         ctx.require(RPC).register(
             method,

@@ -1,6 +1,7 @@
 import { rpcMethods, type RpcMethod } from "../rpcMethods.generated";
 import { PluginBridgeError, type PluginRpcClient } from "@yinfengwindy/shiori-sdk";
-import type { StoryCgGallery, StoryCreationInput, StoryDetails, StoryResource, StorySummary } from "./types";
+import type { PluginServiceReference } from "@yinfengwindy/shiori-sdk";
+import type { StoryCgGallery, StoryCreationInput, StoryDetails, StoryResource, StorySummary, StoryVoice, StoryVoiceAudio } from "./types";
 import { StoryBridgeError } from "./types";
 
 type StorySummaryPayload = {
@@ -66,6 +67,10 @@ export interface StoryBridgeClient {
   listCgGallery(): Promise<StoryCgGallery[]>;
   retryCg(storyId: string, resourceId: string): Promise<StoryDetails>;
   regenerateCg(storyId: string, resourceId: string): Promise<StoryDetails>;
+  /** Reads one saved voice line, or null when it was never saved or its file is gone. */
+  getVoice(storyId: string, beatId: string, fragmentIndex: number): Promise<(StoryVoice & StoryVoiceAudio) | null>;
+  /** Saves synthesized audio for one dialogue fragment into the Story. */
+  saveVoice(storyId: string, beatId: string, fragmentIndex: number, provider: PluginServiceReference, audio: StoryVoiceAudio): Promise<StoryVoice>;
 }
 
 /** Creates the renderer client for the Story simulation bounded context. */
@@ -138,6 +143,23 @@ export function createStoryBridgeClient(client: PluginRpcClient): StoryBridgeCli
       });
       return rememberStory(payload.story);
     },
+    async getVoice(storyId, beatId, fragmentIndex) {
+      const payload = await invokePayload<{ voice: (StoryVoice & StoryVoiceAudio) | null }>(client, rpcMethods["voice.get"], { story_id: storyId, beat_id: beatId, fragment_index: fragmentIndex });
+      return payload.voice;
+    },
+    async saveVoice(storyId, beatId, fragmentIndex, provider, audio) {
+      const payload = await invokePayload<{ voice: StoryVoice }>(client, rpcMethods["voice.save"], {
+        story_id: storyId,
+        beat_id: beatId,
+        fragment_index: fragmentIndex,
+        provider,
+        audio_base64: audio.audio_base64,
+        format: audio.format,
+      });
+      const latestStory = latestStories.get(storyId);
+      if (latestStory) latestStories.set(storyId, { ...latestStory, voices: mergeVoices(latestStory.voices, [payload.voice]) });
+      return payload.voice;
+    },
     async listCgGallery() {
       const payload = await invokePayload<{ stories: StoryCgGalleryPayload[] }>(client, rpcMethods["cg.list"], {});
       return payload.stories.map((story) => ({
@@ -175,7 +197,19 @@ function mergeStoryReadModels(previous: StoryDetails | undefined, incoming: Stor
     ...base,
     backgroundResource,
     cgGallery: resources,
+    voices: mergeVoices(previous.voices, incoming.voices),
   };
+}
+
+function voiceKey(voice: Pick<StoryVoice, "beatId" | "fragmentIndex">) {
+  return `${voice.beatId}:${voice.fragmentIndex}`;
+}
+
+/** Saving a voice does not advance the Story revision, so a later read may still carry the older list. */
+function mergeVoices(previous: StoryVoice[], incoming: StoryVoice[]) {
+  const voices = new Map(previous.map((voice) => [voiceKey(voice), voice]));
+  for (const voice of incoming) voices.set(voiceKey(voice), voice);
+  return [...voices.values()];
 }
 
 function mergeResources(previous: StoryResource[], incoming: StoryResource[]) {

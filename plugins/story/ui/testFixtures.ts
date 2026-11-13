@@ -58,6 +58,7 @@ export function createStoryDetails(overrides: Partial<StoryDetails> = {}): Story
     currentScene: overrides.currentScene ?? { key: "default", name: "默认场景", characterIds: [] },
     backgroundResource: overrides.backgroundResource ?? null,
     cgGallery: overrides.cgGallery ?? [],
+    voices: overrides.voices ?? [],
     currentStoryDate: overrides.currentStoryDate ?? "2026-08-02",
     currentTimeBand: overrides.currentTimeBand ?? "上午",
   };

@@ -6,6 +6,7 @@ import { createStoryBridgeClient } from "./storyBridgeClient";
 import { useStoryController } from "./useStoryController";
 import { useStoryWorkspacePresentation } from "./useStoryWorkspacePresentation";
 import { StoryAppSurface } from "./StoryAppSurface";
+import { createStoryVoiceSource } from "./storyVoice";
 
 /** Owns the full Story route; the shell supplies only RPC, host services and an exit callback. */
 export function StoryPage({ client, onExit }: PluginNavPageComponentProps) {
@@ -14,6 +15,14 @@ export function StoryPage({ client, onExit }: PluginNavPageComponentProps) {
   const [failure, setFailure] = useState<ReturnType<typeof describeStoryFailure> | null>(null);
   const storyClient = useMemo(() => createStoryBridgeClient(client), [client]);
   const controller = useStoryController(storyClient);
+  const voiceSource = useMemo(() => createStoryVoiceSource({
+    rpc: client,
+    stories: storyClient,
+    onSaveError: (cause) => {
+      const saveFailure = describeStoryFailure(cause, "语音未能存进存档，下次会重新生成");
+      host.feedback.warning(saveFailure.error, saveFailure.errorDetail ? { detail: saveFailure.errorDetail } : undefined);
+    },
+  }), [client, host, storyClient]);
   useEffect(() => {
     let active = true;
     void host.listRoles().then((next) => { if (active) setRoles(next); }).catch((cause: unknown) => {
@@ -25,6 +34,6 @@ export function StoryPage({ client, onExit }: PluginNavPageComponentProps) {
     if (!onExit) throw new Error("故事页面缺少退出入口");
     onExit();
   };
-  const presentation = useStoryWorkspacePresentation({ roles, client: storyClient, controller, onExit: exit });
+  const presentation = useStoryWorkspacePresentation({ roles, client: storyClient, controller, voiceSource, onExit: exit });
   return <StoryAppSurface>{failure ? <StoryError className="m-6" message={failure.error} detail={failure.errorDetail} /> : presentation.content}</StoryAppSurface>;
 }

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { useReducedMotion } from "motion/react";
+import type { PluginServiceReference } from "@yinfengwindy/shiori-sdk";
 
 /** Pace shared by text reveal and auto-play: slower values give the reader more time. */
 export type StoryPace = "slow" | "normal" | "fast";
@@ -11,6 +12,10 @@ export type StoryPreferences = {
   autoPlay: boolean;
   autoPlaySpeed: StoryPace;
   reducedMotion: boolean;
+  /** TTS service that voices role dialogue; null keeps the Story silent. */
+  voiceProvider: PluginServiceReference | null;
+  /** Voice volume in percent, applied by the Story's own audio graph. */
+  voiceVolume: number;
 };
 
 const storageKey = "shiori.story-preferences.v1";
@@ -22,6 +27,8 @@ export const defaultStoryPreferences: StoryPreferences = {
   autoPlay: false,
   autoPlaySpeed: "normal",
   reducedMotion: false,
+  voiceProvider: null,
+  voiceVolume: 80,
 };
 
 const textCharactersPerSecond: Record<StoryPace, number> = { slow: 18, normal: 36, fast: 72 };
@@ -37,6 +44,16 @@ export function storyAutoPlayDelayMs(preferences: StoryPreferences): number {
   return autoPlayDelayMs[preferences.autoPlaySpeed];
 }
 
+function readProvider(value: unknown): PluginServiceReference | null {
+  if (!value || typeof value !== "object") return null;
+  const { plugin_id: pluginId, service_id: serviceId } = value as Record<string, unknown>;
+  return typeof pluginId === "string" && pluginId && typeof serviceId === "string" && serviceId ? { plugin_id: pluginId, service_id: serviceId } : null;
+}
+
+function readVolume(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(100, Math.max(0, Math.round(value))) : defaultStoryPreferences.voiceVolume;
+}
+
 function readPace(value: unknown): StoryPace {
   return value === "slow" || value === "fast" ? value : "normal";
 }
@@ -47,13 +64,15 @@ export function readStoryPreferences(): StoryPreferences {
     const raw = globalThis.localStorage?.getItem(storageKey);
     if (!raw) return defaultStoryPreferences;
     const value = JSON.parse(raw) as Partial<Record<keyof StoryPreferences, unknown>>;
-    // Pick known fields only: older builds stored volume and motion-intensity keys that never took effect.
+    // Pick known fields only: older builds also stored music, ambience, effects and motion-intensity keys that never took effect.
     return {
       textSpeed: readPace(value.textSpeed),
       showFullText: value.showFullText === true,
       autoPlay: value.autoPlay === true,
       autoPlaySpeed: readPace(value.autoPlaySpeed),
       reducedMotion: value.reducedMotion === true,
+      voiceProvider: readProvider(value.voiceProvider),
+      voiceVolume: readVolume(value.voiceVolume),
     };
   } catch {
     return defaultStoryPreferences;

@@ -1435,7 +1435,9 @@ async def _call(handler: StorySimulationHandler, method: str, payload: dict) -> 
     return result
 
 
-async def _create_library_story(handler: StorySimulationHandler) -> str:
+async def _create_library_story(
+    handler: StorySimulationHandler, creation_id: str = "creation-1"
+) -> str:
     created = await _call(
         handler,
         "create",
@@ -1445,7 +1447,7 @@ async def _create_library_story(handler: StorySimulationHandler) -> str:
             "story_date": "2026-08-01",
             "time_band": "上午",
             "role_id": "role-1",
-            "creation_id": "creation-1",
+            "creation_id": creation_id,
             "player_profile": {
                 "display_name": "悠",
                 "appearance": "短发",
@@ -1454,6 +1456,119 @@ async def _create_library_story(handler: StorySimulationHandler) -> str:
         },
     )
     return str(created["story"]["id"])
+
+
+async def _opened_voice_story(handler: StorySimulationHandler) -> tuple[str, str]:
+    story_id = await _create_library_story(handler)
+    await _wait_for_director_tasks(handler)
+    story = (await _call(handler, "get", {"story_id": story_id}))["story"]
+    return story_id, str(story["beats"][0]["id"])
+
+
+def _voice_payload(story_id: str, beat_id: str, audio: bytes, audio_format: str):
+    import base64
+
+    return {
+        "story_id": story_id,
+        "beat_id": beat_id,
+        "fragment_index": 1,
+        "provider": {"plugin_id": "fish_audio_tts", "service_id": "tts"},
+        "audio_base64": base64.b64encode(audio).decode("ascii"),
+        "format": audio_format,
+    }
+
+
+@pytest.mark.asyncio
+async def test_saved_voice_replays_from_the_story_and_replaces_its_old_format(
+    tmp_path,
+) -> None:
+    import base64
+
+    handler = _library_handler(tmp_path, director=OpeningDirector())
+    story_id, beat_id = await _opened_voice_story(handler)
+    voices_dir = handler._catalog.database_path(story_id).parent / "assets" / "voices"
+    key = {"story_id": story_id, "beat_id": beat_id, "fragment_index": 1}
+
+    saved = await _call(
+        handler, "voice.save", _voice_payload(story_id, beat_id, b"RIFF-wav", "wav")
+    )
+    replayed = (await _call(handler, "voice.get", key))["voice"]
+    story = (await _call(handler, "get", {"story_id": story_id}))["story"]
+
+    expected = {
+        "beatId": beat_id,
+        "fragmentIndex": 1,
+        "provider": {"plugin_id": "fish_audio_tts", "service_id": "tts"},
+        "format": "wav",
+    }
+    assert saved == {"voice": expected}
+    assert base64.b64decode(replayed.pop("audio_base64")) == b"RIFF-wav"
+    assert replayed == expected
+    assert story["voices"] == [expected]
+
+    await _call(
+        handler, "voice.save", _voice_payload(story_id, beat_id, b"ID3-mp3", "mp3")
+    )
+    replaced = (await _call(handler, "voice.get", key))["voice"]
+
+    assert replaced["format"] == "mp3"
+    assert base64.b64decode(replaced["audio_base64"]) == b"ID3-mp3"
+    assert sorted(path.name for path in voices_dir.iterdir()) == [f"{beat_id}-1.mp3"]
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_voice_save_rejects_bad_audio_and_foreign_beats_without_files(
+    tmp_path,
+) -> None:
+    from plugins.story.backend.errors import StoryNotFoundError
+
+    handler = _library_handler(tmp_path, director=OpeningDirector())
+    story_id, beat_id = await _opened_voice_story(handler)
+    other_id = await _create_library_story(handler, "creation-2")
+    await _wait_for_director_tasks(handler)
+    invalid = {
+        **_voice_payload(story_id, beat_id, b"wav", "wav"),
+        "audio_base64": "bm90IGJhc2U2NA=!",
+    }
+
+    with pytest.raises(ValueError):
+        await _call(handler, "voice.save", invalid)
+    with pytest.raises(StoryNotFoundError):
+        await _call(
+            handler, "voice.save", _voice_payload(other_id, beat_id, b"wav", "wav")
+        )
+
+    for owner in (story_id, other_id):
+        story_dir = handler._catalog.database_path(owner).parent
+        assert not any(story_dir.glob("assets/voices/*"))
+        story = (await _call(handler, "get", {"story_id": owner}))["story"]
+        assert story["voices"] == []
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_voice_whose_file_disappeared_is_forgotten_for_resynthesis(
+    tmp_path,
+) -> None:
+    handler = _library_handler(tmp_path, director=OpeningDirector())
+    story_id, beat_id = await _opened_voice_story(handler)
+    await _call(
+        handler, "voice.save", _voice_payload(story_id, beat_id, b"RIFF", "wav")
+    )
+    story_dir = handler._catalog.database_path(story_id).parent
+    (story_dir / "assets" / "voices" / f"{beat_id}-1.wav").unlink()
+
+    missing = await _call(
+        handler,
+        "voice.get",
+        {"story_id": story_id, "beat_id": beat_id, "fragment_index": 1},
+    )
+
+    story = (await _call(handler, "get", {"story_id": story_id}))["story"]
+    assert missing == {"voice": None}
+    assert story["voices"] == []
+    await handler.aclose()
 
 
 @pytest.mark.asyncio

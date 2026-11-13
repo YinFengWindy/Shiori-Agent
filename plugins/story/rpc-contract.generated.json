@@ -13,58 +13,70 @@
     "get",
     "input",
     "list",
-    "rename"
+    "rename",
+    "voice.get",
+    "voice.save"
   ],
   "registrations": [
     {
       "name": "cg.list",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "cg.regenerate",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "cg.retry",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "continue",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "create",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "delete",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "get",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "input",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "list",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
     },
     {
       "name": "rename",
       "path": "plugins/story/backend/plugin.py",
-      "line": 73
+      "line": 75
+    },
+    {
+      "name": "voice.get",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 75
+    },
+    {
+      "name": "voice.save",
+      "path": "plugins/story/backend/plugin.py",
+      "line": 75
     }
   ],
   "services": []

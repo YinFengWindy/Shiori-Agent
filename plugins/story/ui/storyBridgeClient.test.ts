@@ -21,6 +21,7 @@ function storyPayload(revision = 4, operation: "awaiting_player" | "generating" 
     currentScene: { key: "default", name: "默认场景", characterIds: [] },
     backgroundResource: null,
     cgGallery: [],
+    voices: [],
     segment: { id: "segment-1", sequence: 1, storyDate: "2026-08-01", timeBand: "上午" as const, status: "active", mode: "plot", operation, openingContext: {}, runtimeSnapshot: {} },
     beats: [{ id: "beat-1", storyId: "story-1", segmentId: "segment-1", turnId: "turn-1", sequence: 1, storyDate: "2026-08-01", timeBand: "上午" as const, text: "风从走廊尽头吹来。", kind: "narration" as const, speaker: null, recordedAt: "2026-08-02T10:00:00+08:00" }],
     cues: [],

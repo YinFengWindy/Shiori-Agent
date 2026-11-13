@@ -1,4 +1,4 @@
-import { BridgeError } from "@yinfengwindy/shiori-sdk";
+import { BridgeError, type PluginServiceReference } from "@yinfengwindy/shiori-sdk";
 import type { StoryTimeBand } from "./storyTime";
 
 /** A Story entry shown in the launcher. */
@@ -98,6 +98,17 @@ export type StoryTurn = {
   updatedAt: string;
 };
 
+/** A saved voice line for one dialogue fragment, synthesized by `provider`. */
+export type StoryVoice = {
+  beatId: string;
+  fragmentIndex: number;
+  provider: PluginServiceReference;
+  format: "wav" | "mp3";
+};
+
+/** Saved voice audio as read back from the Story save. */
+export type StoryVoiceAudio = { audio_base64: string; format: "wav" | "mp3" };
+
 /** A renderer-safe Story read model returned by stories.get and stories.* mutations. */
 export type StoryDetails = {
   id: string;
@@ -125,6 +136,8 @@ export type StoryDetails = {
   currentScene: StoryScene;
   backgroundResource: StoryResource | null;
   cgGallery: StoryResource[];
+  /** Voice lines already saved in this Story, one per dialogue fragment. */
+  voices: StoryVoice[];
   currentStoryDate: string;
   currentTimeBand: StoryTimeBand;
 };
