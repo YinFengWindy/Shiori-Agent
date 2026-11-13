@@ -1,5 +1,6 @@
 import type { BackgroundCtx, PluginBackgroundSettled, SurfaceCreateResult } from "@yinfengwindy/shiori-sdk";
-import { isRecord, readPresentationIdentity, readPresentationState, type PetGesture, type PetPresentationIdentity, type PetPresentationState, type PetProviderReport } from "./protocol";
+import { isRecord } from "./guards";
+import { readPresentationIdentity, readPresentationState, type PetGesture, type PetPresentationIdentity, type PetPresentationState, type PetProviderReport } from "./protocol";
 
 type Instance<Load extends PetProviderLoad> = { surfaceId: string; load: Load; placement: PluginBackgroundSettled | null; ready: boolean; shown: boolean; created: Promise<SurfaceCreateResult> };
 /** Retained common state; each provider extends it with its own model data. */

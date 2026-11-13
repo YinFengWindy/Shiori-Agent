@@ -4,7 +4,7 @@ import type { BackgroundCtx, PluginBackgroundSettled } from "@yinfengwindy/shior
 import { createFakePluginClient } from "@yinfengwindy/shiori-sdk/testing";
 import { defaultVoicePreferences } from "./voice/preferences";
 import petBackground from "./index";
-import type { PetPresentationRequest } from "@yinfengwindy/shiori-pet";
+import type { PetPresentationRequest } from "../provider";
 
 /**
  * Covers the wiring, not the behaviour behind it.

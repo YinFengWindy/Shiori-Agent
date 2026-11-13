@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "shiori-plugin-pet-codex-sprite"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["shiori-sdk>=4.1.1,<4.2.0", "shiori-plugin-desktop-pet>=0.1.5", "pillow>=11.3.0"]
+dependencies = ["shiori-sdk>=4.1.1,<4.2.0", "shiori-plugin-desktop-pet>=0.1.4", "pillow>=11.3.0"]
 
 [project.optional-dependencies]
 test = ["shiori-sdk[testing]>=4.1.1,<4.2.0"]

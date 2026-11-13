@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { BackgroundCtx, PluginBackgroundSettled } from "@yinfengwindy/shiori-sdk";
-import type { PetProviderReport } from "@yinfengwindy/shiori-pet";
+import type { PetProviderReport } from "@shiori-plugin/desktop_pet/provider";
 import { deferred } from "@yinfengwindy/shiori-sdk/testing";
 import { SpritePresentationController } from "./controller";
 

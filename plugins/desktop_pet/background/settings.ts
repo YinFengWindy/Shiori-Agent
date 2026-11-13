@@ -1,4 +1,5 @@
-import { isRecord, readPetModelReference, type PetModelReference } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../provider/guards";
+import { readPetModelReference, type PetModelReference } from "../provider";
 import type { DesktopPetBinding, DesktopPetSettings } from "./types";
 /** Reads device preferences and upgrades the old sprite selection mirror in memory. */
 export function normalizeDesktopPetSettings(value: unknown): DesktopPetSettings {

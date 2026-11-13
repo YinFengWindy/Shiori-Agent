@@ -1,4 +1,4 @@
-import { isRecord } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "./isRecord";
 
 /** Provider-owned controls; all amplitudes are relative to the model's anchors. */
 export const animationControls = {

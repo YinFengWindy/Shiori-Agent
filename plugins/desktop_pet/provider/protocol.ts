@@ -1,4 +1,5 @@
 import type { PluginBackgroundSettled, PluginServiceReference } from "@yinfengwindy/shiori-sdk";
+import { isRecord, nonempty } from "./guards";
 
 /** Shared model-provider discovery contract. */
 export const petModelsContract = "shiori.pet-models.v1";
@@ -53,10 +54,6 @@ export function readPetModelReference(value: unknown): PetModelReference | null 
 export function readPetProviderReference(value: unknown): PluginServiceReference | null {
   return isRecord(value) && nonempty(value.plugin_id) && nonempty(value.service_id) ? { plugin_id: value.plugin_id, service_id: value.service_id } : null;
 }
-/** Checks unknown JSON objects at plugin boundaries. */
-export function isRecord(value: unknown): value is Record<string, unknown> { return Boolean(value && typeof value === "object" && !Array.isArray(value)); }
-/** Checks nonempty identity fields without coercion. */
-export function nonempty(value: unknown): value is string { return typeof value === "string" && value.trim().length > 0; }
 /** Parses the common command identity before dispatching any effects. */
 export function readPresentationIdentity(value: unknown): PetPresentationIdentity | null {
   if (!isRecord(value) || !nonempty(value.request_id) || !nonempty(value.lease_id) || !nonempty(value.role_id) || !nonempty(value.model_id)) return null;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { petModelKey } from "@yinfengwindy/shiori-pet";
+import { petModelKey } from "../provider";
 import { readPetPackages } from "./petPackages";
 
 const sprite = { plugin_id: "pet_codex_sprite", service_id: "models" };

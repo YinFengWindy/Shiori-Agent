@@ -1,5 +1,6 @@
 import type { BackgroundCtx } from "@yinfengwindy/shiori-sdk";
-import { isRecord, type PetProviderLoad } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../shared/isRecord";
+import type { PetProviderLoad } from "@shiori-plugin/desktop_pet/provider";
 import type { CaptureCommand, CapturePreferences, CaptureStatus } from "../capture/contracts";
 import type { AvatarPreferences } from "./preferences";
 

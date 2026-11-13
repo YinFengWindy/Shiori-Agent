@@ -4,7 +4,7 @@ import { errorMessage, type HostInlineErrorProps, usePluginHostServices, type Pl
 import { noPetPackages, readPetPackages, type PetPackages } from "./petPackages";
 import { pickPetPackageFile } from "./petPackagePicker";
 import type { PetPackageProvider } from "./petPackages";
-import type { PetModelReference } from "@yinfengwindy/shiori-pet";
+import type { PetModelReference } from "../provider";
 
 /** Loads and mutates this role's packages, then refreshes both form and pet projections. */
 export function usePetPackages({ roleId, disabled, client, onRoleDataChanged }: Omit<PluginRoleAssetsComponentProps, "host">) {

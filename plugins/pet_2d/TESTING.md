@@ -1,6 +1,6 @@
 # 独立测试
 
-Python 测试使用合成小包，守住 ZIP 路径与资源上限、清单与图片完整性、跨文件引用、原子发布、失败重试、角色隔离及服务生命周期。依赖 `shiori-sdk[testing]>=4.1.2,<4.2.0`、`shiori-plugin-desktop-pet>=0.1.5` 与 Pillow；不依赖宿主 fixture。
+Python 测试使用合成小包，守住 ZIP 路径与资源上限、清单与图片完整性、跨文件引用、原子发布、失败重试、角色隔离及服务生命周期。依赖 `shiori-sdk[testing]>=4.1.2,<4.2.0`、`shiori-plugin-desktop-pet>=0.1.4` 与 Pillow；不依赖宿主 fixture。
 
 在包含 SDK 与桌宠 wheel 的隔离环境安装 `.[test]` 后运行：
 

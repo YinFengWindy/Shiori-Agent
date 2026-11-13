@@ -1,5 +1,6 @@
 import type { PluginRpcClient } from "@yinfengwindy/shiori-sdk";
-import { emptyPetReply, isRecord, petModelKey, readPetModelReference, type PetAction, type PetBinding, type PetGesture, type PetModelReference, type PetPresentationState, type PetProviderReport, type PetVoiceState } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../provider/guards";
+import { emptyPetReply, petModelKey, readPetModelReference, type PetAction, type PetBinding, type PetGesture, type PetModelReference, type PetPresentationState, type PetProviderReport, type PetVoiceState } from "../provider";
 import { ReplyBubbleController } from "./replyBubble";
 import { desktopPetBindingPatch } from "./settings";
 import { PetPresentationTransport } from "./presentation";

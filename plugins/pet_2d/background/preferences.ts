@@ -1,5 +1,5 @@
 import type { PluginBackgroundStore } from "@yinfengwindy/shiori-sdk";
-import { isRecord } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../shared/isRecord";
 import type { CapturePreferences } from "../capture/contracts";
 import { readAnimationSettings, type AnimationSettings } from "../shared/animation";
 

@@ -1,6 +1,6 @@
 import { useEffect, type RefObject } from "react";
 import type { SurfaceHandle } from "@yinfengwindy/shiori-sdk";
-import { isRecord } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "../shared/isRecord";
 import type { AvatarRenderer } from "../surface/runtime/renderer";
 import { FaceCaptureSession } from "./session";
 

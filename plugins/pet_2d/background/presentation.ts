@@ -1,4 +1,4 @@
-import { emptyPetReply, readPresentationState, type PetProviderLoad, type PetPresentationIdentity } from "@yinfengwindy/shiori-pet";
+import { emptyPetReply, readPresentationState, type PetProviderLoad, type PetPresentationIdentity } from "@shiori-plugin/desktop_pet/provider";
 import { array, finite, record, text } from "../surface/runtime/model";
 
 /** Provider-private model documents and authorized image URLs in retained state. */

@@ -1,5 +1,5 @@
 import type { BackgroundCtx } from "@yinfengwindy/shiori-sdk";
-import { readPetModelReference, type PetModel } from "@yinfengwindy/shiori-pet";
+import { readPetModelReference, type PetModel } from "@shiori-plugin/desktop_pet/provider";
 import { readAnimationSettings, type AnimationCatalog, type AnimationSettings } from "../shared/animation";
 import type { AvatarPresentation } from "./presentation";
 import type { AvatarPreferences } from "./preferences";

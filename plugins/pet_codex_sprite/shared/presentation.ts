@@ -1,4 +1,5 @@
-import { isRecord, readPresentationIdentity, readPresentationState, type PetPresentationIdentity, type PetPresentationState } from "@yinfengwindy/shiori-pet";
+import { isRecord } from "./isRecord";
+import { readPresentationIdentity, readPresentationState, type PetPresentationIdentity, type PetPresentationState } from "@shiori-plugin/desktop_pet/provider";
 import { spriteAnimations, type SpriteState } from "../surface/spriteContract";
 
 /** Retained sprite-only load plus shared presentation state. */

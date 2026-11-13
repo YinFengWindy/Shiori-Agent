@@ -1,4 +1,4 @@
-import type { PetPresentationState } from "@yinfengwindy/shiori-pet";
+import type { PetPresentationState } from "@shiori-plugin/desktop_pet/provider";
 import type { AvatarModel } from "./model";
 import { animateScene, createScene, createSceneMotion } from "./scene";
 import { paintMouth } from "./mouth";

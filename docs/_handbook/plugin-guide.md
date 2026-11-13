@@ -169,6 +169,10 @@ UTF-8 YAML。字段在 `apps/backend/agent/plugin_host/manifest.py` 解析；外
 - **好感度**：`AffectionSummary` 只由好感插件的 `history`、`chat_status` RPC 返回，`RoleRecord` 与会话 metadata 不带它；第一次对话初始化之前为 `null`。`value` 是 -100 到 100，七个阶段：「厌恶」-100～-50、「冷淡」-49～-1、「陌生」0～19、「熟悉」20～39、「朋友」40～59、「亲密」60～79、「挚爱」80～100；`progress` 是当前阶段内的 0～1。`floor` 是达到过的最高「熟悉」及以上阶段的起点（20 / 40 / 60 / 80），从没达到「熟悉」时为 `null`；好感不会再低于它。「陌生」的角色可以掉到负值，但衰减不会让好感变成负数。消费方要处理全部七个阶段。寂寞增长和关系主动动机要求好感至少 60（「亲密」起点）。
 - **关系状态**：关系快照是好感插件的私有数据（`relationship_snapshot.json`），SDK 不再导出它的类型；聊天侧栏要的关系标签由 `chat_status` 返回。需要亲近程度的用好感。
 
+## 插件之间的代码复用
+
+互不依赖的插件不共享业务代码，小段重复可以接受。子插件在 manifest 声明 `dependencies` 依赖主插件后，共用逻辑由主插件导出：Python 运行时接口走 `ctx.expose` / `DEPENDENCIES`，静态契约可 import 已声明依赖的主插件模块；前端按包名引用主插件的导出子路径，不写跨插件相对路径。前端导出在构建时内联进子插件，只放稳定协议与 UI 套件，运行时状态仍经服务、事件或依赖 client 向主插件取得。主插件导出的契约变化时升主插件版本，子插件更新约束。领域无关的工具进 SDK 或 `packages/` 下的独立库，不经主插件导出。详见[代码复用归属](../decisions/2026-11-11-plugin-code-sharing.md)。
+
 ## 版本
 
 SDK 的自定义 `A.B.C` 中，A 是整体代际，B 允许破坏性 API 变更，C 用于同一 A.B 线内的兼容修复、功能与迁移。数值排序和区间语法保持原样，这不是标准 SemVer 的兼容承诺。源码版本只在 `packages/sdk/python/shiori_sdk/_version.py`。同一 A.B 线不能增加已有 Key/Protocol 的必需方法或删改既有调用契约；破坏性整理提升 B，可在新兼容线合并此前拆开的接口。详见 [版本规则](../decisions/2026-11-05-sdk-version-policy.md)。
