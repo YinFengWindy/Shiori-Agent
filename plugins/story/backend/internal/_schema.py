@@ -94,6 +94,19 @@ CREATE TABLE IF NOT EXISTS story_resources (
     UNIQUE(story_id, sequence)
 );
 
+CREATE TABLE IF NOT EXISTS story_voices (
+    story_id TEXT NOT NULL,
+    beat_id TEXT NOT NULL REFERENCES beats(id) ON DELETE CASCADE,
+    fragment_index INTEGER NOT NULL,
+    provider_plugin_id TEXT NOT NULL,
+    provider_service_id TEXT NOT NULL,
+    format TEXT NOT NULL,
+    path TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (beat_id, fragment_index)
+);
+
 CREATE TABLE IF NOT EXISTS idempotency (
     request_id TEXT PRIMARY KEY,
     payload_hash TEXT NOT NULL,

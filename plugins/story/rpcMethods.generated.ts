@@ -11,6 +11,8 @@ export const rpcMethods = {
   "input": "input",
   "list": "list",
   "rename": "rename",
+  "voice.get": "voice.get",
+  "voice.save": "voice.save",
 } as const;
 
 /** A backend method accepted by this plugin. */

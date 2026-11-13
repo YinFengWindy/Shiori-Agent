@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import type { RoleRecord } from "@yinfengwindy/shiori-sdk";
 import type { StoryBridgeClient } from "./storyBridgeClient";
 import type { StoryCgGallery } from "./types";
+import type { StoryVoiceSource } from "./storyVoice";
 import { isStoryOpeningFailed, replaceStoryGallery } from "./selectors";
 import type { useStoryController } from "./useStoryController";
 import { waitForMinimumStoryLoadingStage, waitForStoryLoadingCompletion } from "./storyLoadingPresentation";
@@ -16,11 +17,12 @@ type Args = {
   roles: RoleRecord[];
   client: StoryBridgeClient;
   controller: ReturnType<typeof useStoryController>;
+  voiceSource?: StoryVoiceSource;
   onExit: () => void;
 };
 
 /** Assembles the desktop workspace around the direct Story bridge. */
-export function useStoryWorkspacePresentation({ roles, client, controller, onExit }: Args) {
+export function useStoryWorkspacePresentation({ roles, client, controller, voiceSource, onExit }: Args) {
   const [mode, setMode] = useState<StoryPresentationMode>("launcher");
   const [loadingStoryId, setLoadingStoryId] = useState("");
   const [loadingElapsedMs, setLoadingElapsedMs] = useState(0);
@@ -100,6 +102,6 @@ export function useStoryWorkspacePresentation({ roles, client, controller, onExi
   }, [client, run]);
 
   return {
-    content: <StoryWorkspacePresentationView roles={roles} mode={mode} loadingStoryId={loadingStoryId} loadingElapsedMs={loadingElapsedMs} loadingPhase={loadingPhase} cgGallery={cgGallery} cgGalleryLoading={cgGalleryLoading} controller={controller} operation={operation} creation={creation} setMode={setMode} loadStoryForPlay={loadStoryForPlay} onOpenCg={openCgGallery} onRetryCg={retryCg} onOpenSettings={openSettings} onCloseSettings={closeSettings} onExit={onExit} />,
+    content: <StoryWorkspacePresentationView roles={roles} mode={mode} loadingStoryId={loadingStoryId} loadingElapsedMs={loadingElapsedMs} loadingPhase={loadingPhase} cgGallery={cgGallery} cgGalleryLoading={cgGalleryLoading} controller={controller} operation={operation} creation={creation} setMode={setMode} loadStoryForPlay={loadStoryForPlay} onOpenCg={openCgGallery} onRetryCg={retryCg} onOpenSettings={openSettings} onCloseSettings={closeSettings} onExit={onExit} voiceSource={voiceSource} />,
   };
 }

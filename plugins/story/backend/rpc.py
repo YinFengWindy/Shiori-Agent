@@ -30,6 +30,7 @@ from .story_time import (
     normalize_story_date,
     normalize_story_time_band,
 )
+from .voices import decode_voice_audio, encode_voice_audio
 
 from .image_generator import StoryImageGenerator
 
@@ -137,6 +138,10 @@ class StorySimulationHandler:
             return await self._retry_cg(payload, emit_event=emit_event)
         if method == "stories.cg.regenerate":
             return await self._regenerate_cg(payload, emit_event=emit_event)
+        if method == "stories.voice.save":
+            return self._save_voice(payload)
+        if method == "stories.voice.get":
+            return self._get_voice(payload)
         if method == "stories.create":
             return await self._create(payload, emit_event=emit_event)
         if method == "stories.input":
@@ -509,6 +514,38 @@ class StorySimulationHandler:
             "resource_id": resource_id,
         }
 
+    def _save_voice(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Persist renderer-synthesized dialogue audio so replays skip the provider."""
+
+        story_id = self._story_id(payload)
+        provider = payload.get("provider")
+        if not isinstance(provider, dict):
+            raise ValueError("provider 必须是对象")
+        voice = self._repository(story_id).save_voice(
+            story_id,
+            beat_id=self._required(payload, "beat_id"),
+            fragment_index=self._fragment_index(payload),
+            provider_plugin_id=self._required(provider, "plugin_id"),
+            provider_service_id=self._required(provider, "service_id"),
+            audio_format=self._required(payload, "format"),
+            audio=decode_voice_audio(payload.get("audio_base64")),
+        )
+        return {"voice": voice}
+
+    def _get_voice(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Return cached dialogue audio, or null when the renderer must synthesize."""
+
+        story_id = self._story_id(payload)
+        cached = self._repository(story_id).voice(
+            story_id,
+            self._required(payload, "beat_id"),
+            self._fragment_index(payload),
+        )
+        if cached is None:
+            return {"voice": None}
+        voice, audio = cached
+        return {"voice": {**voice, "audio_base64": encode_voice_audio(audio)}}
+
     def _schedule_story_cg(
         self,
         story: dict[str, Any],
@@ -743,6 +780,13 @@ class StorySimulationHandler:
         if value < 0:
             raise ValueError("expected_revision 必须是非负整数")
         return value
+
+    @staticmethod
+    def _fragment_index(payload: dict[str, Any]) -> int:
+        raw = payload.get("fragment_index")
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+            raise ValueError("fragment_index 必须是非负整数")
+        return raw
 
     @staticmethod
     async def _emit(

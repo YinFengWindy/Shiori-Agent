@@ -10,9 +10,11 @@ import { getStoryBeatPresentationFragments } from "./storyBeatPresentation";
 import { storyAutoPlayDelayMs, storyTextCharactersPerSecond, updateStoryPreferences, useStoryPreferences, useStoryReducedMotion } from "./storyPreferences";
 import { storyStageControlClass } from "./storyStyles";
 import { formatStoryDate } from "./storyTime";
-import type { StoryDetails } from "./types";
+import type { StoryBeat, StoryDetails } from "./types";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 import { useStoryTypewriter } from "./useStoryTypewriter";
+import type { StoryVoiceLine, StoryVoiceSource } from "./storyVoice";
+import { useStoryVoice } from "./useStoryVoice";
 
 type StoryGameSurfaceProps = {
   story: StoryDetails;
@@ -27,6 +29,8 @@ type StoryGameSurfaceProps = {
   onOpenArchive: () => void;
   onOpenSettings: () => void;
   onExit: () => void;
+  /** Voices role dialogue when a TTS provider is chosen in the Story settings. */
+  voiceSource?: StoryVoiceSource;
 };
 
 type StoryFragmentCursor = {
@@ -52,12 +56,25 @@ function resolveDialogueSpeakerName(speaker: string | null | undefined, roleName
   return normalizedSpeaker;
 }
 
+const enclosingQuotes = /^[“「『"]|[”」』"]$/gu;
+
+/** Builds the voice line for one fragment when it is the Story role speaking; narration stays silent. */
+function voiceLineFor(beat: StoryBeat | null, fragmentIndex: number, roleName: string | undefined): StoryVoiceLine | null {
+  if (!beat) return null;
+  const fragment = getStoryBeatPresentationFragments(beat)[fragmentIndex];
+  if (fragment?.kind !== "dialogue") return null;
+  const speaker = beat.speaker?.trim() ?? "";
+  if (speaker && speaker !== "角色" && speaker !== roleName?.trim()) return null;
+  const text = fragment.text.trim().replace(enclosingQuotes, "").trim();
+  return text ? { beatId: beat.id, fragmentIndex, text } : null;
+}
+
 function isTextEntryTarget(target: EventTarget | null) {
   return target instanceof Element && Boolean(target.closest("input, textarea, select, [contenteditable='true'], [role='dialog']"));
 }
 
 /** Renders the active Story as a layered visual-novel stage with one bottom dialogue band. */
-export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, errorDetail, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
+export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, errorDetail, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit, voiceSource }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const [dialogueVisible, setDialogueVisible] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -103,6 +120,14 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const showContinueMark = !isGenerating && typewriter.complete && hasMoreToRead;
   const showPlayerInput = typewriter.complete && canShowStoryInput(story, isGenerating, hasMoreToRead);
   const canSubmit = showPlayerInput && !busy && Boolean(action.trim());
+  const voice = useStoryVoice({
+    source: voiceSource,
+    story,
+    provider: preferences.voiceProvider,
+    volume: preferences.voiceVolume,
+    line: isGenerating ? null : voiceLineFor(presentedBeat, presentedFragmentIndex, story.roleSnapshot.name),
+    nextLine: isGenerating ? null : hasNextFragment ? voiceLineFor(presentedBeat, presentedFragmentIndex + 1, story.roleSnapshot.name) : voiceLineFor(nextBeat, 0, story.roleSnapshot.name),
+  });
 
   useEffect(() => {
     setPlaybackState((current) => syncStoryPlaybackState(current, story));
@@ -159,10 +184,10 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
 
   const autoPlayDelay = storyAutoPlayDelayMs(preferences);
   useEffect(() => {
-    if (!preferences.autoPlay || !showContinueMark || !dialogueVisible) return;
+    if (!preferences.autoPlay || !showContinueMark || !dialogueVisible || voice.speaking) return;
     const timer = setTimeout(() => advanceRef.current(), autoPlayDelay);
     return () => clearTimeout(timer);
-  }, [advanceRef, autoPlayDelay, dialogueVisible, preferences.autoPlay, showContinueMark, typewriterKey]);
+  }, [advanceRef, autoPlayDelay, dialogueVisible, preferences.autoPlay, showContinueMark, typewriterKey, voice.speaking]);
 
   async function submit() {
     if (!canSubmit) return;
@@ -249,6 +274,7 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
           </section>
         </div>
       </> : null}
+      {voice.failure && dialogueVisible ? <StoryError className="fixed left-1/2 top-20 z-40 w-[min(28rem,calc(100%-2rem))] -translate-x-1/2" message={voice.failure.error} detail={voice.failure.errorDetail} /> : null}
       {error ? <StoryError className="fixed bottom-5 left-1/2 z-40 w-[min(32rem,calc(100%-2rem))] -translate-x-1/2" message={error} detail={errorDetail} /> : null}
     </section>
   );

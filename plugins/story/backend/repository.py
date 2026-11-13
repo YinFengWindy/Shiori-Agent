@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any, Iterator
 from uuid import uuid4
 
+from shiori_sdk.files.text import atomic_save_bytes
+
 from .assets import adopt_existing_images, adopt_image
 from .internal._json import dump, load
 from .internal._schema import SCHEMA
@@ -31,6 +33,7 @@ from .models import (
     has_chinese_text,
     utc_now,
 )
+from .voices import VOICE_FORMATS, voice_relative_path
 from .story_time import (
     next_story_clock,
     normalize_story_date,
@@ -167,6 +170,13 @@ class StoryRepository:
                 WHERE story_id = ? ORDER BY sequence, created_at, id""",
                 (story_id,),
             ).fetchall()
+            voices = self._connection.execute(
+                """SELECT story_voices.* FROM story_voices
+                JOIN beats ON beats.id = story_voices.beat_id
+                WHERE story_voices.story_id = ?
+                ORDER BY beats.sequence, story_voices.fragment_index""",
+                (story_id,),
+            ).fetchall()
         resource_models = [self._resource_dict(row) for row in resources]
         background_resource = next(
             (
@@ -190,6 +200,7 @@ class StoryRepository:
             "turns": [self._turn_dict(row) for row in turns],
             "backgroundResource": background_resource,
             "cgGallery": resource_models,
+            "voices": [self._voice_dict(row) for row in voices],
             "currentStoryDate": str(segment["story_date"]),
             "currentTimeBand": str(segment["time_band"]),
             "currentScene": self._current_scene_dict(
@@ -348,6 +359,112 @@ class StoryRepository:
                 "SELECT * FROM story_resources WHERE id = ?", (resource_id,), connection
             )
         return self._resource_dict(row)
+
+    def save_voice(
+        self,
+        story_id: str,
+        *,
+        beat_id: str,
+        fragment_index: int,
+        provider_plugin_id: str,
+        provider_service_id: str,
+        audio_format: str,
+        audio: bytes,
+    ) -> dict[str, Any]:
+        """Replace one dialogue fragment's cached audio file and its record."""
+
+        if audio_format not in VOICE_FORMATS:
+            raise ValueError("format 只能是 wav 或 mp3")
+        if not provider_plugin_id.strip() or not provider_service_id.strip():
+            raise ValueError("provider 不能为空")
+        if fragment_index < 0:
+            raise ValueError("fragment_index 必须是非负整数")
+        if not audio:
+            raise ValueError("语音内容不能为空")
+        relative_path = voice_relative_path(beat_id, fragment_index, audio_format)
+        story_dir = self.db_path.parent
+        previous_path: str | None = None
+        written = False
+        try:
+            with self.transaction() as connection:
+                self._require_row(
+                    "SELECT id FROM beats WHERE id = ? AND story_id = ?",
+                    (beat_id, story_id),
+                    connection,
+                )
+                previous = connection.execute(
+                    """SELECT path FROM story_voices
+                    WHERE beat_id = ? AND fragment_index = ?""",
+                    (beat_id, fragment_index),
+                ).fetchone()
+                previous_path = None if previous is None else str(previous["path"])
+                atomic_save_bytes(story_dir / relative_path, audio)
+                written = True
+                now = utc_now()
+                connection.execute(
+                    """INSERT INTO story_voices
+                    (story_id, beat_id, fragment_index, provider_plugin_id,
+                     provider_service_id, format, path, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(beat_id, fragment_index) DO UPDATE SET
+                        provider_plugin_id = excluded.provider_plugin_id,
+                        provider_service_id = excluded.provider_service_id,
+                        format = excluded.format,
+                        path = excluded.path,
+                        updated_at = excluded.updated_at""",
+                    (
+                        story_id,
+                        beat_id,
+                        fragment_index,
+                        provider_plugin_id.strip(),
+                        provider_service_id.strip(),
+                        audio_format,
+                        relative_path,
+                        now,
+                        now,
+                    ),
+                )
+                row = self._require_row(
+                    """SELECT * FROM story_voices
+                    WHERE beat_id = ? AND fragment_index = ?""",
+                    (beat_id, fragment_index),
+                    connection,
+                )
+        except BaseException:
+            # A file the committed record never pointed at must not outlive the
+            # failed write; a same-path overwrite keeps the replaced audio usable.
+            if written and previous_path != relative_path:
+                (story_dir / relative_path).unlink(missing_ok=True)
+            raise
+        if previous_path is not None and previous_path != relative_path:
+            (story_dir / previous_path).unlink(missing_ok=True)
+        return self._voice_dict(row)
+
+    def voice(
+        self, story_id: str, beat_id: str, fragment_index: int
+    ) -> tuple[dict[str, Any], bytes] | None:
+        """Return cached fragment audio, forgetting records whose file disappeared."""
+
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT * FROM story_voices
+                WHERE story_id = ? AND beat_id = ? AND fragment_index = ?""",
+                (story_id, beat_id, fragment_index),
+            ).fetchone()
+            if row is None:
+                return None
+            try:
+                audio = (self.db_path.parent / str(row["path"])).read_bytes()
+            except FileNotFoundError:
+                # The renderer re-synthesizes and saves again after a null result.
+                with self.transaction() as connection:
+                    connection.execute(
+                        """DELETE FROM story_voices
+                        WHERE beat_id = ? AND fragment_index = ?""",
+                        (beat_id, fragment_index),
+                    )
+                return None
+        return self._voice_dict(row), audio
 
     def current_time_band(self, story_id: str) -> str:
         """Return the current player-facing Story period."""
@@ -1013,6 +1130,18 @@ class StoryRepository:
             updated_at=str(row["updated_at"]),
         )
         return resource.to_dict()
+
+    @staticmethod
+    def _voice_dict(row: sqlite3.Row) -> dict[str, Any]:
+        return {
+            "beatId": row["beat_id"],
+            "fragmentIndex": int(row["fragment_index"]),
+            "provider": {
+                "plugin_id": row["provider_plugin_id"],
+                "service_id": row["provider_service_id"],
+            },
+            "format": row["format"],
+        }
 
 
 def payload_hash(payload: dict[str, Any]) -> str:

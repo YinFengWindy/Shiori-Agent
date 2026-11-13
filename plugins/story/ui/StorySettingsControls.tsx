@@ -49,3 +49,32 @@ export function StoryToggle({ checked, label, onChange }: StoryToggleProps) {
     </button>
   );
 }
+
+type StoryVolumeControlProps = {
+  id: string;
+  label: string;
+  value: number;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+};
+
+/** Renders one labeled volume slider with its numeric value. */
+export function StoryVolumeControl({ id, label, value, disabled = false, onChange }: StoryVolumeControlProps) {
+  return (
+    <span className={cx("grid grid-cols-[minmax(0,1fr)_3rem] items-center gap-3", disabled && "opacity-45")}>
+      <input
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full accent-[color:var(--story-wine)] disabled:cursor-default"
+        id={id}
+        type="range"
+        min="0"
+        max="100"
+        value={value}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(event) => onChange(Number(event.target.value))}
+        style={{ background: `linear-gradient(90deg, var(--story-wine) ${value}%, var(--story-line-field) ${value}%)` }}
+      />
+      <output className="text-right text-xs font-semibold tabular-nums text-[color:var(--story-ink-muted)]" htmlFor={id}>{value}%</output>
+    </span>
+  );
+}
