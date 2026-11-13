@@ -97,7 +97,7 @@ Shiori 以角色为中心组织人设、记忆、会话、素材与关系。你�
 
 ### 本地开发
 
-环境：Windows x64、Node.js 22+、pnpm 10.33.0、Python 3.12+、uv、PowerShell 7。
+环境：Windows x64、Node.js 22.15+、pnpm 10.33.0、Python 3.12+、uv、PowerShell 7。
 
 ```powershell
 uv sync --dev --locked

@@ -99,7 +99,7 @@ Natural chat, affection, scene observation, scheduled tasks, proactive interacti
 
 ### Local development
 
-Requirements: Windows x64, Node.js 22+, pnpm 10.33.0, Python 3.12+, uv, PowerShell 7.
+Requirements: Windows x64, Node.js 22.15+, pnpm 10.33.0, Python 3.12+, uv, PowerShell 7.
 
 ```powershell
 uv sync --dev --locked

@@ -5,6 +5,8 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { batchByArgumentLength } from "./test-unit-batches.mjs";
+import { prebundleManifestEnv } from "./test-unit-loader-hooks.mjs";
+import { prebundleTestDependencies } from "./test-unit-prebundle.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(here, "..");
@@ -123,9 +125,9 @@ const batches = batchByArgumentLength(testFiles.map((path) => relative(repoRoot,
  * Runs one `node --test` batch: spec output goes to the terminal, the summary
  * reporter writes this batch's counts to `summaryPath`.
  */
-function runBatch(files, summaryPath) {
+function runBatch(files, summaryPath, env) {
   return new Promise((resolveBatch, rejectBatch) => {
-    const child = spawn(
+    const child = runningBatch = spawn(
       process.execPath,
       [tsxCli, "--tsconfig", rendererTsconfig, `--import=${testLoader}`, "--test",
         `--test-concurrency=${testConcurrency}`,
@@ -134,26 +136,61 @@ function runBatch(files, summaryPath) {
         ...(options["test-name-pattern"] !== undefined
           ? [`--test-name-pattern=${options["test-name-pattern"]}`] : []),
         ...files],
-      { cwd: repoRoot, stdio: "inherit" },
+      { cwd: repoRoot, stdio: "inherit", env },
     );
     child.on("error", rejectBatch);
-    child.on("exit", (code, signal) => resolveBatch({ code, signal }));
+    child.on("exit", (code, signal) => {
+      runningBatch = undefined;
+      resolveBatch({ code, signal });
+    });
   });
 }
 
-const summaryDir = await mkdtemp(join(tmpdir(), "shiori-desktop-test-"));
+/** The batch process currently running, if any. */
+let runningBatch;
+/** The interrupt this runner received, once it has received one. */
+let interruptSignal;
+
+/**
+ * An interrupt must not end this process straight away: the run directory
+ * holds the prebundled dependencies and the compile cache, and exiting before
+ * the `finally` below removes it leaves the whole thing in the temp directory
+ * on every Ctrl+C. Record the signal, pass it to the running batch (Ctrl+C
+ * already reaches it through the terminal; a signal sent to this process
+ * alone does not), start no further batch, clean up, then end with that
+ * signal.
+ */
+function onInterrupt(signal) {
+  interruptSignal ??= signal;
+  runningBatch?.kill(signal);
+}
+const interruptSignals = ["SIGINT", "SIGTERM"];
+for (const signal of interruptSignals) process.on(signal, onInterrupt);
+
+// Holds this run's prebundled dependencies and per-batch summaries.
+const runDir = await mkdtemp(join(tmpdir(), "shiori-desktop-test-"));
 const totals = { tests: 0, passed: 0, failed: 0, skipped: 0, todo: 0 };
 const failedBatches = [];
 const startedAt = Date.now();
 try {
+  const childEnv = {
+    ...process.env,
+    [prebundleManifestEnv]: await prebundleTestDependencies(join(runDir, "prebundle")),
+    // Test processes compile the same modules over and over; V8's code cache
+    // lets every process after the first skip that. Kept per run unless the
+    // caller already chose a cache directory.
+    NODE_COMPILE_CACHE: process.env.NODE_COMPILE_CACHE ?? join(runDir, "compile-cache"),
+  };
   for (const [index, files] of batches.entries()) {
+    if (interruptSignal) break;
     const label = `batch ${index + 1}/${batches.length}`;
     if (batches.length > 1) console.log(`\n[desktop:test] ${label}: ${files.length} files`);
-    const summaryPath = join(summaryDir, `batch-${index + 1}.json`);
-    const { code, signal } = await runBatch(files, summaryPath);
+    const summaryPath = join(runDir, `batch-${index + 1}.json`);
+    const { code, signal } = await runBatch(files, summaryPath, childEnv);
     if (signal) {
-      // Forward an interrupt (e.g. Ctrl+C) instead of starting the next batch.
-      process.kill(process.pid, signal);
+      // The batch was killed (an interrupt, or e.g. the OOM killer): stop
+      // instead of starting the next batch, and end with the same signal.
+      interruptSignal ??= signal;
       break;
     }
     const counts = JSON.parse(await readFile(summaryPath, "utf-8"));
@@ -162,12 +199,17 @@ try {
     if (code !== 0) failedBatches.push(label);
   }
 } finally {
-  await rm(summaryDir, { recursive: true, force: true });
+  await rm(runDir, { recursive: true, force: true });
+}
+
+if (interruptSignal) {
+  for (const signal of interruptSignals) process.off(signal, onInterrupt);
+  process.kill(process.pid, interruptSignal);
 }
 
 const seconds = ((Date.now() - startedAt) / 1000).toFixed(1);
-console.log(`\n[desktop:test] ${testFiles.length} files in ${batches.length} batch(es), ${seconds}s: `
-  + `tests ${totals.tests}, pass ${totals.passed}, fail ${totals.failed}, `
+console.log(`\n[desktop:test] ${testFiles.length} files in ${batches.length} batch(es), ${seconds}s, `
+  + `concurrency ${testConcurrency}: tests ${totals.tests}, pass ${totals.passed}, fail ${totals.failed}, `
   + `skipped ${totals.skipped}, todo ${totals.todo}`);
 if (failedBatches.length) {
   console.log(`[desktop:test] failed: ${failedBatches.join(", ")}`);

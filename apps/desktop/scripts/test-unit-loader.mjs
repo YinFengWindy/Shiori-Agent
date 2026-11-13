@@ -3,12 +3,13 @@
  * `test-unit-loader-hooks.mjs` in every `node --test` child before any test
  * file loads, then settles Base UI's load-time environment probes.
  */
-import { readFile } from "node:fs/promises";
-import { createRequire, register } from "node:module";
+import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
+import { registerTestModuleHooks } from "./test-unit-loader-hooks.mjs";
+import { esmEntryTarget, readPackageManifest, sdkPackageRequire } from "./test-unit-packages.mjs";
 
-register("./test-unit-loader-hooks.mjs", import.meta.url);
+registerTestModuleHooks();
 
 /** Base UI's utility modules that answer an environment question at load time. */
 const baseUiProbeSubpaths = ["./useIsoLayoutEffect", "./platform"];
@@ -20,23 +21,19 @@ function baseUiProbeError(detail) {
 
 /**
  * ESM URLs of the probe modules in the very Base UI copy the plugin SDK
- * loads: resolved from the SDK package itself (which owns `Select` and
- * `ActionMenu`), so a second copy elsewhere in the tree cannot be settled
- * in its place.
+ * loads (the SDK owns `Select` and `ActionMenu`), so a second copy elsewhere
+ * in the tree cannot be settled in its place. The prebundled Base UI
+ * (`test-unit-prebundle.mjs`) leaves `@base-ui/utils` external and imports
+ * these same files.
  */
 async function baseUiProbeUrls() {
-  // The main entry is `src/index.ts`, one level below the package root.
-  const sdkManifestPath = join(dirname(fileURLToPath(import.meta.resolve("@yinfengwindy/shiori-sdk"))), "..", "package.json");
-  if (JSON.parse(await readFile(sdkManifestPath, "utf8")).name !== "@yinfengwindy/shiori-sdk") {
-    throw new Error(`test-unit-loader: ${sdkManifestPath} is not the plugin SDK manifest; the SDK main entry moved, update baseUiProbeUrls().`);
-  }
-  const baseUiManifestPath = createRequire(sdkManifestPath).resolve("@base-ui/react/package.json");
+  const baseUiManifestPath = (await sdkPackageRequire()).resolve("@base-ui/react/package.json");
   const utilsManifestPath = createRequire(baseUiManifestPath).resolve("@base-ui/utils/package.json");
-  const { exports } = JSON.parse(await readFile(utilsManifestPath, "utf8"));
-  if (!exports || typeof exports !== "object") throw baseUiProbeError(`${utilsManifestPath} has no "exports" map`);
+  const utilsManifest = await readPackageManifest(utilsManifestPath);
+  if (!utilsManifest.exports || typeof utilsManifest.exports !== "object") throw baseUiProbeError(`${utilsManifestPath} has no "exports" map`);
   return baseUiProbeSubpaths.map((subpath) => {
-    const target = exports[subpath]?.import?.default;
-    if (typeof target !== "string") throw baseUiProbeError(`@base-ui/utils no longer exports an ESM "${subpath}"`);
+    const target = esmEntryTarget(utilsManifest, subpath);
+    if (target === undefined) throw baseUiProbeError(`@base-ui/utils no longer exports an ESM "${subpath}"`);
     return pathToFileURL(join(dirname(utilsManifestPath), target)).href;
   });
 }
