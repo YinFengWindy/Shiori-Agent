@@ -21,7 +21,8 @@ type StoryCgGallerySurfaceProps = {
   onBack: () => void;
 };
 
-const lightboxButtonClass = "grid h-11 w-11 place-items-center rounded-md text-[color:var(--story-stage-ink-muted)] transition-colors hover:bg-[color:var(--story-stage-glass-hover)] hover:text-[color:var(--story-stage-ink)] disabled:cursor-default disabled:opacity-30";
+// `aria-disabled` rather than `disabled`: a focused arrow at the first or last CG must keep focus inside the dialog.
+const lightboxButtonClass = "grid h-11 w-11 place-items-center rounded-md text-[color:var(--story-stage-ink-muted)] transition-colors hover:bg-[color:var(--story-stage-glass-hover)] hover:text-[color:var(--story-stage-ink)] aria-disabled:cursor-default aria-disabled:opacity-30";
 
 function resourceLabel(resource: StoryResource, index: number) {
   if (resource.kind === "background") return "开场背景";
@@ -37,6 +38,7 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
   const [selectedStoryId, setSelectedStoryId] = useState(stories[0]?.storyId ?? "");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const previewTriggerRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   const reducedMotion = useStoryReducedMotion();
   const host = usePluginHostServices();
   const selectedStory = stories.find((story) => story.storyId === selectedStoryId) ?? stories[0] ?? null;
@@ -55,8 +57,18 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
     if (target) setPreviewId(target.id);
   }
 
+  /** Keeps Tab inside the modal preview, cycling over its own buttons. */
+  function trapTab(event: KeyboardEvent) {
+    const buttons = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("button") ?? []);
+    if (!buttons.length) return;
+    const index = buttons.indexOf(document.activeElement as HTMLElement);
+    const next = event.shiftKey ? (index <= 0 ? buttons.length - 1 : index - 1) : (index + 1) % buttons.length;
+    buttons[next]?.focus();
+  }
+
   const keyHandlerRef = useLatestRef((event: KeyboardEvent) => {
-    if (event.key === "Escape") closePreview();
+    if (event.key === "Tab") trapTab(event);
+    else if (event.key === "Escape") closePreview();
     else if (event.key === "ArrowLeft") stepPreview(-1);
     else if (event.key === "ArrowRight") stepPreview(1);
     else return;
@@ -124,6 +136,7 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
         {preview ? <motion.div
           key="story-cg-preview"
           className="fixed inset-0 z-40 grid grid-rows-[minmax(0,1fr)_auto] place-items-center gap-3 bg-[color:var(--story-lightbox)] p-6 backdrop-blur-md"
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="CG 预览"
@@ -134,8 +147,8 @@ export function StoryCgGallerySurface({ stories, background, sharedBackdrop = fa
           onClick={(event) => { if (event.target === event.currentTarget) closePreview(); }}
         >
           <button className={cx(lightboxButtonClass, "absolute right-5 top-5")} type="button" aria-label="关闭 CG 预览" title="关闭 CG 预览（Esc）" autoFocus onClick={closePreview}><X className="h-6 w-6" weight="bold" /></button>
-          <button className={cx(lightboxButtonClass, "absolute left-5 top-1/2 -translate-y-1/2")} type="button" aria-label="上一张" title="上一张（←）" disabled={previewIndex <= 0} onClick={() => stepPreview(-1)}><CaretLeft className="h-6 w-6" weight="bold" /></button>
-          <button className={cx(lightboxButtonClass, "absolute right-5 top-1/2 -translate-y-1/2")} type="button" aria-label="下一张" title="下一张（→）" disabled={previewIndex >= previewable.length - 1} onClick={() => stepPreview(1)}><CaretRight className="h-6 w-6" weight="bold" /></button>
+          <button className={cx(lightboxButtonClass, "absolute left-5 top-1/2 -translate-y-1/2")} type="button" aria-label="上一张" title="上一张（←）" aria-disabled={previewIndex <= 0} onClick={() => stepPreview(-1)}><CaretLeft className="h-6 w-6" weight="bold" /></button>
+          <button className={cx(lightboxButtonClass, "absolute right-5 top-1/2 -translate-y-1/2")} type="button" aria-label="下一张" title="下一张（→）" aria-disabled={previewIndex >= previewable.length - 1} onClick={() => stepPreview(1)}><CaretRight className="h-6 w-6" weight="bold" /></button>
           <AnimatePresence initial={false} mode="wait">
             <motion.img
               key={preview.id}

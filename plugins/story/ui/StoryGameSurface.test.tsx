@@ -118,8 +118,9 @@ describe("StoryGameSurface", () => {
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
-  it("replaces the dialogue with one generation state and hides player input while busy", () => {
-    const markup = renderStoryMarkup(<StoryGameSurface story={createStoryDetails()} busy error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+  it("replaces the dialogue with one generation state and hides player input while the turn generates", () => {
+    const generating = createStoryDetails();
+    const markup = renderStoryMarkup(<StoryGameSurface story={{ ...generating, segment: { ...generating.segment, operation: "generating" } }} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, />剧情生成中\.\.\.</);
     assert.doesNotMatch(markup, />你终于来了。</);

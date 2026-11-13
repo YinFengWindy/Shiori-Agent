@@ -1502,6 +1502,59 @@ async def test_story_cannot_be_deleted_while_its_turn_is_generating(tmp_path) ->
 
 
 @pytest.mark.asyncio
+async def test_story_with_persisted_generating_image_cannot_be_deleted(
+    tmp_path,
+) -> None:
+    from plugins.story.backend.errors import StoryInvalidStateError
+
+    handler = _library_handler(
+        tmp_path, director=OpeningDirector(), image_tool=FileImageTool(tmp_path)
+    )
+    story_id = await _create_library_story(handler)
+    await _wait_for_director_tasks(handler)
+    for _ in range(8):
+        await asyncio.sleep(0)
+    repository = handler._repository(story_id)
+    background = repository.story_read_model(story_id)["backgroundResource"]
+    # A retry has persisted "generating" but not yet scheduled its task.
+    repository.prepare_resource(background["id"], prompt="again", source_turn_id=None)
+    database = handler._catalog.database_path(story_id)
+
+    with pytest.raises(StoryInvalidStateError):
+        await _call(handler, "delete", {"story_id": story_id})
+
+    assert database.exists()
+    assert handler._catalog.require_entry(story_id)["status"] == "active"
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_file_removal_keeps_the_story_listed_for_retry(
+    tmp_path, monkeypatch
+) -> None:
+    import shutil
+
+    handler = _library_handler(tmp_path, director=OpeningDirector())
+    story_id = await _create_library_story(handler)
+    await _wait_for_director_tasks(handler)
+
+    def locked(_path, *args, **kwargs):
+        raise PermissionError("file is in use")
+
+    monkeypatch.setattr(shutil, "rmtree", locked)
+    with pytest.raises(PermissionError):
+        await _call(handler, "delete", {"story_id": story_id})
+    assert [
+        story["story_id"] for story in (await _call(handler, "list", {}))["stories"]
+    ] == [story_id]
+
+    monkeypatch.undo()
+    await _call(handler, "delete", {"story_id": story_id})
+    assert (await _call(handler, "list", {}))["stories"] == []
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
 async def test_renamed_story_title_reaches_library_and_story_without_new_revision(
     tmp_path,
 ) -> None:

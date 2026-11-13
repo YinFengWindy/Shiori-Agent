@@ -369,6 +369,19 @@ class StoryRepository:
             )
         return str(segment["story_date"])
 
+    def generation_in_progress(self, story_id: str) -> bool:
+        """Whether a turn or an image is being generated for this Story."""
+
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT
+                EXISTS (SELECT 1 FROM segments WHERE story_id = ? AND operation = 'generating')
+                OR EXISTS (SELECT 1 FROM story_resources WHERE story_id = ? AND status = 'generating')
+                AS busy""",
+                (story_id, story_id),
+            ).fetchone()
+        return bool(row["busy"])
+
     def library_summary(self, story_id: str) -> dict[str, Any]:
         """Return the stage, role and cover facts shown for one saved Story."""
 

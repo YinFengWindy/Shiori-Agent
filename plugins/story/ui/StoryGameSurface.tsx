@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { AutosizeTextarea, cx, useLatestRef, usePluginHostServices } from "@yinfengwindy/shiori-sdk";
 import { canShowStoryInput, isStoryRoleInCurrentScene, selectActiveStoryVisualResource } from "./selectors";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
-import { advanceStoryPlayback, createStoryPlaybackState, getNextStoryBeat, getPresentedStoryBeat, syncStoryPlaybackState } from "./storyPlayback";
+import { advanceStoryPlayback, createStoryPlaybackState, getNextStoryBeat, getPresentedStoryBeat, syncStoryPlaybackState, type StoryPlaybackState } from "./storyPlayback";
 import { getStoryBeatPresentationFragments } from "./storyBeatPresentation";
 import { storyAutoPlayDelayMs, storyTextCharactersPerSecond, updateStoryPreferences, useStoryPreferences, useStoryReducedMotion } from "./storyPreferences";
 import { storyStageControlClass } from "./storyStyles";
@@ -34,8 +34,15 @@ type StoryFragmentCursor = {
   index: number;
 };
 
-/** Minimum gap between two wheel-driven advances, so one flick reads one line. */
-const WHEEL_ADVANCE_COOLDOWN_MS = 350;
+/** Quiet time that ends one wheel gesture; trackpad inertia keeps firing inside it, so one flick reads one line. */
+const WHEEL_GESTURE_GAP_MS = 250;
+
+/**
+ * Reading position per Story. The game page unmounts while the record or the
+ * settings are open; without this the player would return to the latest beat
+ * and skip every line not yet read.
+ */
+const readingPositions = new Map<string, { playback: StoryPlaybackState; cursor: StoryFragmentCursor }>();
 const advanceKeys = new Set([" ", "Enter", "ArrowDown", "PageDown"]);
 const archiveKeys = new Set(["ArrowUp", "PageUp"]);
 
@@ -53,10 +60,11 @@ function isTextEntryTarget(target: EventTarget | null) {
 export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGROUND, busy, error, errorDetail, characterAvatarUrl, onSubmitInput, onRegenerateCg, onOpenArchive, onOpenSettings, onExit }: StoryGameSurfaceProps) {
   const [action, setAction] = useState("");
   const [dialogueVisible, setDialogueVisible] = useState(true);
-  const [playbackState, setPlaybackState] = useState(() => createStoryPlaybackState(story));
-  const [fragmentCursor, setFragmentCursor] = useState<StoryFragmentCursor>({ beatId: null, index: 0 });
+  const [submitting, setSubmitting] = useState(false);
+  const [playbackState, setPlaybackState] = useState(() => readingPositions.get(story.id)?.playback ?? createStoryPlaybackState(story));
+  const [fragmentCursor, setFragmentCursor] = useState<StoryFragmentCursor>(() => readingPositions.get(story.id)?.cursor ?? { beatId: null, index: 0 });
   const archiveWheelTriggeredRef = useRef(false);
-  const lastWheelAdvanceRef = useRef(0);
+  const lastWheelEventRef = useRef(0);
   const preferences = useStoryPreferences();
   const reducedMotion = useStoryReducedMotion();
   const host = usePluginHostServices();
@@ -78,7 +86,8 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
     && storyVisualResource?.visualType === "scene"
     && isStoryRoleInCurrentScene(story);
   const hasGeneratingCg = story.cgGallery.some((resource) => resource.kind === "cg" && resource.status === "generating");
-  const isGenerating = busy || story.segment.operation === "generating";
+  // Only a turn in progress replaces the dialogue; other busy work (a CG regeneration) keeps the line on screen.
+  const isGenerating = submitting || story.segment.operation === "generating";
   const isDialogueFragment = presentedFragment?.kind === "dialogue";
   const fragmentLabel = isGenerating
     ? ""
@@ -93,11 +102,15 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
   const hasMoreToRead = hasNextFragment || nextBeat !== null;
   const showContinueMark = !isGenerating && typewriter.complete && hasMoreToRead;
   const showPlayerInput = typewriter.complete && canShowStoryInput(story, isGenerating, hasMoreToRead);
-  const canSubmit = showPlayerInput && Boolean(action.trim());
+  const canSubmit = showPlayerInput && !busy && Boolean(action.trim());
 
   useEffect(() => {
     setPlaybackState((current) => syncStoryPlaybackState(current, story));
   }, [story]);
+
+  useEffect(() => {
+    readingPositions.set(story.id, { playback: playbackState, cursor: fragmentCursor });
+  }, [fragmentCursor, playbackState, story.id]);
 
   useEffect(() => {
     if (!showPlayerInput && action) setAction("");
@@ -153,10 +166,17 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
 
   async function submit() {
     if (!canSubmit) return;
-    if (await onSubmitInput(action.trim())) setAction("");
+    setSubmitting(true);
+    try {
+      if (await onSubmitInput(action.trim())) setAction("");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   function handleContextMenu(event: React.MouseEvent<HTMLElement>) {
+    // Inside the input the native menu (paste, spelling) stays available.
+    if (isTextEntryTarget(event.target)) return;
     event.preventDefault();
     setDialogueVisible((visible) => !visible);
   }
@@ -170,8 +190,9 @@ export function StoryGameSurface({ story, background = DEFAULT_STORY_MENU_BACKGR
       return;
     }
     const now = Date.now();
-    if (now - lastWheelAdvanceRef.current < WHEEL_ADVANCE_COOLDOWN_MS) return;
-    lastWheelAdvanceRef.current = now;
+    const continuesGesture = now - lastWheelEventRef.current < WHEEL_GESTURE_GAP_MS;
+    lastWheelEventRef.current = now;
+    if (continuesGesture) return;
     advance();
   }
 

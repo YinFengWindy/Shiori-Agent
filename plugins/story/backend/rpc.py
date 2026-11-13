@@ -227,10 +227,13 @@ class StorySimulationHandler:
 
         story_id = self._story_id(payload)
         _ = self._catalog.require_entry(story_id)
+        # Live tasks cover work already scheduled; the persisted state covers a
+        # retry or regeneration that is still awaiting its event before it schedules.
+        # Startup recovery has already cleared generation states left by a crash.
         if any(
             owner == story_id and not task.done()
             for task, owner in self._task_story_ids.items()
-        ):
+        ) or self._repository(story_id).generation_in_progress(story_id):
             raise StoryInvalidStateError("剧情正在生成，完成后再删除")
         self._remove_story(story_id)
         return {"story_id": story_id}
@@ -690,9 +693,10 @@ class StorySimulationHandler:
             story_path = self._catalog.database_path(story_id).parent
         except StoryNotFoundError:
             return
-        self._catalog.delete_entry(story_id)
+        # Files first: if removal fails the entry stays, so the save is still listed and deletable.
         if story_path.exists():
             shutil.rmtree(story_path)
+        self._catalog.delete_entry(story_id)
 
     def _service(
         self,
