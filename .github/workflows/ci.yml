@@ -247,6 +247,20 @@ jobs:
       - name: Run plugin UI build smoke check
         run: pnpm run desktop:test:plugin-ui
 
+      # TEMPORARY (#1031): paired old/new desktop:test timing on one runner. Reverted before merge.
+      - name: Paired desktop test benchmark (temporary)
+        run: |
+          lscpu | grep -E '^Model name|^CPU\(s\)'
+          git fetch --depth=1 origin main
+          mkdir -p apps/desktop/oldscripts
+          for f in test-unit.mjs test-unit-batches.mjs test-unit-loader.mjs test-unit-loader-hooks.mjs test-unit-summary-reporter.mjs; do
+            git show FETCH_HEAD:apps/desktop/scripts/$f > apps/desktop/oldscripts/$f
+          done
+          for i in 1 2 3; do
+            node apps/desktop/scripts/test-unit.mjs 2>&1 | grep -E '^\[desktop:test\] [0-9]+ files' | sed 's/^/new /'
+            node apps/desktop/oldscripts/test-unit.mjs 2>&1 | grep -E '^\[desktop:test\] [0-9]+ files' | sed 's/^/old /'
+          done
+
   sdk-artifacts:
     runs-on: ubuntu-latest
     steps:
