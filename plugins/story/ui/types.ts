@@ -11,6 +11,10 @@ export type StorySummary = {
   currentStoryDate: string;
   currentTimeBand: StoryTimeBand;
   currentScene: StoryScene;
+  roleId: string;
+  roleName: string;
+  /** Latest ready CG or opening background, shown as the save thumbnail. */
+  coverPath: string | null;
 };
 
 /** Story operation state owned by the current segment. */

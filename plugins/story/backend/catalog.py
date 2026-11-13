@@ -171,6 +171,21 @@ class StoryCatalog:
             raise StoryNotFoundError(f"story not found: {story_id}")
         return self.require_entry(story_id)
 
+    def rename_entry(self, story_id: str, title: str) -> dict[str, Any]:
+        """Update the library title shown before a Story database is opened."""
+
+        clean_title = title.strip()
+        if not clean_title:
+            raise ValueError("title 不能为空")
+        with self._lock:
+            updated = self._connection.execute(
+                "UPDATE story_entries SET title = ? WHERE story_id = ?",
+                (clean_title, story_id),
+            )
+        if updated.rowcount != 1:
+            raise StoryNotFoundError(f"story not found: {story_id}")
+        return self.require_entry(story_id)
+
     def delete_entry(self, story_id: str) -> None:
         """Remove one catalog entry after its private database is removed."""
 

@@ -74,5 +74,8 @@ export function createStorySummary(story = createStoryDetails()): StorySummary {
     currentStoryDate: story.currentStoryDate,
     currentTimeBand: story.currentTimeBand,
     currentScene: story.currentScene,
+    roleId: story.roleSnapshot.id ?? "",
+    roleName: story.roleSnapshot.name ?? "",
+    coverPath: null,
   };
 }

@@ -33,10 +33,10 @@ describe("createStoryBridgeClient", () => {
     const requests: Array<{ method: string; payload: Record<string, unknown> }> = [];
     const invoke = async (request: { method: string; payload: Record<string, unknown> }): Promise<FakeStoryResponse> => {
       requests.push(request);
-      return { payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_story_date: "2026-08-02", current_time_band: "上午", current_scene: { key: "station", name: "车站", character_ids: [] } }] }, error: null };
+      return { payload: { stories: [{ story_id: "story-1", relative_db_path: "story-1/story.db", title: "雨港", status: "active", created_at: "2026-08-02T10:00:00+08:00", current_story_date: "2026-08-02", current_time_band: "上午", current_scene: { key: "station", name: "车站", character_ids: [] }, role_id: "role-1", role_name: "澪", cover_path: "D:/stories/story-1/assets/cg.png" }] }, error: null };
     };
 
-    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentStoryDate: "2026-08-02", currentTimeBand: "上午", currentScene: { key: "station", name: "车站", characterIds: [] } }]);
+    assert.deepEqual(await createStoryBridgeClient(invoke).listStories(), [{ storyId: "story-1", relativeDbPath: "story-1/story.db", title: "雨港", status: "active", createdAt: "2026-08-02T10:00:00+08:00", currentStoryDate: "2026-08-02", currentTimeBand: "上午", currentScene: { key: "station", name: "车站", characterIds: [] }, roleId: "role-1", roleName: "澪", coverPath: "D:/stories/story-1/assets/cg.png" }]);
     assert.deepEqual(requests, [{ method: "story.list", payload: {} }]);
   });
 

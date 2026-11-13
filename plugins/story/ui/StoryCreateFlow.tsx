@@ -1,5 +1,5 @@
 import { StoryError } from "./StoryError";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Check, CircleNotch, Sparkle } from "@phosphor-icons/react";
 import { useRef, useState } from "react";
 import { cx } from "@yinfengwindy/shiori-sdk";
@@ -7,6 +7,8 @@ import type { StoryCreationInput, StoryRoleChoice } from "./types";
 import { createInitialStoryCreationInput, creationSteps, isCreationStepComplete, type CreationStep } from "./storyCreationWizard";
 import { StoryCreateStep } from "./StoryCreateStep";
 import { StorySurface } from "./StorySurface";
+import { useStoryReducedMotion } from "./storyPreferences";
+import { storyGutterClass, storyIconButtonClass, storyPageHeaderClass, storyPageTitleClass, storyPrimaryButtonClass, storySecondaryButtonClass } from "./storyStyles";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryCreateFlowProps = {
@@ -21,9 +23,6 @@ type StoryCreateFlowProps = {
 };
 
 const stepLabels: Record<CreationStep, string> = { role: "选择角色", setting: "开场设定", player: "玩家资料", review: "总览" };
-const storyActionButtonBase = "grid h-10 w-10 shrink-0 place-items-center rounded-md border-0 p-0 transition-[color,transform] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0] disabled:cursor-default disabled:opacity-50";
-const storyPrimaryButtonClass = cx(storyActionButtonBase, "text-[#B64B75] hover:text-[#96325F] active:scale-[0.94]");
-const storySecondaryButtonClass = cx(storyActionButtonBase, "text-[#6C3E52] hover:text-[#7A2356]");
 const stepTransition = { duration: 0.22, ease: "easeOut" } as const;
 
 /** Renders the compact animated form that creates one Story database entry. */
@@ -32,7 +31,7 @@ export function StoryCreateFlow({ roles, background, sharedBackdrop = false, bus
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
   const creationAttempt = useRef<{ fingerprint: string; id: string } | null>(null);
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = useStoryReducedMotion();
   const step = creationSteps[stepIndex];
   const selectedRole = roles.find((role) => role.id === input.roleId);
   const stepComplete = isCreationStepComplete(step, input);
@@ -62,24 +61,29 @@ export function StoryCreateFlow({ roles, background, sharedBackdrop = false, bus
   return (
     <StorySurface background={background} sharedBackdrop={sharedBackdrop} dataTestId="story-create-flow" panelTestId="story-create-panel" contentClassName="overflow-hidden">
       <header>
-        <div className="border-b border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5">
-          <div className="flex items-center gap-4">
-            <button className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-[#8F355C] transition-colors hover:text-[#7A2356] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#E5A9C0]" type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}><ArrowLeft className="h-5 w-5" weight="bold" /></button>
-            <div className="min-w-0 flex-1"><h1 className="m-0 font-serif text-2xl font-semibold italic text-[#7A2356]">新剧情</h1></div>
-          </div>
+        <div className={storyPageHeaderClass}>
+          <button className={storyIconButtonClass} type="button" aria-label="返回剧情主菜单" title="返回剧情主菜单" onClick={onBack}><ArrowLeft className="h-5 w-5" weight="bold" /></button>
+          <h1 className={`${storyPageTitleClass} min-w-0 flex-1`}>新的故事</h1>
         </div>
-        <div className="px-[clamp(18px,4vw,40px)] py-4">
-          <ol className="grid grid-cols-4 gap-2" aria-label="创建步骤">
+        <div className={`${storyGutterClass} py-4`}>
+          <ol className="m-0 mx-auto grid w-full max-w-3xl list-none grid-cols-4 gap-2 p-0" aria-label="创建步骤">
             {creationSteps.map((item, index) => {
               const active = index === stepIndex;
               const complete = index < stepIndex;
-              return <li key={item} aria-current={active ? "step" : undefined} className={cx("min-w-0 text-xs transition-colors", active || complete ? "text-[#8F355C]" : "text-[#A48090]")}><div className="mb-1 flex items-center gap-1.5"><span className={cx("grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px]", active || complete ? "border-[#B64B75] bg-[#FFF0F6]" : "border-[#E9C4D5] bg-white/60")}>{complete ? <Check weight="bold" /> : index + 1}</span><span className="truncate">{stepLabels[item]}</span></div><div className="h-0.5 overflow-hidden bg-[#E9C4D5]/65"><motion.span className="block h-full origin-left bg-[#B64B75]" initial={false} animate={{ scaleX: active || complete ? 1 : 0 }} transition={stepTransition} /></div></li>;
+              const reachable = index < stepIndex;
+              return <li key={item} aria-current={active ? "step" : undefined} className={cx("min-w-0 text-xs transition-colors", active || complete ? "text-[color:var(--story-wine)]" : "text-[color:var(--story-ink-muted)]")}>
+                <button className="mb-1 flex w-full min-w-0 items-center gap-1.5 rounded-sm text-left disabled:cursor-default" type="button" disabled={!reachable || busy} onClick={() => goToStep(index)}>
+                  <span className={cx("grid h-5 w-5 shrink-0 place-items-center rounded-full border text-[10px]", active || complete ? "border-[color:var(--story-rose)] bg-[color:var(--story-paper-selected)]" : "border-[color:var(--story-line-field)] bg-[color:var(--story-paper-soft)]")}>{complete ? <Check weight="bold" /> : index + 1}</span>
+                  <span className="truncate">{stepLabels[item]}</span>
+                </button>
+                <div className="h-0.5 overflow-hidden bg-[color:var(--story-line-soft)]"><motion.span className="block h-full origin-left bg-[color:var(--story-rose)]" initial={false} animate={{ scaleX: active || complete ? 1 : 0 }} transition={stepTransition} /></div>
+              </li>;
             })}
           </ol>
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 overflow-y-auto px-[clamp(18px,4vw,40px)] py-7">
+      <main className={`min-h-0 flex-1 overflow-y-auto py-7 ${storyGutterClass}`}>
         <div className="mx-auto w-full max-w-3xl">
           <AnimatePresence initial={false} mode="wait">
             <motion.div key={step} initial={stepMotion.initial} animate={stepMotion.animate} exit={stepMotion.exit} transition={reducedMotion ? { duration: 0 } : stepTransition}>
@@ -90,7 +94,14 @@ export function StoryCreateFlow({ roles, background, sharedBackdrop = false, bus
         </div>
       </main>
 
-      <footer className="border-t border-[#DDA9BE]/65 px-[clamp(18px,4vw,40px)] py-5"><div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4"><div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" aria-label="上一步" title="上一步" disabled={busy} onClick={previous}><ArrowLeft className="h-5 w-5" aria-hidden="true" /></button> : null}</div><div className="flex shrink-0 items-center justify-end gap-3">{busy ? <span className="max-w-24 text-right text-xs text-[#7D6470]">正在创建剧情</span> : null}{step === "review" ? <button className={storyPrimaryButtonClass} type="button" aria-label={busy ? "创建中" : "开始剧情"} title={busy ? "创建中" : "开始剧情"} disabled={busy || !stepComplete} onClick={submitCreation}>{busy ? <CircleNotch className="h-5 w-5 animate-spin" aria-hidden="true" /> : <Sparkle className="h-5 w-5" weight="fill" aria-hidden="true" />}</button> : <button className={storyPrimaryButtonClass} type="button" aria-label="下一步" title="下一步" disabled={!stepComplete} onClick={next}><ArrowRight className="h-5 w-5" aria-hidden="true" /></button>}</div></div></footer>
+      <footer className={`border-t border-[color:var(--story-line)] py-5 ${storyGutterClass}`}>
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">{stepIndex ? <button className={storySecondaryButtonClass} type="button" disabled={busy} onClick={previous}><ArrowLeft className="h-4 w-4" aria-hidden="true" />上一步</button> : null}</div>
+          {step === "review"
+            ? <button className={storyPrimaryButtonClass} type="button" disabled={busy || !stepComplete} onClick={submitCreation}>{busy ? <CircleNotch className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Sparkle className="h-4 w-4" weight="fill" aria-hidden="true" />}{busy ? "正在创建" : "开始剧情"}</button>
+            : <button className={storyPrimaryButtonClass} type="button" disabled={!stepComplete} onClick={next}>下一步<ArrowRight className="h-4 w-4" aria-hidden="true" /></button>}
+        </div>
+      </footer>
     </StorySurface>
   );
 }

@@ -101,6 +101,26 @@ export function useStoryController(client: StoryBridgeClient) {
     if (storyId) refreshStory(storyId);
   }), [host, refreshStory]);
 
+  /** Renames one save; failures propagate so the list row can keep its draft and show the error. */
+  const renameStory = useCallback(async (storyId: string, title: string) => {
+    const summary = await client.renameStory(storyId, title);
+    setState((current) => ({
+      ...current,
+      stories: current.stories.map((story) => story.storyId === storyId ? summary : story),
+      story: current.story?.id === storyId ? { ...current.story, title: summary.title } : current.story,
+    }));
+  }, [client]);
+
+  /** Deletes one save with its images; failures propagate to the confirmation dialog. */
+  const deleteStory = useCallback(async (storyId: string) => {
+    await client.deleteStory(storyId);
+    setState((current) => ({
+      ...current,
+      stories: current.stories.filter((story) => story.storyId !== storyId),
+      story: current.story?.id === storyId ? null : current.story,
+    }));
+  }, [client]);
+
   const submitInput = useCallback(async (input: string) => {
     if (!state.story || !input.trim()) return false;
     const story = await run(() => client.submitInput(state.story!.id, input.trim()), applyStory);
@@ -127,5 +147,7 @@ export function useStoryController(client: StoryBridgeClient) {
     submitInput,
     continueStory,
     regenerateCg,
-  }), [continueStory, loadStory, regenerateCg, reloadStories, state, submitInput, waitForStoryReady]);
+    renameStory,
+    deleteStory,
+  }), [continueStory, deleteStory, loadStory, regenerateCg, reloadStories, renameStory, state, submitInput, waitForStoryReady]);
 }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shiori-plugin-story"
-version = "0.1.4"
+version = "0.1.5"
 requires-python = ">=3.12"
 dependencies = ["shiori-sdk>=4.0.0,<4.2.0", "shiori-plugin-novelai==0.1.4", "tzdata>=2025.2"]
 
