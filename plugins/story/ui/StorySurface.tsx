@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { cx } from "@yinfengwindy/shiori-sdk";
 import { DEFAULT_STORY_MENU_BACKGROUND } from "./StoryMenuScene";
+import { useStoryReducedMotion } from "./storyPreferences";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StorySurfaceProps = {
@@ -10,7 +11,6 @@ type StorySurfaceProps = {
   children: ReactNode;
   background?: StoryMenuBackground;
   sharedBackdrop?: boolean;
-  reducedMotion?: boolean;
   contentClassName?: string;
 };
 
@@ -23,12 +23,11 @@ export const STORY_SURFACE_BACKDROP_TRANSITION_SECONDS = 0.7;
 export const STORY_SURFACE_BACKDROP_FADE_SECONDS = 0.7;
 
 /** Renders the shared Story backdrop, overlays, panel surface, and entrance motion. */
-export function StorySurface({ dataTestId, panelTestId, children, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, reducedMotion = false, contentClassName }: StorySurfaceProps) {
-  const systemReducedMotion = useReducedMotion() ?? false;
-  const reduceEffects = systemReducedMotion || reducedMotion;
+export function StorySurface({ dataTestId, panelTestId, children, background = DEFAULT_STORY_MENU_BACKGROUND, sharedBackdrop = false, contentClassName }: StorySurfaceProps) {
+  const reduceEffects = useStoryReducedMotion();
 
   return (
-    <section className={cx("relative h-full min-h-0 overflow-hidden text-[#4A2738]", sharedBackdrop ? "bg-transparent" : "bg-[#1D1520]")} data-testid={dataTestId}>
+    <section className={cx("relative h-full min-h-0 overflow-hidden text-[color:var(--story-ink)]", sharedBackdrop ? "bg-transparent" : "bg-[color:var(--story-night)]")} data-testid={dataTestId}>
       {sharedBackdrop ? null : <motion.div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         data-testid={`${dataTestId}-backdrop`}
@@ -37,8 +36,7 @@ export function StorySurface({ dataTestId, panelTestId, children, background = D
         transition={{ duration: reduceEffects ? 0 : STORY_SURFACE_BACKDROP_TRANSITION_SECONDS, ease: "easeOut" }}
         style={{ backgroundImage: `url(${background.url})` }}
       />}
-      <div aria-hidden="true" className="absolute inset-0 bg-[#281421]/42" />
-      <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(120deg,rgba(40,20,33,0.2),rgba(40,20,33,0.05)_52%,rgba(104,31,68,0.22))]" />
+      <div aria-hidden="true" className="absolute inset-0 bg-[color:var(--story-veil)]" />
 
       <motion.main
         className={cx("relative z-10 flex h-full min-h-0 flex-col", contentClassName || "overflow-y-auto")}
@@ -46,10 +44,10 @@ export function StorySurface({ dataTestId, panelTestId, children, background = D
         animate={{ opacity: 1, x: 0 }}
         transition={transition}
       >
-        <section className="relative flex min-h-full w-full flex-col border-y border-[#DDA9BE]/75 shadow-[0_18px_48px_rgba(49,17,35,0.3)]" data-testid={panelTestId}>
+        <section className="relative flex min-h-full w-full flex-col border-y border-[color:var(--story-line)] shadow-[var(--story-shadow-panel)]" data-testid={panelTestId}>
           <motion.div
             aria-hidden="true"
-            className={`pointer-events-none absolute inset-0 bg-[#FFF8FC]/72 ${sharedBackdrop ? "" : "backdrop-blur-xl backdrop-saturate-150"}`}
+            className={cx("pointer-events-none absolute inset-0 bg-[color:var(--story-paper)]", !sharedBackdrop && "backdrop-blur-xl backdrop-saturate-150")}
             initial={sharedBackdrop && !reduceEffects ? { opacity: 0 } : false}
             animate={sharedBackdrop && !reduceEffects ? { opacity: 1 } : undefined}
             transition={{ duration: sharedBackdrop && !reduceEffects ? STORY_SURFACE_BACKDROP_FADE_SECONDS : 0, ease: "easeOut" }}

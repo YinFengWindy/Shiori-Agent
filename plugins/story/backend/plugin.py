@@ -63,6 +63,8 @@ async def setup(ctx: PluginRuntimeContext) -> None:
         "get",
         "cg.list",
         "create",
+        "rename",
+        "delete",
         "input",
         "continue",
         "cg.retry",

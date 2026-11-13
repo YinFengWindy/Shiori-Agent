@@ -18,6 +18,7 @@ from plugins.novelai.backend.api import ImageGenerationAPI
 from .catalog import StoryCatalog
 from .director import ProviderStoryDirector, StoryDirector
 from .errors import (
+    StoryInvalidStateError,
     StoryNotFoundError,
     StoryProviderUnavailableError,
 )
@@ -65,6 +66,8 @@ class StorySimulationHandler:
         self._models = models
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._resource_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+        # Owning Story of each live turn/resource task, so deletion can refuse it.
+        self._task_story_ids: dict[asyncio.Task[Any], str] = {}
         self._image_generator = StoryImageGenerator(image_tool)
         self._recovery_lock = asyncio.Lock()
         self._recovered = False
@@ -81,6 +84,7 @@ class StorySimulationHandler:
             _ = await asyncio.gather(*tasks, return_exceptions=True)
         self._tasks.clear()
         self._resource_tasks.clear()
+        self._task_story_ids.clear()
         for repository in self._repositories.values():
             repository.close()
         self._repositories.clear()
@@ -116,23 +120,17 @@ class StorySimulationHandler:
         if method == "stories.list":
             include_archived = bool(payload.get("include_archived", False))
             summaries = self._catalog.list_summaries(include_archived=include_archived)
-            return {
-                "stories": [
-                    {
-                        **summary,
-                        **self._repository(summary["story_id"]).current_stage_state(
-                            summary["story_id"]
-                        ),
-                    }
-                    for summary in summaries
-                ]
-            }
+            return {"stories": [self._summary(summary) for summary in summaries]}
         if method == "stories.get":
             return {
                 "story": self._repository(self._story_id(payload)).story_read_model(
                     self._story_id(payload)
                 )
             }
+        if method == "stories.rename":
+            return self._rename(payload)
+        if method == "stories.delete":
+            return self._delete(payload)
         if method == "stories.cg.list":
             return self._cg_gallery()
         if method == "stories.cg.retry":
@@ -206,9 +204,39 @@ class StorySimulationHandler:
                 emit_accepted=True,
             )
         except Exception:
-            self._discard_incomplete_story(story_id)
+            self._remove_story(story_id)
             raise
         return {**result, "catalog": self._catalog.require_entry(story_id)}
+
+    def _summary(self, entry: dict[str, Any]) -> dict[str, Any]:
+        """Combine one catalog entry with its Story's library-facing facts."""
+
+        story_id = str(entry["story_id"])
+        return {**entry, **self._repository(story_id).library_summary(story_id)}
+
+    def _rename(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Rename one saved Story in both its private database and the catalog."""
+
+        story_id = self._story_id(payload)
+        title = self._required(payload, "title")
+        self._repository(story_id).rename_story(story_id, title)
+        return {"story": self._summary(self._catalog.rename_entry(story_id, title))}
+
+    def _delete(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Remove one saved Story and its assets unless a task still writes to it."""
+
+        story_id = self._story_id(payload)
+        _ = self._catalog.require_entry(story_id)
+        # Live tasks cover work already scheduled; the persisted state covers a
+        # retry or regeneration that is still awaiting its event before it schedules.
+        # Startup recovery has already cleared generation states left by a crash.
+        if any(
+            owner == story_id and not task.done()
+            for task, owner in self._task_story_ids.items()
+        ) or self._repository(story_id).generation_in_progress(story_id):
+            raise StoryInvalidStateError("剧情正在生成，完成后再删除")
+        self._remove_story(story_id)
+        return {"story_id": story_id}
 
     async def _complete_create(
         self,
@@ -536,11 +564,13 @@ class StorySimulationHandler:
             name=f"story-resource:{resource_id}",
         )
         self._resource_tasks[resource_id] = task
-        task.add_done_callback(
-            lambda _task, resource_id=resource_id: self._resource_tasks.pop(
-                resource_id, None
-            )
-        )
+        self._task_story_ids[task] = str(resource["storyId"])
+
+        def _forget(done: asyncio.Task[Any], resource_id: str = resource_id) -> None:
+            _ = self._resource_tasks.pop(resource_id, None)
+            _ = self._task_story_ids.pop(done, None)
+
+        task.add_done_callback(_forget)
 
     def _start_generation(
         self,
@@ -557,9 +587,13 @@ class StorySimulationHandler:
             name=f"story-director:{turn_id}",
         )
         self._tasks[turn_id] = task
-        task.add_done_callback(
-            lambda _task, turn_id=turn_id: self._tasks.pop(turn_id, None)
-        )
+        self._task_story_ids[task] = service.repository.story_id_for_turn(turn_id)
+
+        def _forget(done: asyncio.Task[Any], turn_id: str = turn_id) -> None:
+            _ = self._tasks.pop(turn_id, None)
+            _ = self._task_story_ids.pop(done, None)
+
+        task.add_done_callback(_forget)
 
     async def _generate_turn(
         self,
@@ -649,8 +683,8 @@ class StorySimulationHandler:
         self._repositories[story_id] = repository
         return repository
 
-    def _discard_incomplete_story(self, story_id: str) -> None:
-        """Remove a locally-created Story that never reached its opening Turn."""
+    def _remove_story(self, story_id: str) -> None:
+        """Close and remove one Story's database, assets and catalog entry."""
 
         repository = self._repositories.pop(story_id, None)
         if repository is not None:
@@ -659,9 +693,10 @@ class StorySimulationHandler:
             story_path = self._catalog.database_path(story_id).parent
         except StoryNotFoundError:
             return
-        self._catalog.delete_entry(story_id)
+        # Files first: if removal fails the entry stays, so the save is still listed and deletable.
         if story_path.exists():
             shutil.rmtree(story_path)
+        self._catalog.delete_entry(story_id)
 
     def _service(
         self,

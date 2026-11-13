@@ -6,9 +6,11 @@ export const rpcMethods = {
   "cg.retry": "cg.retry",
   "continue": "continue",
   "create": "create",
+  "delete": "delete",
   "get": "get",
   "input": "input",
   "list": "list",
+  "rename": "rename",
 } as const;
 
 /** A backend method accepted by this plugin. */

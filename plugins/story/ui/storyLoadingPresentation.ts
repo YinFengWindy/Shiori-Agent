@@ -28,28 +28,28 @@ export type StoryLoadingCopy = {
 };
 
 const storyLoadingCopy: Record<StoryLoadingMode, Omit<StoryLoadingCopy, "heading" | "currentStage" | "activeStage">> = {
-    listing: {
-    stageLabel: "Story menu loading stages",
-    stages: ["Read story list", "Prepare menu"],
-    progressLabel: "Read story list",
-    railLabel: "Story menu loading",
+  listing: {
+    stageLabel: "故事菜单载入步骤",
+    stages: ["读取剧情列表", "准备菜单"],
+    progressLabel: "读取剧情列表",
+    railLabel: "正在载入故事菜单",
   },
   story: {
-    stageLabel: "Story loading stages",
-    stages: ["Read story", "Restore progress", "Prepare stage"],
-    progressLabel: "Prepare stage",
-    railLabel: "Story loading",
+    stageLabel: "剧情载入步骤",
+    stages: ["读取剧情", "恢复进度", "布置舞台"],
+    progressLabel: "布置舞台",
+    railLabel: "正在载入剧情",
   },
 };
 
 const storyLoadingPhaseCopy: Record<StoryLoadingPhase, Pick<StoryLoadingCopy, "heading" | "currentStage" | "activeStage">> = {
-  "reading-list": { heading: "Preparing", currentStage: "Read story list", activeStage: 0 },
-  "preparing-menu": { heading: "Preparing", currentStage: "Prepare menu", activeStage: 1 },
-  "menu-ready": { heading: "Preparing", currentStage: "Story menu ready", activeStage: 2 },
-  "reading-story": { heading: "Preparing", currentStage: "Read story", activeStage: 0 },
-  "restoring-progress": { heading: "Preparing", currentStage: "Restore progress", activeStage: 1 },
-  "preparing-opening": { heading: "Preparing", currentStage: "Prepare stage", activeStage: 2 },
-  "opening-ready": { heading: "Preparing", currentStage: "Stage ready", activeStage: 3 },
+  "reading-list": { heading: "准备中", currentStage: "读取剧情列表", activeStage: 0 },
+  "preparing-menu": { heading: "准备中", currentStage: "准备菜单", activeStage: 1 },
+  "menu-ready": { heading: "准备中", currentStage: "菜单已就绪", activeStage: 2 },
+  "reading-story": { heading: "准备中", currentStage: "读取剧情", activeStage: 0 },
+  "restoring-progress": { heading: "准备中", currentStage: "恢复进度", activeStage: 1 },
+  "preparing-opening": { heading: "准备中", currentStage: "布置舞台", activeStage: 2 },
+  "opening-ready": { heading: "准备中", currentStage: "舞台已就绪", activeStage: 3 },
 };
 
 /** Returns the copy contract for one Story loading route. */

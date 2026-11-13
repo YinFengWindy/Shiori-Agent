@@ -2,8 +2,11 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { act } from "react";
+import { PluginHostServicesProvider } from "@yinfengwindy/shiori-sdk";
+import { createFakeHostServices, mountTestComponent } from "@yinfengwindy/shiori-sdk/testing";
 import { StoryGameSurface } from "./StoryGameSurface";
-import { createStoryDetails, renderStoryMarkup } from "./testFixtures";
+import { createStoryBeat, createStoryDetails, renderStoryMarkup } from "./testFixtures";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 const resolvedBackground: StoryMenuBackground = {
@@ -24,7 +27,6 @@ describe("StoryGameSurface", () => {
     assert.match(markup, /2026年8月2日/);
     assert.match(markup, />上午</);
     assert.doesNotMatch(markup, /aria-label="提交剧情行动"/);
-    assert.match(markup, /placeholder="写下你的行动或回应\.\.\."/);
     assert.match(markup, /aria-label="查看剧情记录"/);
     assert.match(markup, /data-testid="story-dialogue-panel"/);
     assert.match(markup, /data-testid="story-dialogue-text"/);
@@ -116,8 +118,9 @@ describe("StoryGameSurface", () => {
     assert.doesNotMatch(markup, /default-galgame-bg\.png/);
   });
 
-  it("replaces the dialogue with one generation state and hides player input while busy", () => {
-    const markup = renderStoryMarkup(<StoryGameSurface story={createStoryDetails()} busy error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
+  it("replaces the dialogue with one generation state and hides player input while the turn generates", () => {
+    const generating = createStoryDetails();
+    const markup = renderStoryMarkup(<StoryGameSurface story={{ ...generating, segment: { ...generating.segment, operation: "generating" } }} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => undefined} onOpenSettings={() => undefined} onExit={() => undefined} />);
 
     assert.match(markup, />剧情生成中\.\.\.</);
     assert.doesNotMatch(markup, />你终于来了。</);
@@ -141,5 +144,30 @@ describe("StoryGameSurface", () => {
 
     assert.match(markup, />澪</);
     assert.doesNotMatch(markup, />角色</);
+  });
+
+  it("finishes the typing line before advancing and offers input only after the last line", async () => {
+    const story = createStoryDetails({ beats: [createStoryBeat({ id: "beat-1", text: "第一句。" }), createStoryBeat({ id: "beat-2", sequence: 2, text: "第二句。" })] });
+    let archiveOpened = 0;
+    const { host } = createFakeHostServices();
+    const view = await mountTestComponent(<PluginHostServicesProvider services={host}><StoryGameSurface story={story} busy={false} error="" onSubmitInput={async () => true} onOpenArchive={() => { archiveOpened += 1; }} onOpenSettings={() => undefined} onExit={() => undefined} /></PluginHostServicesProvider>);
+    try {
+      const surface = view.container.querySelector<HTMLElement>('[data-testid="story-game-surface"]')!;
+      const text = () => view.container.querySelector<HTMLElement>('[data-testid="story-dialogue-text"]')!;
+      const click = () => act(async () => { surface.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+      // The page opens on the latest committed beat, still typing.
+      assert.equal(text().dataset.storyBeatId, "beat-2");
+      assert.equal(text().dataset.storyTextComplete, "false");
+      assert.equal(view.container.querySelector('[data-testid="story-player-input"]'), null);
+      await click();
+      assert.equal(text().dataset.storyBeatId, "beat-2");
+      assert.equal(text().dataset.storyTextComplete, "true");
+      assert.ok(view.container.querySelector('[data-testid="story-player-input"]'));
+      // Scrolling down reads on; only scrolling up opens the record.
+      await act(async () => { surface.dispatchEvent(new window.WheelEvent("wheel", { bubbles: true, deltaY: 120 })); });
+      assert.equal(archiveOpened, 0);
+      await act(async () => { surface.dispatchEvent(new window.WheelEvent("wheel", { bubbles: true, deltaY: -120 })); });
+      assert.equal(archiveOpened, 1);
+    } finally { await view.cleanup(); }
   });
 });

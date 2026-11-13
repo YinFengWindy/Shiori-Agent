@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useStoryReducedMotion } from "./storyPreferences";
 import type { StoryMenuBackground } from "./useStoryMenuBackground";
 
 type StoryWorkspaceBackdropProps = {
@@ -20,14 +21,14 @@ const backdropFilters: Record<StoryWorkspaceBackdropBlur, string> = {
 
 /** Keeps one Story background mounted while the workspace changes presentation modes. */
 export function StoryWorkspaceBackdrop({ background, blur = "none" }: StoryWorkspaceBackdropProps) {
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = useStoryReducedMotion();
   const targetFilter = backdropFilters[blur];
   const shouldBlur = blur !== "none";
 
   return <>
     <motion.div
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 bg-[#1D1520] bg-cover bg-center bg-no-repeat"
+      className="pointer-events-none absolute inset-0 bg-[color:var(--story-night)] bg-cover bg-center bg-no-repeat"
       data-testid="story-workspace-backdrop"
       initial={reducedMotion ? false : { opacity: 0, scale: 1.06 }}
       animate={{ opacity: 1, scale: 1 }}

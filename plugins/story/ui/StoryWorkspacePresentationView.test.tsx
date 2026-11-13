@@ -21,6 +21,8 @@ const controller: StoryWorkspacePresentationController = {
   reloadStories: async () => undefined,
   submitInput: async () => true,
   regenerateCg: async () => true,
+  renameStory: async () => undefined,
+  deleteStory: async () => undefined,
 };
 
 const operation: StoryOperationPresentationController = { error: "", busy: false, clearError: () => undefined };
@@ -77,7 +79,7 @@ describe("StoryWorkspacePresentationView", () => {
   it("keeps a failed Story list on the retryable loading surface", () => {
     const markup = renderStoryMarkup(<StoryWorkspacePresentationView roles={[]} mode="launcher" loadingStoryId="" loadingElapsedMs={0} loadingPhase="reading-story" cgGallery={[]} cgGalleryLoading={false} controller={{ ...controller, story: null, loading: true, error: "读取失败" }} operation={operation} creation={creation} setMode={() => undefined} loadStoryForPlay={async () => undefined} onOpenCg={() => undefined} onRetryCg={() => undefined} onOpenSettings={() => undefined} onCloseSettings={() => undefined} onExit={() => undefined} />);
     assert.match(markup, /role="alert"/);
-    assert.match(markup, />Retry</);
+    assert.match(markup, />重试</);
   });
 });
 

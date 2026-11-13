@@ -1,15 +1,15 @@
+import { useSyncExternalStore } from "react";
+import { useReducedMotion } from "motion/react";
+
+/** Pace shared by text reveal and auto-play: slower values give the reader more time. */
+export type StoryPace = "slow" | "normal" | "fast";
+
 /** Persisted renderer preferences controlling Story playback and presentation. */
 export type StoryPreferences = {
-  textSpeed: "slow" | "normal" | "fast";
+  textSpeed: StoryPace;
   showFullText: boolean;
   autoPlay: boolean;
-  autoPlayDelayMs: number;
-  skipReadTextOnly: boolean;
-  motionIntensity: "reduced" | "standard" | "cinematic";
-  voiceVolume: number;
-  musicVolume: number;
-  ambienceVolume: number;
-  effectsVolume: number;
+  autoPlaySpeed: StoryPace;
   reducedMotion: boolean;
 };
 
@@ -20,49 +20,74 @@ export const defaultStoryPreferences: StoryPreferences = {
   textSpeed: "normal",
   showFullText: false,
   autoPlay: false,
-  autoPlayDelayMs: 1200,
-  skipReadTextOnly: true,
-  motionIntensity: "standard",
-  voiceVolume: 100,
-  musicVolume: 70,
-  ambienceVolume: 70,
-  effectsVolume: 80,
+  autoPlaySpeed: "normal",
   reducedMotion: false,
 };
+
+const textCharactersPerSecond: Record<StoryPace, number> = { slow: 18, normal: 36, fast: 72 };
+const autoPlayDelayMs: Record<StoryPace, number> = { slow: 2400, normal: 1400, fast: 700 };
+
+/** Characters revealed per second, or null when the whole fragment shows at once. */
+export function storyTextCharactersPerSecond(preferences: StoryPreferences): number | null {
+  return preferences.showFullText ? null : textCharactersPerSecond[preferences.textSpeed];
+}
+
+/** Pause after a fully shown fragment before auto-play moves on. */
+export function storyAutoPlayDelayMs(preferences: StoryPreferences): number {
+  return autoPlayDelayMs[preferences.autoPlaySpeed];
+}
+
+function readPace(value: unknown): StoryPace {
+  return value === "slow" || value === "fast" ? value : "normal";
+}
 
 /** Reads Story presentation preferences without affecting desktop settings. */
 export function readStoryPreferences(): StoryPreferences {
   try {
     const raw = globalThis.localStorage?.getItem(storageKey);
     if (!raw) return defaultStoryPreferences;
-    const value = JSON.parse(raw) as Partial<StoryPreferences>;
+    const value = JSON.parse(raw) as Partial<Record<keyof StoryPreferences, unknown>>;
+    // Pick known fields only: older builds stored volume and motion-intensity keys that never took effect.
     return {
-      ...defaultStoryPreferences,
-      ...value,
-      textSpeed: value.textSpeed === "slow" || value.textSpeed === "fast" ? value.textSpeed : "normal",
-      autoPlayDelayMs: clampDelay(value.autoPlayDelayMs),
-      motionIntensity: value.motionIntensity === "reduced" || value.motionIntensity === "cinematic" ? value.motionIntensity : "standard",
-      voiceVolume: clampVolume(value.voiceVolume, defaultStoryPreferences.voiceVolume),
-      musicVolume: clampVolume(value.musicVolume, defaultStoryPreferences.musicVolume),
-      ambienceVolume: clampVolume(value.ambienceVolume, defaultStoryPreferences.ambienceVolume),
-      effectsVolume: clampVolume(value.effectsVolume, defaultStoryPreferences.effectsVolume),
+      textSpeed: readPace(value.textSpeed),
+      showFullText: value.showFullText === true,
+      autoPlay: value.autoPlay === true,
+      autoPlaySpeed: readPace(value.autoPlaySpeed),
+      reducedMotion: value.reducedMotion === true,
     };
   } catch {
     return defaultStoryPreferences;
   }
 }
 
-/** Persists Story presentation preferences under a versioned renderer key. */
-export function writeStoryPreferences(settings: StoryPreferences): void {
-  globalThis.localStorage?.setItem(storageKey, JSON.stringify(settings));
+let snapshot: StoryPreferences | null = null;
+const listeners = new Set<() => void>();
+
+function getSnapshot(): StoryPreferences {
+  snapshot ??= readStoryPreferences();
+  return snapshot;
 }
 
-function clampVolume(value: number | undefined, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? Math.min(100, Math.max(0, value)) : fallback;
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
 }
 
-function clampDelay(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value)
-    ? Math.min(5_000, Math.max(300, Math.round(value)))
-    : defaultStoryPreferences.autoPlayDelayMs;
+/** Persists one preference change and notifies every mounted Story surface. */
+export function updateStoryPreferences(patch: Partial<StoryPreferences>): void {
+  const next = { ...getSnapshot(), ...patch };
+  snapshot = next;
+  globalThis.localStorage?.setItem(storageKey, JSON.stringify(next));
+  for (const listener of listeners) listener();
+}
+
+/** Subscribes to the shared Story preferences; the snapshot keeps its identity until a change. */
+export function useStoryPreferences(): StoryPreferences {
+  return useSyncExternalStore(subscribe, getSnapshot, () => defaultStoryPreferences);
+}
+
+/** Whether Story motion should be reduced, by the system setting or the Story preference. */
+export function useStoryReducedMotion(): boolean {
+  const systemReducedMotion = useReducedMotion() ?? false;
+  return useStoryPreferences().reducedMotion || systemReducedMotion;
 }

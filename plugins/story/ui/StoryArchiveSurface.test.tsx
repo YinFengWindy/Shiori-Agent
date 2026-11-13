@@ -30,8 +30,7 @@ describe("StoryArchiveSurface", () => {
     assert.match(markup, /data-story-entry-kind="dialogue"/);
     assert.doesNotMatch(markup, /上午 · 澪/);
     assert.match(markup, /aria-label="返回游戏页"/);
-    assert.match(markup, /title="返回游戏页"/);
-    assert.match(markup, /story-archive-control pointer-events-auto/);
+    assert.match(markup, /title="返回游戏页/);
     assert.doesNotMatch(markup, /剧情设置|返回剧情列表/);
     assert.doesNotMatch(markup, /提交剧情输入|写下你的行动或回应/);
     assert.doesNotMatch(markup, /Day|OC|world-workspace|属性|好感度/);

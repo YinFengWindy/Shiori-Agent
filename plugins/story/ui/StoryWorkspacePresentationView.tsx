@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
+import { useStoryReducedMotion } from "./storyPreferences";
 import { usePluginHostServices, type RoleRecord } from "@yinfengwindy/shiori-sdk";
 import { StoryArchiveSurface, StoryCreateFlow, StoryGameSurface, StoryLauncher, StoryLoadList, StoryLoadingScreen, StorySettings, StoryWorkspaceBackdrop, type StoryWorkspaceBackdropBlur } from "./components";
 import { StoryCgGallerySurface } from "./components";
@@ -13,7 +14,7 @@ import type { StoryCgGallery } from "./types";
 import type { StoryGameplayLoadingPhase } from "./storyLoadingPresentation";
 
 /** Story state required by the presentation router. */
-export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "loadingPhase" | "error" | "errorDetail" | "busy" | "reloadStories" | "submitInput" | "regenerateCg">;
+export type StoryWorkspacePresentationController = Pick<ReturnType<typeof useStoryController>, "story" | "stories" | "loading" | "loadingPhase" | "error" | "errorDetail" | "busy" | "reloadStories" | "submitInput" | "regenerateCg" | "renameStory" | "deleteStory">;
 
 /** Operation state required by Story routes. */
 export type StoryOperationPresentationController = Pick<ReturnType<typeof useStoryPresentationOperation>, "error" | "errorDetail" | "busy" | "clearError">;
@@ -56,7 +57,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   const error = operation.error || controller.error;
   const errorDetail = operation.error ? operation.errorDetail : controller.errorDetail;
   const busy = operation.busy || controller.busy;
-  const reducedMotion = useReducedMotion() ?? false;
+  const reducedMotion = useStoryReducedMotion();
   const host = usePluginHostServices();
   const storyMenuBackground = useStoryMenuBackground(roles, host.assets.url);
   const presentationKey = mode === "launcher" && controller.loading ? "launcher-loading" : mode;
@@ -73,7 +74,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
   } else if (mode === "launcher") {
     content = <StoryLauncher background={storyMenuBackground} sharedBackdrop busy={busy} error={error} errorDetail={errorDetail} onCreateStory={() => { operation.clearError(); setMode("create"); }} onOpenLoad={() => { operation.clearError(); setMode("load"); }} onOpenCg={onOpenCg} onOpenSettings={() => { operation.clearError(); onOpenSettings("launcher"); }} onExit={onExit} />;
   } else if (mode === "load") {
-    content = <StoryLoadList stories={controller.stories} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} errorDetail={errorDetail} onBack={() => setMode("launcher")} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} />;
+    content = <StoryLoadList stories={controller.stories} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} errorDetail={errorDetail} onBack={() => setMode("launcher")} onCreateStory={() => { operation.clearError(); setMode("create"); }} onLoadStory={(storyId) => void loadStoryForPlay(storyId)} onRenameStory={controller.renameStory} onDeleteStory={controller.deleteStory} />;
   } else if (mode === "loading") {
     const backgroundReady = story?.id === loadingStoryId && story.backgroundResource?.status !== "generating";
     content = <StoryLoadingScreen background={storyMenuBackground} sharedBackdrop mode="story" phase={loadingPhase} busy={busy} error={error} errorDetail={errorDetail} elapsedMs={loadingElapsedMs} loaded={backgroundReady ? 1 : 0} total={1} onRetry={loadingStoryId ? () => void loadStoryForPlay(loadingStoryId) : undefined} onBack={() => setMode("launcher")} />;
@@ -91,7 +92,7 @@ export function StoryWorkspacePresentationView({ roles, mode, loadingStoryId, lo
     content = <StoryGameSurface story={story} background={storyMenuBackground} sharedBackdrop busy={busy} error={error} errorDetail={errorDetail} characterAvatarUrl={characterIllustration ? host.assets.url(characterIllustration) : undefined} onSubmitInput={controller.submitInput} onRegenerateCg={(resourceId) => { void controller.regenerateCg(resourceId); }} onOpenArchive={() => setMode("archive")} onOpenSettings={() => onOpenSettings("game")} onExit={() => setMode("launcher")} />;
   }
 
-  return <section className="relative h-full min-h-0 overflow-hidden bg-[#1D1520]" data-testid="story-workspace-presentation">
+  return <section className="relative h-full min-h-0 overflow-hidden bg-[color:var(--story-night)]" data-testid="story-workspace-presentation">
     <StoryWorkspaceBackdrop background={storyMenuBackground} blur={resolveStoryWorkspaceBackdropBlur(mode)} />
     <div className="relative z-10 h-full min-h-0" data-testid="story-presentation-layer">
       <AnimatePresence mode="sync">

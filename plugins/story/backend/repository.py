@@ -369,17 +369,45 @@ class StoryRepository:
             )
         return str(segment["story_date"])
 
-    def current_stage_state(self, story_id: str) -> dict[str, Any]:
-        """Return the current date, time band, and scene for a Story summary."""
+    def generation_in_progress(self, story_id: str) -> bool:
+        """Whether a turn or an image is being generated for this Story."""
 
         with self._lock:
+            row = self._connection.execute(
+                """SELECT
+                EXISTS (SELECT 1 FROM segments WHERE story_id = ? AND operation = 'generating')
+                OR EXISTS (SELECT 1 FROM story_resources WHERE story_id = ? AND status = 'generating')
+                AS busy""",
+                (story_id, story_id),
+            ).fetchone()
+        return bool(row["busy"])
+
+    def library_summary(self, story_id: str) -> dict[str, Any]:
+        """Return the stage, role and cover facts shown for one saved Story."""
+
+        with self._lock:
+            story = self._require_row(
+                "SELECT role_snapshot FROM stories WHERE id = ?", (story_id,)
+            )
             segment = self._require_row(
                 "SELECT story_date, time_band, runtime_snapshot FROM segments "
                 "WHERE story_id = ? ORDER BY sequence DESC LIMIT 1",
                 (story_id,),
             )
+            # The newest ready CG is the cover; the background is only a fallback.
+            cover = self._connection.execute(
+                """SELECT path FROM story_resources
+                WHERE story_id = ? AND status = 'ready'
+                AND path IS NOT NULL AND path != ''
+                ORDER BY kind = 'cg' DESC, sequence DESC LIMIT 1""",
+                (story_id,),
+            ).fetchone()
+        role_snapshot = load(story["role_snapshot"], {})
         scene = self._current_scene_dict(load(segment["runtime_snapshot"], {}))
         return {
+            "role_id": str(role_snapshot.get("id") or ""),
+            "role_name": str(role_snapshot.get("name") or ""),
+            "cover_path": None if cover is None else str(cover["path"]),
             "current_story_date": str(segment["story_date"]),
             "current_time_band": str(segment["time_band"]),
             "current_scene": {
@@ -388,6 +416,19 @@ class StoryRepository:
                 "character_ids": scene["characterIds"],
             },
         }
+
+    def rename_story(self, story_id: str, title: str) -> None:
+        """Rename a Story without advancing the revision used by player input."""
+
+        clean_title = title.strip()
+        if not clean_title:
+            raise ValueError("title 不能为空")
+        with self.transaction() as connection:
+            updated = connection.execute(
+                "UPDATE stories SET title = ? WHERE id = ?", (clean_title, story_id)
+            )
+            if updated.rowcount != 1:
+                raise StoryNotFoundError("找不到这段剧情")
 
     def story_id_for_turn(self, turn_id: str) -> str:
         """Resolve a persisted Turn owner without loading unrelated Story state."""

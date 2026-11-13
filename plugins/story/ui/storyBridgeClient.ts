@@ -12,6 +12,9 @@ type StorySummaryPayload = {
   current_story_date: string;
   current_time_band: StorySummary["currentTimeBand"];
   current_scene: { key: string; name: string; character_ids: string[] };
+  role_id: string;
+  role_name: string;
+  cover_path: string | null;
 };
 
 type StoryPayload = StoryDetails;
@@ -45,6 +48,9 @@ function toStorySummary(story: StorySummaryPayload): StorySummary {
     currentStoryDate: story.current_story_date,
     currentTimeBand: story.current_time_band,
     currentScene: { key: story.current_scene.key, name: story.current_scene.name, characterIds: story.current_scene.character_ids },
+    roleId: story.role_id,
+    roleName: story.role_name,
+    coverPath: story.cover_path,
   };
 }
 
@@ -52,6 +58,8 @@ function toStorySummary(story: StorySummaryPayload): StorySummary {
 export interface StoryBridgeClient {
   listStories(): Promise<StorySummary[]>;
   getStory(storyId: string): Promise<StoryDetails>;
+  renameStory(storyId: string, title: string): Promise<StorySummary>;
+  deleteStory(storyId: string): Promise<void>;
   createStory(input: StoryCreationInput, creationId: string): Promise<StoryDetails>;
   submitInput(storyId: string, input: string): Promise<StoryDetails>;
   continueStory(storyId: string): Promise<StoryDetails>;
@@ -86,6 +94,17 @@ export function createStoryBridgeClient(client: PluginRpcClient): StoryBridgeCli
       return payload.stories.map(toStorySummary);
     },
     getStory,
+    async renameStory(storyId, title) {
+      const payload = await invokePayload<{ story: StorySummaryPayload }>(client, rpcMethods["rename"], { story_id: storyId, title });
+      const latestStory = latestStories.get(storyId);
+      if (latestStory) latestStories.set(storyId, { ...latestStory, title: payload.story.title });
+      return toStorySummary(payload.story);
+    },
+    async deleteStory(storyId) {
+      await invokePayload<{ story_id: string }>(client, rpcMethods["delete"], { story_id: storyId });
+      latestStories.delete(storyId);
+      revisions.delete(storyId);
+    },
     async createStory(input, creationId) {
       if (!input.roleId) throw new StoryBridgeError("请选择一位角色", "role_required");
       const requestPayload: Record<string, unknown> = {

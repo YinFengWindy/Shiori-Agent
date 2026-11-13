@@ -1396,3 +1396,224 @@ async def test_story_list_quarantines_an_active_entry_with_a_missing_database(
     assert summaries == {"stories": []}
     assert handler._catalog.require_entry("story-missing-db")["status"] == "deleting"
     await handler.aclose()
+
+
+class FileImageTool:
+    """Writes a real image per call so Story adopts it into its own assets."""
+
+    def __init__(self, directory) -> None:
+        self.directory = directory
+        self.calls = 0
+
+    async def execute(self, **_kwargs):
+        self.calls += 1
+        path = self.directory / f"generated-{self.calls}.png"
+        path.write_bytes(f"image-{self.calls}".encode())
+        return json.dumps({"output_paths": [str(path)]})
+
+
+def _library_handler(tmp_path, *, director, image_tool=None) -> StorySimulationHandler:
+    role = SimpleNamespace(id="role-1", to_dict=lambda: {"id": "role-1", "name": "澪"})
+    return StorySimulationHandler(
+        models=FakeModels(),
+        workspace=tmp_path,
+        role_store=SimpleNamespace(get_role=lambda _role_id: role),
+        director=director,
+        image_tool=image_tool,
+        background=FakeBackground(FakePluginContext()),
+    )
+
+
+async def _call(handler: StorySimulationHandler, method: str, payload: dict) -> dict:
+    result = await handler.handle(
+        f"stories.{method}",
+        payload,
+        request_id=f"{method}-{payload.get('story_id', '')}",
+        emit_event=lambda _event: None,
+    )
+    assert result is not None
+    return result
+
+
+async def _create_library_story(handler: StorySimulationHandler) -> str:
+    created = await _call(
+        handler,
+        "create",
+        {
+            "title": "夏日来信",
+            "background": "午后的旧校舍",
+            "story_date": "2026-08-01",
+            "time_band": "上午",
+            "role_id": "role-1",
+            "creation_id": "creation-1",
+            "player_profile": {
+                "display_name": "悠",
+                "appearance": "短发",
+                "identity": "转学生",
+            },
+        },
+    )
+    return str(created["story"]["id"])
+
+
+@pytest.mark.asyncio
+async def test_deleted_story_leaves_neither_catalog_entry_nor_files(tmp_path) -> None:
+    from plugins.story.backend.errors import StoryNotFoundError
+
+    handler = _library_handler(
+        tmp_path, director=OpeningDirector(), image_tool=FileImageTool(tmp_path)
+    )
+    story_id = await _create_library_story(handler)
+    for _ in range(8):
+        await asyncio.sleep(0)
+    story_dir = handler._catalog.database_path(story_id).parent
+    assert any((story_dir / "assets").iterdir())
+
+    deleted = await _call(handler, "delete", {"story_id": story_id})
+
+    assert deleted == {"story_id": story_id}
+    assert not story_dir.exists()
+    with pytest.raises(StoryNotFoundError):
+        handler._catalog.require_entry(story_id)
+    assert await _call(handler, "list", {"include_archived": True}) == {"stories": []}
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_story_cannot_be_deleted_while_its_turn_is_generating(tmp_path) -> None:
+    from plugins.story.backend.errors import StoryInvalidStateError
+
+    director = BlockingOpeningDirector()
+    handler = _library_handler(tmp_path, director=director)
+    story_id = await _create_library_story(handler)
+    await director.started.wait()
+    database = handler._catalog.database_path(story_id)
+
+    with pytest.raises(StoryInvalidStateError):
+        await _call(handler, "delete", {"story_id": story_id})
+
+    assert database.exists()
+    assert handler._catalog.require_entry(story_id)["status"] == "active"
+    director.release.set()
+    await _wait_for_director_tasks(handler)
+    await _call(handler, "delete", {"story_id": story_id})
+    assert not database.exists()
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_story_with_persisted_generating_image_cannot_be_deleted(
+    tmp_path,
+) -> None:
+    from plugins.story.backend.errors import StoryInvalidStateError
+
+    handler = _library_handler(
+        tmp_path, director=OpeningDirector(), image_tool=FileImageTool(tmp_path)
+    )
+    story_id = await _create_library_story(handler)
+    await _wait_for_director_tasks(handler)
+    for _ in range(8):
+        await asyncio.sleep(0)
+    repository = handler._repository(story_id)
+    background = repository.story_read_model(story_id)["backgroundResource"]
+    # A retry has persisted "generating" but not yet scheduled its task.
+    repository.prepare_resource(background["id"], prompt="again", source_turn_id=None)
+    database = handler._catalog.database_path(story_id)
+
+    with pytest.raises(StoryInvalidStateError):
+        await _call(handler, "delete", {"story_id": story_id})
+
+    assert database.exists()
+    assert handler._catalog.require_entry(story_id)["status"] == "active"
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_file_removal_keeps_the_story_listed_for_retry(
+    tmp_path, monkeypatch
+) -> None:
+    import shutil
+
+    handler = _library_handler(tmp_path, director=OpeningDirector())
+    story_id = await _create_library_story(handler)
+    await _wait_for_director_tasks(handler)
+
+    def locked(_path, *args, **kwargs):
+        raise PermissionError("file is in use")
+
+    monkeypatch.setattr(shutil, "rmtree", locked)
+    with pytest.raises(PermissionError):
+        await _call(handler, "delete", {"story_id": story_id})
+    assert [
+        story["story_id"] for story in (await _call(handler, "list", {}))["stories"]
+    ] == [story_id]
+
+    monkeypatch.undo()
+    await _call(handler, "delete", {"story_id": story_id})
+    assert (await _call(handler, "list", {}))["stories"] == []
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_renamed_story_title_reaches_library_and_story_without_new_revision(
+    tmp_path,
+) -> None:
+    handler = _library_handler(tmp_path, director=OpeningDirector())
+    story_id = await _create_library_story(handler)
+    await _wait_for_director_tasks(handler)
+    revision = (await _call(handler, "get", {"story_id": story_id}))["story"][
+        "revision"
+    ]
+
+    renamed = await _call(
+        handler, "rename", {"story_id": story_id, "title": "  雨停之后  "}
+    )
+
+    story = (await _call(handler, "get", {"story_id": story_id}))["story"]
+    listed = (await _call(handler, "list", {}))["stories"]
+    assert renamed["story"]["title"] == "雨停之后"
+    assert [summary["title"] for summary in listed] == ["雨停之后"]
+    assert story["title"] == "雨停之后"
+    assert story["revision"] == revision
+    with pytest.raises(ValueError):
+        await _call(handler, "rename", {"story_id": story_id, "title": "   "})
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_story_list_cover_prefers_the_latest_ready_cg_over_background(
+    tmp_path,
+) -> None:
+    handler = _library_handler(
+        tmp_path,
+        director=ProgressionVisualDirector(),
+        image_tool=FileImageTool(tmp_path),
+    )
+    story_id = await _create_library_story(handler)
+    for _ in range(8):
+        await asyncio.sleep(0)
+    opening = (await _call(handler, "get", {"story_id": story_id}))["story"]
+    background_path = opening["backgroundResource"]["path"]
+    assert (await _call(handler, "list", {}))["stories"][0][
+        "cover_path"
+    ] == background_path
+
+    await _call(
+        handler,
+        "input",
+        {
+            "story_id": story_id,
+            "input": "和她一起走。",
+            "expected_revision": opening["revision"],
+        },
+    )
+    for _ in range(12):
+        await asyncio.sleep(0)
+    progressed = (await _call(handler, "get", {"story_id": story_id}))["story"]
+    summary = (await _call(handler, "list", {}))["stories"][0]
+
+    cg = progressed["cgGallery"][1]
+    assert cg["kind"] == "cg" and cg["status"] == "ready"
+    assert summary["cover_path"] == cg["path"] != background_path
+    assert (summary["role_id"], summary["role_name"]) == ("role-1", "澪")
+    await handler.aclose()
