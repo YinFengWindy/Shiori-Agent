@@ -307,18 +307,19 @@ class _MessageMixin:
             return {}
         placeholders = ",".join("?" for _ in named)
         with self._lock:
+            # Group once, then use the unique (session_key, seq) index to fetch
+            # each row. A correlated MAX rescans history for every message.
             rows = self._conn.execute(
                 f"""
                 SELECT {_MESSAGE_SELECT_COLUMNS}
                 FROM messages
-                WHERE session_key = ? AND thread_id IN ({placeholders})
-                  AND seq = (
-                    SELECT MAX(newest.seq) FROM messages AS newest
-                    WHERE newest.session_key = messages.session_key
-                      AND newest.thread_id = messages.thread_id
+                WHERE session_key = ? AND seq IN (
+                    SELECT MAX(seq) FROM messages
+                    WHERE session_key = ? AND thread_id IN ({placeholders})
+                    GROUP BY thread_id
                   )
                 """,
-                (session_key, *named),
+                (session_key, session_key, *named),
             ).fetchall()
         return {str(row["thread_id"]): self._row_to_message(row) for row in rows}
 
