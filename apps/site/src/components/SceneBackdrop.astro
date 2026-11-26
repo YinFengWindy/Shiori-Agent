@@ -60,6 +60,7 @@ const imageClass = "scene-backdrop-image h-full w-full object-cover";
       const src = image.dataset[phase];
       if (!src) throw new Error(`scene backdrop is missing data-${phase}`);
       // A first-screen backdrop is still waiting for the loader to fetch it.
+      // That script also retries a dropped load, and it runs after this swap.
       if (image.dataset.src) image.dataset.src = src;
       else image.src = src;
     }
