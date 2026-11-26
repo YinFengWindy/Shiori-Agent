@@ -31,10 +31,10 @@ import type { ShowcaseClipId } from "../content/showcase";
  * the dictionaries (i18n/zh.ts, i18n/en.ts), by the art's file name. Pages import art from here
  * rather than reaching into `../assets/`, so swapping a picture is a one-file
  * change; only what a page uses is imported, because every imported image is
- * emitted into the build. `tests/assets.test.ts` checks that each
- * `../assets/art/*.webp` import above exists, and owns the WebP
- * size/metadata hygiene of every file in that directory — including art
- * no page shows (yet), kept for later use.
+ * emitted into the build unless the page only passes it to `getImage`
+ * (lib/displayImage.ts), which replaces it with a resized file.
+ * `tests/images.test.ts` checks that every picture a built page requests
+ * exists and stays under the size the mainland CDN can finish.
  *
  * The scene backgrounds and 吟风's expression sprites are the desktop's
  * own files (first-run guide / startup splash, the app's mascot) and are
@@ -79,17 +79,6 @@ export const narrativeExpressionSprites: Record<MascotExpression, ImageMetadata>
   surprised: mascotSurprised,
 };
 
-const mascotFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/shared/assets/mascot/yinfeng-*.webp", {
-  query: "?bytes",
-  import: "default",
-  eager: true,
-});
-const sceneFileBytes = import.meta.glob<number>("../../../desktop/renderer/src/shared/assets/scene/bg-*.webp", {
-  query: "?bytes",
-  import: "default",
-  eager: true,
-});
-
 /** The entry of an `import.meta.glob` result whose file is named `name`. */
 function globFile<T>(files: Record<string, T>, name: string): T {
   const entry = Object.entries(files).find(([path]) => path.endsWith(`/${name}`));
@@ -98,17 +87,30 @@ function globFile<T>(files: Record<string, T>, name: string): T {
 }
 
 /**
- * Size in bytes of every picture the narrative's first screen may wait for
- * (each time-of-day scene, each expression sprite), by emitted URL: the home
- * page loader weighs its progress bar by these.
+ * File name of an imported picture. Reads `fsPath`, which Astro's image
+ * proxy serves without marking the original file for emission (reading
+ * `.src` or `.width` would).
  */
-export const firstScreenImageBytes: Readonly<Record<string, number>> = Object.fromEntries([
-  ...Object.entries(sceneBackgrounds).map(([phase, image]) => [image.src, globFile(sceneFileBytes, `bg-${phase}.webp`)]),
-  ...Object.entries(narrativeExpressionSprites).map(([expression, image]) => [
-    image.src,
-    globFile(mascotFileBytes, `yinfeng-${expression}.webp`),
-  ]),
-]);
+function importedFileName(image: ImageMetadata): string {
+  const path = (image as ImageMetadata & { fsPath?: string }).fsPath;
+  if (!path) throw new Error("an imported image is missing its file path");
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  if (!name) throw new Error(`an imported image has no file name: ${path}`);
+  return name;
+}
+
+/**
+ * Width and height of an imported picture, without marking the original for
+ * emission. `clone` is the proxy's structured copy; reading `.width` on the
+ * proxy itself would keep the full file in the build.
+ */
+export function imageIntrinsicSize(image: ImageMetadata): { readonly width: number; readonly height: number } {
+  // The proxy's `clone` getter returns a plain copy. Calling it would throw,
+  // and reading `.width` on the proxy would keep the original file in the build.
+  const cloned = (image as ImageMetadata & { clone?: ImageMetadata }).clone;
+  const meta = cloned ?? image;
+  return { width: meta.width, height: meta.height };
+}
 
 /**
  * Event CGs framed beside 吟风 while a narrative line plays (keys named by
@@ -178,14 +180,21 @@ export const galleryPhotos: readonly GalleryPhoto[] = GALLERY_ARTS.map((art) => 
 /*
  * The full-size art of the photo strip's previews, by name: the arts named in
  * GALLERY_ARTS (content/gallery.ts), spelled out because a glob pattern must
- * be literal. Not every file in assets/art: each file a glob names is emitted
- * into the build, and some of the art (cg-1) is deliberately kept off the
- * public site. A preview missing here fails `galleryArtOf` with its name.
+ * be literal. Not every file in assets/art: cg-1 is deliberately kept off
+ * the public site. These are only the source of the share pictures
+ * (`getImage`); nothing reads their `.src`, so the full file is not copied
+ * into the build. A preview missing here fails `galleryArtOf` with its name.
  */
 const fullArt = import.meta.glob<ImageMetadata>("../assets/art/{cg-2,cg-3,cg-4,cg-5,cg-6,cg-7,cg-8,cg-10}.webp", {
   import: "default",
   eager: true,
 });
+
+/** Whether `image` is one of the photo strip's committed previews (already small). */
+export function isGalleryPreview(image: ImageMetadata): boolean {
+  const name = importedFileName(image);
+  return Object.keys(galleryThumbs).some((path) => path.endsWith(`/${name}`));
+}
 
 /**
  * The full-size art a photo strip preview was shrunk from (same file name in
@@ -193,7 +202,6 @@ const fullArt = import.meta.glob<ImageMetadata>("../assets/art/{cg-2,cg-3,cg-4,c
  * picture, #799); `undefined` when `image` is not one of the previews.
  */
 export function galleryArtOf(image: ImageMetadata): ImageMetadata | undefined {
-  const preview = Object.keys(galleryThumbs).find((path) => galleryThumbs[path]?.src === image.src);
-  if (preview === undefined) return undefined;
-  return globFile(fullArt, preview.slice(preview.lastIndexOf("/") + 1));
+  if (!isGalleryPreview(image)) return undefined;
+  return globFile(fullArt, importedFileName(image));
 }

@@ -1,9 +1,9 @@
 ---
 import { brandMotifPaths } from "@yinfengwindy/shiori-sdk/host-internal";
-import { firstScreenImageBytes, loaderArtwork } from "../lib/siteAssets";
+import type { DisplayImage } from "../lib/displayImage";
 
 /**
- * The home page loader (#770): 吟风's wide illustration (`loaderArtwork`,
+ * The home page loader (#770): 吟风's wide illustration (passed in,
  * preloaded first from the page head) fading in over the app's blue-pink
  * wash once decoded, a faint shade along the bottom, a few sakura petals
  * drifting down, and a glowing progress line low and centred — the
@@ -11,20 +11,21 @@ import { firstScreenImageBytes, loaderArtwork } from "../lib/siteAssets";
  * with a short light trail, and the percentage above it.
  *
  * The progress counts the narrative's first screen only — the current
- * scene backdrop and all eight expression sprites (`img[data-first-screen]`,
- * which carry `data-src` instead of `src`) — not the illustration, which is
- * the loader's own dressing. The script below downloads them with `fetch`,
- * so the bar can count bytes as they arrive (weighted by the sizes in
- * `data-bytes`, known at build time) and move even on a very slow line. The
- * backdrop and her current face go first, the other faces after them. Each
- * picture is then handed to its `<img>` and decoded.
+ * scene backdrop and the face she is wearing on the first line
+ * (`img[data-first-screen]`, which carry `data-src` instead of `src`) — not
+ * the illustration, which is the loader's own dressing, and not the other
+ * faces or the event CGs. Those wait until this frame is on its way out
+ * (NarrativeStage.astro). The script below downloads the first screen with
+ * `fetch`, so the bar can count bytes as they arrive (each response's
+ * Content-Length) and move even on a very slow line. Each picture is then
+ * handed to its `<img>` and decoded.
  *
  * Then: the bar reaches 100% and the sparkle flashes; the whole loader
  * fades out, growing very slightly, onto the narrative's scene while 吟风's
  * sprite fades in, rising the last few pixels into place, and the dialogue
  * box follows with the first line (timings in site.css). Afterwards the
- * loader leaves the DOM. The narrative's CGs are not its business: each is
- * fetched as its line draws near (NarrativeStage.astro, #790).
+ * loader leaves the DOM. Later faces and CGs are fetched as their line
+ * draws near (NarrativeStage.astro, #790).
  *
  * Painted with the first frame: the markup and the styles (`.site-loader*`
  * in site.css, inlined with the rest of the CSS, see astro.config.ts) are
@@ -46,6 +47,13 @@ import { firstScreenImageBytes, loaderArtwork } from "../lib/siteAssets";
  * it, readable at once; a 「加载中」 status would only be noise.
  */
 
+interface Props {
+  /** The illustration behind the progress line, already sized for the viewport. */
+  art: DisplayImage;
+}
+
+const { art } = Astro.props;
+
 // Petals: horizontal start (% of the width), delay and speed (fractions of
 // --site-loader-petal-fall), size (rem). Colours cycle in site.css.
 const petals = [
@@ -59,13 +67,13 @@ const petals = [
 ];
 ---
 
-<div id="site-loader" class="site-loader" aria-hidden="true" data-bytes={JSON.stringify(firstScreenImageBytes)}>
+<div id="site-loader" class="site-loader" aria-hidden="true">
   <div class="site-loader-wash"></div>
   <img
     class="site-loader-art"
-    src={loaderArtwork.src}
-    width={loaderArtwork.width}
-    height={loaderArtwork.height}
+    src={art.src}
+    width={art.width}
+    height={art.height}
     alt=""
     decoding="async"
     fetchpriority="high"
@@ -173,7 +181,6 @@ const petals = [
     setTimeout(reveal, Math.max(0, capMs - performance.now()));
 
     const percent = loader.querySelector("[data-loader-percent]");
-    const sizes = JSON.parse(loader.dataset.bytes || "{}");
     let loaded = 0;
     let total = 0;
     const showProgress = () => {
@@ -183,22 +190,33 @@ const petals = [
     };
 
     // Download one picture, counting its bytes as they arrive, then hand it
-    // to its <img> and decode it. A failed download leaves the <img> to load
-    // the URL itself; its share is counted once it settles either way.
+    // to its <img> and decode it. The weight is the response's Content-Length,
+    // the optimized file. A failed download leaves the <img> to load the URL
+    // itself; its share is counted once it settles either way.
     const load = async (image, priority) => {
       const url = image.dataset.src;
-      const size = sizes[url] || 0;
+      let weight = 0;
       let counted = 0;
       const count = (bytes) => {
-        const add = Math.min(bytes, size - counted);
+        if (weight <= 0) return;
+        const add = Math.min(bytes, weight - counted);
         if (add <= 0) return;
         counted += add;
         loaded += add;
         showProgress();
       };
+      const setWeight = (next) => {
+        if (!next || next === weight) return;
+        total += next - weight;
+        weight = next;
+        showProgress();
+      };
       try {
         const response = await fetch(url, { priority });
         if (!response.ok || !response.body) throw new Error(`${url}: ${response.status}`);
+        const length = Number(response.headers.get("content-length"));
+        // No length: one even share, filled in when the body finishes.
+        setWeight(length > 0 ? length : 1);
         const reader = response.body.getReader();
         const chunks = [];
         for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
@@ -208,20 +226,18 @@ const petals = [
         image.src = URL.createObjectURL(new Blob(chunks, { type: response.headers.get("content-type") || "" }));
       } catch {
         image.src = url;
+        if (weight === 0) setWeight(1);
       }
       await image.decode().catch(() => undefined);
-      count(size);
+      count(weight);
     };
 
-    // The backdrop and her current face first, then the other faces.
-    // Module scripts (the scene's time-of-day swap of data-src) have run by
-    // DOMContentLoaded, so the URLs read then are the ones that will show.
+    // The backdrop and her current face, nothing else. Module scripts (the
+    // scene's time-of-day swap of data-src) have run by DOMContentLoaded, so
+    // the URLs read then are the ones that will show.
     const track = async () => {
       const images = [...document.querySelectorAll("img[data-first-screen][data-src]")];
-      total = images.reduce((sum, image) => sum + (sizes[image.dataset.src] || 0), 0);
-      const first = images.filter((image) => image.hasAttribute("data-scene-backdrop") || image.dataset.layer === "current");
-      await Promise.all(first.map((image) => load(image, "high")));
-      await Promise.all(images.filter((image) => !first.includes(image)).map((image) => load(image, "auto")));
+      await Promise.all(images.map((image) => load(image, "high")));
       reveal();
     };
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => void track(), { once: true });

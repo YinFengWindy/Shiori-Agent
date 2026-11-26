@@ -2,6 +2,7 @@
 import { pageTitle, siteText } from "../i18n";
 import { type Locale, languageSwitchHref } from "../i18n/locales";
 import SiteLayout from "../layouts/SiteLayout.astro";
+import { displayedCover } from "../lib/displayImage";
 import { blogPostPath, formatPostDate, getPublishedPosts, isoPostDate } from "../lib/blog";
 import { latestDate } from "../lib/pageUpdated";
 import { SITE_SECTIONS } from "../lib/siteMeta";
@@ -29,6 +30,9 @@ const languageHref = languageSwitchHref(locale, versions);
 const listPath = versions[locale];
 const posts = await getPublishedPosts(locale);
 const updated = latestDate(posts.map((post) => post.data.date));
+const cards = await Promise.all(
+  posts.map(async (post) => ({ post, cover: post.data.cover ? await displayedCover(post.data.cover) : undefined })),
+);
 ---
 
 <SiteLayout locale={locale} versions={versions} languageHref={languageHref} title={pageTitle(text.blog.title, locale)} description={text.blog.description} updated={updated}>
@@ -42,15 +46,15 @@ const updated = latestDate(posts.map((post) => post.data.date));
           <p class="site-blog-empty site-story-type">{text.blog.emptyLine}</p>
         ) : (
           <ul class="site-blog-list">
-            {posts.map((post) => (
+            {cards.map(({ post, cover }) => (
               <li>
                 <article class="site-post-card">
-                  {post.data.cover && (
+                  {cover && (
                     <img
-                      src={post.data.cover.image.src}
-                      width={post.data.cover.image.width}
-                      height={post.data.cover.image.height}
-                      alt={post.data.cover.alt}
+                      src={cover.src}
+                      width={cover.width}
+                      height={cover.height}
+                      alt={cover.alt}
                       loading="lazy"
                       decoding="async"
                       class="site-post-card-cover"

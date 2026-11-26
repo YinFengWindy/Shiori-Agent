@@ -4,6 +4,7 @@ import { mascotExpressions } from "../../../desktop/renderer/src/shared/mascot/m
 import { NARRATIVE_LINES } from "../content/narrative";
 import { siteText } from "../i18n";
 import type { Locale } from "../i18n/locales";
+import { cgImage, spriteImage } from "../lib/displayImage";
 import { narrativeCgs, narrativeExpressionSprites } from "../lib/siteAssets";
 import DownloadCall from "./DownloadCall.astro";
 import SceneBackdrop from "./SceneBackdrop.astro";
@@ -46,6 +47,10 @@ if (!firstLine) throw new Error("the narrative needs at least one line");
 // One step per line, then the download state.
 const stepCount = NARRATIVE_LINES.length + 1;
 const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [line.cg] : [])))];
+const sprites = Object.fromEntries(
+  await Promise.all(mascotExpressions.map(async (expression) => [expression, await spriteImage(narrativeExpressionSprites[expression])] as const)),
+);
+const cgs = Object.fromEntries(await Promise.all(usedCgKeys.map(async (key) => [key, await cgImage(narrativeCgs[key])] as const)));
 ---
 
 <section
@@ -56,10 +61,14 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   <div class="site-narrative-stage" data-narrative-stage>
     <SceneBackdrop firstScreen />
     <div class="site-narrative-figure mascot-stack" aria-hidden="true">
-      {/* The home page loader downloads every sprite itself, from data-src (SiteLoader.astro). */}
+      {/*
+        Only the face on the first line is part of the first screen (SiteLoader).
+        The others stay at data-src until this line, or the next few, is on stage.
+      */}
       {
         mascotExpressions.map((expression) => {
-          const sprite = narrativeExpressionSprites[expression];
+          const sprite = sprites[expression];
+          if (!sprite) throw new Error(`no sprite for ${expression}`);
           const first = expression === firstLine.expression;
           return (
             <img
@@ -72,16 +81,16 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
               class="mascot-layer"
               data-expression={expression}
               data-layer={first ? "current" : "hidden"}
-              data-first-screen
+              data-first-screen={first ? "" : undefined}
             />
           );
         })
       }
       <noscript>
         <img
-          src={narrativeExpressionSprites[firstLine.expression].src}
-          width={narrativeExpressionSprites[firstLine.expression].width}
-          height={narrativeExpressionSprites[firstLine.expression].height}
+          src={sprites[firstLine.expression]?.src}
+          width={sprites[firstLine.expression]?.width}
+          height={sprites[firstLine.expression]?.height}
           alt=""
           decoding="async"
           class="mascot-layer"
@@ -92,7 +101,8 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
       {/* No src but the first line's: the script below fetches each CG as its line draws near. */}
       {
         usedCgKeys.map((key) => {
-          const cg = narrativeCgs[key];
+          const cg = cgs[key];
+          if (!cg) throw new Error(`no CG for ${key}`);
           return (
             <img
               src={firstLine.cg === key ? cg.src : undefined}
@@ -159,6 +169,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
   const sprites = [...section.querySelectorAll<HTMLImageElement>("img[data-expression]")];
   const cgs = [...section.querySelectorAll<HTMLImageElement>("img[data-cg]")];
   const lineCgs = lines.map((line) => line.dataset.cg);
+  const lineExpressions = lines.map((line) => line.dataset.expression);
   // Reduced motion keeps the static list layout (site.css): nothing to drive.
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -184,18 +195,31 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
     shownIndex = index;
   }
 
-  /**
-   * Fetch the CGs of the line on stage at `step` and of the next few
-   * (lib/narrativeModel.ts): the CGs carry no src (but the first line's)
-   * until their line draws near, so a reader who stops early, or a slow
-   * line, never spends bandwidth on the rest.
-   */
-  function loadCgsNear(step: number) {
-    const wanted = new Set(narrativeCgsToLoad(lineCgs, step));
-    for (const cg of cgs) {
-      const { cg: key, src } = cg.dataset;
-      if (key && src && wanted.has(key) && !cg.getAttribute("src")) cg.src = src;
+  /** Give `images` a src when their key is on stage or within the lookahead, and not already set. */
+  function loadKeyedNear(
+    images: readonly HTMLImageElement[],
+    keys: readonly (string | undefined)[],
+    step: number,
+    keyOf: (image: HTMLImageElement) => string | undefined,
+  ) {
+    const wanted = new Set(narrativeCgsToLoad(keys, step));
+    for (const image of images) {
+      const key = keyOf(image);
+      const src = image.dataset.src;
+      if (key && src && wanted.has(key) && !image.getAttribute("src")) image.src = src;
     }
+  }
+
+  /**
+   * The line on stage and the next few (lib/narrativeModel.ts): faces and
+   * CGs stay unset until then, so a reader who stops early never downloads
+   * the rest. Not while the loader is still fetching the first frame —
+   * those later files would share its connection.
+   */
+  function loadNearby(step: number) {
+    if (document.documentElement.dataset.siteLoader === "loading") return;
+    loadKeyedNear(cgs, lineCgs, step, (image) => image.dataset.cg);
+    loadKeyedNear(sprites, lineExpressions, step, (image) => image.dataset.expression);
   }
 
   function currentScroll() {
@@ -212,7 +236,7 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
    * underneath, so stepping back fades it straight in again).
    */
   function showStep(step: number) {
-    loadCgsNear(step);
+    loadNearby(step);
     show(Math.min(step, lines.length - 1));
     stage.toggleAttribute("data-final", step === lines.length);
   }
@@ -362,4 +386,18 @@ const usedCgKeys = [...new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [lin
 
   // A reload or a #hash link can open the page mid-narrative.
   update();
+
+  // The first frame is the loader's job. As soon as it starts to leave,
+  // fetch the faces and CGs of the line on stage and the next few, so the
+  // first scroll already has them, without having waited on them to paint.
+  if (document.documentElement.dataset.siteLoader === "loading") {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() => {
+      if (root.dataset.siteLoader === "loading") return;
+      observer.disconnect();
+      // Reduced motion keeps the first face and hides the CG frames, so there is nothing further to fetch.
+      if (!reducedMotion.matches) loadNearby(narrativeStepAt(currentScroll()));
+    });
+    observer.observe(root, { attributes: true, attributeFilter: ["data-site-loader"] });
+  }
 </script>

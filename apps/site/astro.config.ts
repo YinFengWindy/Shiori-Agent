@@ -5,7 +5,6 @@ import react from "@astrojs/react";
 import sitemap from "@astrojs/sitemap";
 import { defineConfig } from "astro/config";
 import { SITEMAP_I18N, withXDefault } from "./src/i18n/locales";
-import { imageBytesPlugin } from "./src/lib/imageQueries";
 import { sitemapLastmod } from "./src/lib/pageUpdated";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -44,8 +43,6 @@ export default defineConfig({
     }),
   ],
   vite: {
-    // `picture.webp?bytes`: file sizes for the home page loader's progress.
-    plugins: [imageBytesPlugin()],
     server: {
       fs: {
         // styles.css, the scene backgrounds and the title logo are imported

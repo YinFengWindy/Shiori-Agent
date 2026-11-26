@@ -48,10 +48,11 @@ describe("home page HTML", () => {
     const images = imgTagsOf(html);
     assert.ok(images.length > 0);
     for (const image of images) assert.match(image, / alt="[^"]*"/, `no alt="…" on ${image}`);
-    // Words for what carries something: the narrative's CGs, the showcase stills, the strip's own prints, and the top bar's QQ group QR.
+    // Words for what carries something: the narrative's CGs, the showcase stills, the strip's own prints,
+    // and the QQ group code twice (the card's image, and the copy shown without scripting).
     const narrativeCgs = new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [line.cg] : [])));
     const described = images.filter((image) => / alt="[^"]+"/.test(image));
-    assert.equal(described.length, narrativeCgs.size + SHOWCASE_FEATURES.length + GALLERY_ARTS.length + 1);
+    assert.equal(described.length, narrativeCgs.size + SHOWCASE_FEATURES.length + GALLERY_ARTS.length + 2);
   });
 
   it("closes the narrative with the download call: icon title, slogan, download and GitHub links", () => {
@@ -108,11 +109,16 @@ describe("home page HTML", () => {
         const header = html.match(/<header class="site-header"[^>]*>[\s\S]*?<\/header>/)?.[0] ?? "";
         assert.match(header, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), page);
         assert.match(header, /1129810364/, page);
-        const img = [...header.matchAll(/<img\b[^>]*>/g)].map((match) => match[0]).find((tag) => tag.includes("site-qq-qr"));
-        assert.ok(img, `${page} top bar has no QQ group QR`);
-        assert.match(img, new RegExp(`alt="${alt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
-        const src = img.match(/\bsrc="([^"]+)"/)?.[1];
+        const imgs = [...header.matchAll(/<img\b[^>]*>/g)].map((match) => match[0]).filter((tag) => tag.includes("site-qq-qr"));
+        const interactive = imgs.find((tag) => tag.includes("data-src="));
+        const noscript = imgs.find((tag) => /\ssrc="/.test(tag));
+        assert.ok(interactive, `${page} top bar has no QQ group QR`);
+        assert.doesNotMatch(interactive, /\bloading="lazy"/, `${page} QR must not be lazy inside the closed card`);
+        assert.doesNotMatch(interactive, /\ssrc="/, `${page} QR must wait until the card opens`);
+        assert.match(interactive, new RegExp(`alt="${alt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+        const src = interactive.match(/\bdata-src="([^"]+)"/)?.[1];
         assert.ok(src, page);
+        assert.equal(noscript?.match(/\bsrc="([^"]+)"/)?.[1], src, `${page} no-JS QR differs`);
         assert.ok(existsSync(resolve(dist, src.startsWith("/") ? src.slice(1) : src)), src);
       }
     });

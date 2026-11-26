@@ -2,17 +2,24 @@
 import { QrCodeIcon } from "@phosphor-icons/react";
 import { cx } from "@yinfengwindy/shiori-sdk";
 import { compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
-import qqGroupQrUrl from "../../../../assets/readme/shiori-qq-group-qr.png?url";
+import qqGroupQr from "../../../../assets/readme/shiori-qq-group-qr.png";
 import { siteText } from "../i18n";
 import type { Locale } from "../i18n/locales";
 import { controlButtonClass } from "../lib/controlButton";
+import { qrImage } from "../lib/displayImage";
 import { QQ_GROUP_NAME, QQ_GROUP_NUMBER } from "../lib/siteMeta";
 
 /**
  * Top-bar entry for the official QQ group (Shiori-Agent交流群). A disclosure
  * in the bar: click or keyboard opens the card, and a fine pointer also
  * opens it on hover. The card shows the group name, the group number and
- * the original QR image. Phones use the same icon tile as GitHub.
+ * the group QR, resized at build time from the shared screenshot
+ * (lib/displayImage.ts) so the page does not fetch the raw 1284×2280 PNG.
+ * Phones use the same icon tile as GitHub. The image has no `src` until the
+ * card opens: a closed `<details>` has no box, so `loading="lazy"` never
+ * intersects and the picture stays broken, while a real `src` would download
+ * on every page before the first screen. The image stays `hidden` until then.
+ * Without scripting the `<noscript>` copy shows.
  */
 interface Props {
   locale: Locale;
@@ -20,6 +27,7 @@ interface Props {
 
 const { locale } = Astro.props;
 const text = siteText(locale).header;
+const qr = await qrImage(qqGroupQr);
 const wideOnlyClass = "max-md:hidden";
 const narrowOnlyClass = "md:hidden";
 ---
@@ -42,14 +50,17 @@ const narrowOnlyClass = "md:hidden";
         <span class="font-mono tabular-nums text-ink">{QQ_GROUP_NUMBER}</span>
       </p>
       <img
-        src={qqGroupQrUrl}
-        width="1284"
-        height="2280"
+        data-src={qr.src}
+        width={qr.width}
+        height={qr.height}
         alt={text.qqQrAlt}
-        loading="lazy"
         decoding="async"
+        hidden
         class="site-qq-qr"
       />
+      <noscript>
+        <img src={qr.src} width={qr.width} height={qr.height} alt={text.qqQrAlt} decoding="async" class="site-qq-qr" />
+      </noscript>
     </div>
   </div>
 </details>
@@ -59,6 +70,18 @@ const narrowOnlyClass = "md:hidden";
   if (!group) throw new Error("QQ group control is missing");
   const summary = group.querySelector("summary");
   if (!summary) throw new Error("QQ group control has no summary");
+
+  const qr = group.querySelector<HTMLImageElement>("img[data-src]");
+  // Assign src only once the card is open. A lazy image inside a closed
+  // disclosure never loads; an eager src would compete with the first screen.
+  const showQr = () => {
+    if (!qr?.dataset.src || qr.getAttribute("src")) return;
+    qr.src = qr.dataset.src;
+    qr.hidden = false;
+  };
+  group.addEventListener("toggle", () => {
+    if (group.open) showQr();
+  });
 
   const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
   if (finePointer.matches) {

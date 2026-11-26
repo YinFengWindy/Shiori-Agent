@@ -2,7 +2,7 @@ import type { ImageMetadata } from "astro";
 import { getImage } from "astro:assets";
 import { siteText } from "../i18n";
 import type { Locale } from "../i18n/locales";
-import { SOCIAL_PREVIEW_ART, galleryArtOf, socialPreviewImage } from "./siteAssets";
+import { SOCIAL_PREVIEW_ART, galleryArtOf, imageIntrinsicSize, socialPreviewImage } from "./siteAssets";
 
 /*
  * The picture a page is shared with (Open Graph / Twitter card, a post's
@@ -43,9 +43,10 @@ export function siteShareImage(locale: Locale): ShareImage {
 export async function postShareImage(cover: { image: ImageMetadata; alt: string } | undefined, locale: Locale): Promise<ShareImage> {
   if (!cover) return siteShareImage(locale);
   const source = galleryArtOf(cover.image) ?? cover.image;
-  if (source.width < SHARE_IMAGE_WIDTH || source.height < SHARE_IMAGE_HEIGHT) {
+  const size = imageIntrinsicSize(source);
+  if (size.width < SHARE_IMAGE_WIDTH || size.height < SHARE_IMAGE_HEIGHT) {
     throw new Error(
-      `a post cover's share picture is cropped from a picture of at least ${SHARE_IMAGE_WIDTH}×${SHARE_IMAGE_HEIGHT}; ${cover.image.src} is ${source.width}×${source.height}`,
+      `a post cover's share picture is cropped from a picture of at least ${SHARE_IMAGE_WIDTH}×${SHARE_IMAGE_HEIGHT}; the source is ${size.width}×${size.height}`,
     );
   }
   const image = await getImage({
