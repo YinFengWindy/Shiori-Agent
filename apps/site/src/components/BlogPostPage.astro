@@ -5,6 +5,7 @@ import { LOCALE_INFO, type Locale, type PageVersions, languageSwitchHref } from 
 import SiteLayout from "../layouts/SiteLayout.astro";
 import { type BlogPost, blogPostPath, formatPostDate, isoPostDate } from "../lib/blog";
 import { postTableOfContents } from "../lib/sectionIndex";
+import { displayedCover } from "../lib/displayImage";
 import { postShareImage } from "../lib/shareImage";
 import { appIconImage } from "../lib/siteAssets";
 import { SITE_SECTIONS } from "../lib/siteMeta";
@@ -54,6 +55,7 @@ if (!Astro.site) throw new Error("astro.config.ts must set `site`: the post's st
 const postUrl = new URL(postPath, Astro.site).href;
 const published = isoPostDate(date);
 const shareImage = await postShareImage(cover, locale);
+const coverPicture = cover ? await displayedCover(cover) : undefined;
 const structuredData = {
   "@context": "https://schema.org",
   "@type": "BlogPosting",
@@ -106,13 +108,14 @@ const structuredDataJson = inlineJson(structuredData);
         </header>
         {tableOfContents.length > 0 && <SectionIndex variant="inline" title={text.blog.contents} entries={tableOfContents} />}
         {
-          cover && (
+          coverPicture && (
             <img
-              src={cover.image.src}
-              width={cover.image.width}
-              height={cover.image.height}
-              alt={cover.alt}
+              src={coverPicture.src}
+              width={coverPicture.width}
+              height={coverPicture.height}
+              alt={coverPicture.alt}
               decoding="async"
+              fetchpriority="high"
               class="site-post-cover"
             />
           )

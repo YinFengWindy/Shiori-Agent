@@ -1,4 +1,5 @@
 ---
+import { sceneImage } from "../lib/displayImage";
 import { sceneBackgrounds } from "../lib/siteAssets";
 
 /**
@@ -17,7 +18,11 @@ interface Props {
 }
 
 const { firstScreen = false } = Astro.props;
-const { day, dusk, night } = sceneBackgrounds;
+const [day, dusk, night] = await Promise.all([
+  sceneImage(sceneBackgrounds.day),
+  sceneImage(sceneBackgrounds.dusk),
+  sceneImage(sceneBackgrounds.night),
+]);
 const imageClass = "scene-backdrop-image h-full w-full object-cover";
 ---
 

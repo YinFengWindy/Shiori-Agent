@@ -5,6 +5,7 @@ import SiteLayout from "../layouts/SiteLayout.astro";
 import { getPublishedPosts } from "../lib/blog";
 import { loadLatestRelease } from "../lib/changelog";
 import { latestDate } from "../lib/pageUpdated";
+import { loaderImage } from "../lib/displayImage";
 import { appIconImage, loaderArtwork, socialPreviewImage } from "../lib/siteAssets";
 import { siteLoaderGateScript } from "../lib/siteLoaderGate";
 import { DOWNLOAD_ANCHOR_ID } from "../lib/siteMeta";
@@ -51,15 +52,16 @@ const updated = latestDate([release.publishedAt, ...posts.map((post) => post.dat
 const structuredDataJson = inlineJson(
   homeJsonLd({ site: Astro.site, locale, logoPath: appIconImage.src, imagePath: socialPreviewImage.src, release }),
 );
+const loaderArt = await loaderImage(loaderArtwork);
 ---
 
 <SiteLayout locale={locale} versions={versions} title={text.meta.homeTitle} updated={updated}>
   {/* Before anything paints: is this a visit the loader stays out of (Back, an anchor)? */}
   <script slot="head" is:inline set:html={siteLoaderGateScript} />
   {/* The loader's illustration is the first picture the page asks for. */}
-  <link slot="head" rel="preload" as="image" href={loaderArtwork.src} fetchpriority="high" />
+  <link slot="head" rel="preload" as="image" href={loaderArt.src} fetchpriority="high" />
   <script slot="meta" type="application/ld+json" set:html={structuredDataJson} />
-  <SiteLoader />
+  <SiteLoader art={loaderArt} />
   <SiteHeader locale={locale} mode="reveal" languageHref={languageHref} sound={text.sound} />
   <main>
     <NarrativeStage locale={locale} downloadId={DOWNLOAD_ANCHOR_ID} />
