@@ -9,18 +9,20 @@ import { barIconImage } from "../lib/siteAssets";
 import { SITE_LINKS, SITE_NAME, SITE_SECTIONS, homeDownloadHref } from "../lib/siteMeta";
 import DownloadButton from "./DownloadButton.astro";
 import LanguageSwitch from "./LanguageSwitch.astro";
+import QqGroupButton from "./QqGroupButton.astro";
 import { SoundToggle } from "./SoundToggle";
 import "../styles/header.css";
 
 /**
  * The site's top bar (#773): the app icon and name, then 博客,
- * 更新日志, GitHub, the language switch (#806) — with the music switch on
- * its right on the home page (#810) — and the download button last, in
- * the page's language; a section without a version in it (the English blog
- * and changelog until #807) is linked in Chinese. A thin, translucent light strip
- * in the showcase's colours. The icon and name lead to the home page's
- * closing download state (`/#download`, #797); on the home page itself the
- * narrative glides there instead of reloading (NarrativeStage.astro).
+ * 更新日志, GitHub, the QQ group (Shiori-Agent交流群), the language switch
+ * (#806) — with the music switch on its right on the home page (#810) — and
+ * the download button last, in the page's language; a section without a
+ * version in it (the English blog and changelog until #807) is linked in
+ * Chinese. A thin, translucent light strip in the showcase's colours. The
+ * icon and name lead to the home page's closing download state
+ * (`/#download`, #797); on the home page itself the narrative glides there
+ * instead of reloading (NarrativeStage.astro).
  *
  * `reveal` (home page): out of sight over the narrative, which is a
  * full-screen stage of its own; it slides in from the top once the page
@@ -32,7 +34,7 @@ import "../styles/header.css";
  * always there, in the page flow at the top and sticking while scrolling.
  *
  * Phones and small tablets (below `md`, 768px) keep the icon, the name, 博客 and the switches, with
- * GitHub as a tile among them (#814); 更新日志 and the download button drop out
+ * GitHub and the QQ group as tiles among them (#814); 更新日志 and the download button drop out
  * — there is no phone version to download, and the footer links the releases.
  */
 interface Props {
@@ -83,6 +85,7 @@ const narrowOnlyClass = "md:hidden";
       <a href={SITE_LINKS.github} class={cx(controlButtonClass, narrowOnlyClass)} aria-label="GitHub" title="GitHub">
         <GithubLogoIcon size={20} aria-hidden="true" />
       </a>
+      <QqGroupButton locale={locale} />
       <LanguageSwitch locale={locale} href={languageHref} variant="bar" />
       {sound && <SoundToggle client:idle className="site-header-sound" labels={sound} />}
       <DownloadButton label={text.download} class={cx(compactPrimaryButtonClass, wideOnlyClass)} iconSize={18} />

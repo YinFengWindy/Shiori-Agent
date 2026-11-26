@@ -3,3 +3,9 @@ declare module "*?bytes" {
   const bytes: number;
   export default bytes;
 }
+
+/** `import url from "./picture.png?url"`: the emitted file URL, bytes unchanged. */
+declare module "*.png?url" {
+  const url: string;
+  export default url;
+}

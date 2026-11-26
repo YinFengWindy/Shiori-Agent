@@ -49,6 +49,14 @@ export const zh = {
     download: "下载 Windows 版",
     blog: "博客",
     changelog: "更新日志",
+    /** Top-bar control that opens the QQ group card. */
+    qq: "QQ 群",
+    /** Accessible name of that control. */
+    qqLabel: "QQ 群：Shiori-Agent交流群",
+    /** Label in front of the group number on the card. */
+    qqNumber: "群号",
+    /** Alt text of the group QR code. */
+    qqQrAlt: "Shiori-Agent交流群二维码，群号 1129810364",
   },
   /** The footer's project links. */
   footer: {

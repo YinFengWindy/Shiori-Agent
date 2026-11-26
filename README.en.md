@@ -26,6 +26,12 @@ Characters can also keep you company through Telegram, QQ, Feishu and Grok Bot. 
 
 The Shiori app's interface is currently in Chinese.
 
+## Community
+
+QQ group: Shiori-Agent交流群, group number `1129810364`.
+
+<img src="./assets/readme/shiori-qq-group-qr.png" alt="QR code for the Shiori-Agent community group, number 1129810364" width="220" />
+
 ## Screenshots
 
 <table>

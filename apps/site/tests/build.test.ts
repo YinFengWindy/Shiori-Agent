@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { GALLERY_ARTS } from "../src/content/gallery";
 import { NARRATIVE_LINES } from "../src/content/narrative";
 import { SHOWCASE_CLIP_IDS } from "../src/content/showcase";
+import { en } from "../src/i18n/en";
 import { zh } from "../src/i18n/zh";
 import {
   ORIGIN,
@@ -47,10 +48,10 @@ describe("home page HTML", () => {
     const images = imgTagsOf(html);
     assert.ok(images.length > 0);
     for (const image of images) assert.match(image, / alt="[^"]*"/, `no alt="…" on ${image}`);
-    // Words for what carries something: the narrative's CGs, the showcase stills, the strip's own prints.
+    // Words for what carries something: the narrative's CGs, the showcase stills, the strip's own prints, and the top bar's QQ group QR.
     const narrativeCgs = new Set(NARRATIVE_LINES.flatMap((line) => (line.cg ? [line.cg] : [])));
     const described = images.filter((image) => / alt="[^"]+"/.test(image));
-    assert.equal(described.length, narrativeCgs.size + SHOWCASE_FEATURES.length + GALLERY_ARTS.length);
+    assert.equal(described.length, narrativeCgs.size + SHOWCASE_FEATURES.length + GALLERY_ARTS.length + 1);
   });
 
   it("closes the narrative with the download call: icon title, slogan, download and GitHub links", () => {
@@ -96,6 +97,24 @@ describe("home page HTML", () => {
     it("shares one direct-download script with the closing call: the release API is asked once", () => {
       assert.equal([...html.matchAll(/<a [^>]*data-download-installer>/g)].length, 2);
       assert.equal(html.split("https://api.github.com/repos/YinFengWindy/Shiori-Agent/releases/latest").length - 1, 1);
+    });
+
+    it("offers the QQ group number in both languages, with a QR image the build emits", () => {
+      for (const [page, label, alt] of [
+        ["index.html", zh.header.qq, zh.header.qqQrAlt],
+        ["en/index.html", en.header.qq, en.header.qqQrAlt],
+      ] as const) {
+        const html = readDist(page);
+        const header = html.match(/<header class="site-header"[^>]*>[\s\S]*?<\/header>/)?.[0] ?? "";
+        assert.match(header, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), page);
+        assert.match(header, /1129810364/, page);
+        const img = [...header.matchAll(/<img\b[^>]*>/g)].map((match) => match[0]).find((tag) => tag.includes("site-qq-qr"));
+        assert.ok(img, `${page} top bar has no QQ group QR`);
+        assert.match(img, new RegExp(`alt="${alt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}"`));
+        const src = img.match(/\bsrc="([^"]+)"/)?.[1];
+        assert.ok(src, page);
+        assert.ok(existsSync(resolve(dist, src.startsWith("/") ? src.slice(1) : src)), src);
+      }
     });
 
     it("starts out of sight above the page, shows without scripting, and does not slide under reduced motion", () => {
