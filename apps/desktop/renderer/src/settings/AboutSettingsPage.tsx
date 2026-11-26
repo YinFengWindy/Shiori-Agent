@@ -1,4 +1,5 @@
-import { ArrowClockwise, ArrowSquareOut, Envelope, GithubLogo } from "@phosphor-icons/react";
+import { useId, useState } from "react";
+import { ArrowClockwise, ArrowSquareOut, Check, Copy, Envelope, GithubLogo, QrCode } from "@phosphor-icons/react";
 import {
   SettingsGroup,
   badgeClass,
@@ -12,12 +13,48 @@ import { DesktopExternalLink } from "../shared/DesktopExternalLink";
 import { InlineError } from "../shared/feedback/InlineError";
 import { MascotOnStage } from "../shared/mascot/MascotOnStage";
 import { useMascotEnabled } from "../shared/mascot/useMascotEnabled";
+import { compactTextButtonClass } from "../shared/styles";
+import { useCopyText } from "../shared/useCopyText";
 import { AboutMascot } from "./AboutMascot";
 import { useDesktopUpdates } from "./useDesktopUpdates";
 import { updatePresentation } from "./updatePresentation";
 
 const releaseUrl = "https://github.com/YinFengWindy/Shiori-Agent/releases/latest";
 const linkClass = "break-all text-body-sm text-accent-text underline-offset-4 hover:underline";
+
+/** Official QQ community group, Shiori-Agent交流群. */
+const qqGroupNumber = "1129810364";
+const qqGroupQrUrl = new URL("../../../../../assets/readme/shiori-qq-group-qr.png", import.meta.url).href;
+
+/**
+ * Shiori-Agent交流群 in the contact list: the group number copies to the
+ * clipboard, and the same row can show the group's QR code.
+ */
+function AboutQqGroup() {
+  const { copied, copy } = useCopyText();
+  const [qrOpen, setQrOpen] = useState(false);
+  const qrId = useId();
+  return (
+    <div className="grid gap-1 border-b border-line-soft py-4 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-start">
+      <dt className="flex h-9 items-center gap-2 text-body-sm text-ink-secondary"><QrCode size={16} aria-hidden="true" />QQ 群</dt>
+      <dd className="m-0 grid min-w-0 justify-items-start gap-3">
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="px-1 font-mono text-body-sm tabular-nums text-ink">{qqGroupNumber}</span>
+          <button type="button" className={compactTextButtonClass} onClick={() => void copy(qqGroupNumber)}>
+            {copied ? <Check size={16} weight="bold" className="text-success-text" aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
+            {copied ? "已复制" : "复制"}
+          </button>
+          <button type="button" className={compactTextButtonClass} aria-expanded={qrOpen} aria-controls={qrOpen ? qrId : undefined} onClick={() => setQrOpen((open) => !open)}>
+            <QrCode size={16} aria-hidden="true" />二维码
+          </button>
+        </div>
+        {qrOpen ? (
+          <img id={qrId} src={qqGroupQrUrl} width={1284} height={2280} alt="Shiori-Agent交流群二维码，群号 1129810364" className="h-auto w-56 rounded-md border border-line-soft bg-surface" />
+        ) : null}
+      </dd>
+    </div>
+  );
+}
 
 /**
  * Shows the installed version and the desktop-owned update lifecycle. The
@@ -77,6 +114,7 @@ export function AboutSettingsPage() {
               <dt className="flex items-center gap-2 text-body-sm text-ink-secondary"><GithubLogo size={16} aria-hidden="true" />GitHub</dt>
               <dd className="m-0 min-w-0"><DesktopExternalLink href="https://github.com/YinFengWindy/Shiori-Agent" className={linkClass}>YinFengWindy/Shiori-Agent</DesktopExternalLink></dd>
             </div>
+            <AboutQqGroup />
             <div className="grid gap-1 py-4 sm:grid-cols-[140px_minmax(0,1fr)] sm:items-center">
               <dt className="flex items-center gap-2 text-body-sm text-ink-secondary"><Envelope size={16} aria-hidden="true" />联系作者</dt>
               <dd className="m-0 min-w-0"><DesktopExternalLink href="mailto:3174898512@qq.com" className={linkClass}>3174898512@qq.com</DesktopExternalLink></dd>

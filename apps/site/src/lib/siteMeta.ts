@@ -36,6 +36,10 @@ export const SITE_SECTIONS = {
   changelog: { zh: "/changelog/", en: "/en/changelog/" },
 } as const satisfies Record<string, PageVersions>;
 
+/** Official QQ community group shown in the top bar: Shiori-Agent交流群. */
+export const QQ_GROUP_NAME = "Shiori-Agent交流群";
+export const QQ_GROUP_NUMBER = "1129810364";
+
 /** Outbound calls to action. */
 export const SITE_LINKS = {
   github: "https://github.com/YinFengWindy/Shiori-Agent",

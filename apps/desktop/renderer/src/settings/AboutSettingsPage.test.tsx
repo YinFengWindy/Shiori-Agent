@@ -149,6 +149,35 @@ for (const [errorPhase, label, expectedCommand] of [
   });
 }
 
+test("copies the official QQ group number and reveals its QR code", async () => {
+  const view = await mountTestComponent(null);
+  const written: string[] = [];
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: async (text: string) => { written.push(text); } },
+  });
+  Object.defineProperty(window, "miraDesktop", { configurable: true, value: { updates: {
+    getState: async () => ({ revision: 0, currentVersion: "0.2.0", phase: "unsupported", latestVersion: null, progress: 0, error: null }),
+    onState: () => () => undefined,
+  } } });
+  try {
+    await view.render(<AboutSettingsPage />);
+    assert.match(view.container.textContent ?? "", /QQ 群/);
+    assert.match(view.container.textContent ?? "", /1129810364/);
+    const copy = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent?.includes("复制"));
+    assert.ok(copy);
+    await act(async () => { copy.click(); });
+    assert.deepEqual(written, ["1129810364"]);
+    const qrAlt = "Shiori-Agent交流群二维码，群号 1129810364";
+    assert.equal(view.container.querySelector(`img[alt="${qrAlt}"]`), null);
+    const qr = Array.from(view.container.querySelectorAll("button")).find((button) => button.textContent?.includes("二维码"));
+    assert.ok(qr);
+    await act(async () => { qr.click(); });
+    const image = view.container.querySelector<HTMLImageElement>(`img[alt="${qrAlt}"]`);
+    assert.ok(image?.getAttribute("src")?.includes("shiori-qq-group-qr.png"));
+  } finally { await view.cleanup(); }
+});
+
 test("an empty update feed is a normal unavailable status instead of claiming latest", async () => {
   const view = await mountTestComponent(null);
   Object.defineProperty(window, "miraDesktop", { configurable: true, value: { updates: {

@@ -29,6 +29,10 @@ export const en: SiteDictionary = {
     download: "Download",
     blog: "Blog",
     changelog: "Changelog",
+    qq: "QQ Group",
+    qqLabel: "QQ group: Shiori-Agent交流群",
+    qqNumber: "Group number",
+    qqQrAlt: "QR code for the Shiori-Agent community group, number 1129810364",
   },
   footer: {
     label: "Project links",

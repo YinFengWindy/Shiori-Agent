@@ -1,0 +1,83 @@
+---
+import { QrCodeIcon } from "@phosphor-icons/react";
+import { cx } from "@yinfengwindy/shiori-sdk";
+import { compactTextButtonClass } from "../../../desktop/renderer/src/shared/styles";
+import qqGroupQrUrl from "../../../../assets/readme/shiori-qq-group-qr.png?url";
+import { siteText } from "../i18n";
+import type { Locale } from "../i18n/locales";
+import { controlButtonClass } from "../lib/controlButton";
+import { QQ_GROUP_NAME, QQ_GROUP_NUMBER } from "../lib/siteMeta";
+
+/**
+ * Top-bar entry for the official QQ group (Shiori-Agent交流群). A disclosure
+ * in the bar: click or keyboard opens the card, and a fine pointer also
+ * opens it on hover. The card shows the group name, the group number and
+ * the original QR image. Phones use the same icon tile as GitHub.
+ */
+interface Props {
+  locale: Locale;
+}
+
+const { locale } = Astro.props;
+const text = siteText(locale).header;
+const wideOnlyClass = "max-md:hidden";
+const narrowOnlyClass = "md:hidden";
+---
+
+<details class="site-qq" data-qq-group>
+  <summary class="site-qq-summary" aria-label={text.qqLabel}>
+    <span class={cx(compactTextButtonClass, wideOnlyClass)}>
+      <QrCodeIcon size={18} aria-hidden="true" />
+      {text.qq}
+    </span>
+    <span class={cx(controlButtonClass, narrowOnlyClass)}>
+      <QrCodeIcon size={20} aria-hidden="true" />
+    </span>
+  </summary>
+  <div class="site-qq-panel">
+    <div class="site-qq-card motion-popover-enter origin-top-right" role="group" aria-label={text.qqLabel}>
+      <p class="m-0 text-body-sm font-medium text-ink" lang="zh-CN">{QQ_GROUP_NAME}</p>
+      <p class="site-qq-number m-0 text-body-sm text-ink-secondary">
+        <span>{text.qqNumber}</span>
+        <span class="font-mono tabular-nums text-ink">{QQ_GROUP_NUMBER}</span>
+      </p>
+      <img
+        src={qqGroupQrUrl}
+        width="1284"
+        height="2280"
+        alt={text.qqQrAlt}
+        loading="lazy"
+        decoding="async"
+        class="site-qq-qr"
+      />
+    </div>
+  </div>
+</details>
+
+<script>
+  const group = document.querySelector<HTMLDetailsElement>("[data-qq-group]");
+  if (!group) throw new Error("QQ group control is missing");
+  const summary = group.querySelector("summary");
+  if (!summary) throw new Error("QQ group control has no summary");
+
+  const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)");
+  if (finePointer.matches) {
+    group.addEventListener("mouseenter", () => {
+      group.open = true;
+    });
+    group.addEventListener("mouseleave", () => {
+      group.open = false;
+    });
+    // Hover already opens the card; a mouse click would toggle it shut.
+    summary.addEventListener("click", (event) => {
+      if (event instanceof PointerEvent && event.pointerType === "mouse") event.preventDefault();
+    });
+  }
+
+  document.addEventListener("pointerdown", (event) => {
+    if (group.open && !group.contains(event.target as Node)) group.open = false;
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && group.open) group.open = false;
+  });
+</script>

@@ -24,6 +24,12 @@ Shiori 以角色为中心组织人设、记忆、会话、素材与关系。你�
 
 角色也可以通过 Telegram、QQ、飞书和 Grok Bot 与你相处。不同入口延续同一份角色身份与状态；群聊、未绑定身份的私聊会保留各自的上下文。
 
+## 交流群
+
+QQ 群：Shiori-Agent交流群，群号 `1129810364`。
+
+<img src="./assets/readme/shiori-qq-group-qr.png" alt="Shiori-Agent交流群二维码，群号 1129810364" width="220" />
+
 ## 界面
 
 <table>

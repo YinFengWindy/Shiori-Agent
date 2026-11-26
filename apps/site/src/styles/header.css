@@ -80,7 +80,9 @@
   height: 100%;
   max-width: 76rem;
   margin-inline: auto;
-  padding-inline: clamp(0.75rem, 3vw, 2rem);
+  /* The floor stays under 0.75rem so a narrow phone can hold the icon tiles
+     (GitHub, QQ group, language, music) without a horizontal scrollbar. */
+  padding-inline: clamp(0.5rem, 3vw, 2rem);
 }
 
 .site-header-brand {
@@ -115,6 +117,82 @@
 
 .site-header-links [aria-current="page"] {
   color: var(--color-text-accent);
+}
+
+/*
+ * QQ group card (components/QqGroupButton.astro): a disclosure in the bar.
+ * The panel hangs below the control; its transparent top padding is the gap
+ * the pointer crosses on the way to the card, so a hover does not drop.
+ * Same rule as the rest of this file: rules below use only --site-qq-* names.
+ */
+.site-qq {
+  /* Clears the rest of the 3.5rem bar under a centered control, then a small gap. */
+  --site-qq-gap: 1.125rem;
+  --site-qq-number-gap: 0.35rem;
+  --site-qq-card-width: 13.75rem;
+  --site-qq-card-padding: 0.75rem;
+  --site-qq-card-gap: 0.5rem;
+  --site-qq-card-radius: var(--radius-lg);
+  --site-qq-card-border: var(--color-border-soft);
+  --site-qq-card-fill: var(--color-bg-glass-strong);
+  --site-qq-card-blur: var(--site-glass-blur);
+  --site-qq-card-shadow: var(--shadow-pop);
+  --site-qq-qr-radius: var(--radius-sm);
+  position: relative;
+}
+
+.site-qq-summary {
+  display: flex;
+  list-style: none;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+}
+
+/* A click whose target is the icon SVG does not toggle the disclosure. */
+.site-qq-summary svg {
+  pointer-events: none;
+}
+
+.site-qq-summary::-webkit-details-marker {
+  display: none;
+}
+
+.site-qq-summary::marker {
+  content: "";
+}
+
+.site-qq-panel {
+  position: absolute;
+  z-index: 1;
+  top: 100%;
+  right: 0;
+  padding-top: var(--site-qq-gap);
+}
+
+.site-qq-card {
+  display: grid;
+  gap: var(--site-qq-card-gap);
+  width: min(var(--site-qq-card-width), calc(100vw - 1.5rem));
+  padding: var(--site-qq-card-padding);
+  border: 1px solid var(--site-qq-card-border);
+  border-radius: var(--site-qq-card-radius);
+  background: var(--site-qq-card-fill);
+  box-shadow: var(--site-qq-card-shadow);
+  backdrop-filter: blur(var(--site-qq-card-blur)) saturate(1.4);
+}
+
+.site-qq-number {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--site-qq-number-gap);
+}
+
+.site-qq-qr {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--site-qq-qr-radius);
 }
 
 
