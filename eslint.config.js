@@ -51,6 +51,8 @@ export default [
     "apps/site/*.ts",
     "apps/site/src/**/*.ts",
     "apps/site/src/**/*.tsx",
+    // Pasted into the home page loader; not a module the checker imports.
+    "apps/site/src/lib/imageRetry.runtime.js",
     "apps/site/tests/**/*.ts",
     // The site's picture scripts (showcase stills, photo-strip thumbnails).
     "apps/site/scripts/**/*.ts",

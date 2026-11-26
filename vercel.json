@@ -4,5 +4,43 @@
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm run build:site",
   "outputDirectory": "apps/site/dist",
-  "ignoreCommand": "sh apps/site/scripts/vercel-ignore-build.sh"
+  "ignoreCommand": "sh apps/site/scripts/vercel-ignore-build.sh",
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/favicon(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    },
+    {
+      "source": "/icons/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400"
+        }
+      ]
+    },
+    {
+      "source": "/_astro/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ]
 }

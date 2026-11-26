@@ -1,6 +1,8 @@
 ---
 import { brandMotifPaths } from "@yinfengwindy/shiori-sdk/host-internal";
+import retryRuntime from "../lib/imageRetry.runtime.js?raw";
 import type { DisplayImage } from "../lib/displayImage";
+import { siteLoaderInlineScript } from "../lib/siteLoaderInline";
 
 /**
  * The home page loader (#770): 吟风's wide illustration (passed in,
@@ -18,7 +20,11 @@ import type { DisplayImage } from "../lib/displayImage";
  * (NarrativeStage.astro). The script below downloads the first screen with
  * `fetch`, so the bar can count bytes as they arrive (each response's
  * Content-Length) and move even on a very slow line. Each picture is then
- * handed to its `<img>` and decoded.
+ * handed to its `<img>` and decoded. A download the CDN drops (the
+ * connection closes, or the body arrives short) is tried again up to three
+ * times, with a short pause and an `r` query so the failed response is not
+ * reused (lib/imageRetry.runtime.js). The same listener covers the scene
+ * backdrops and this illustration.
  *
  * Then: the bar reaches 100% and the sparkle flashes; the whole loader
  * fades out, growing very slightly, onto the narrative's scene while 吟风's
@@ -33,7 +39,8 @@ import type { DisplayImage } from "../lib/displayImage";
  * touch / scroll-key / click input does not reach the page: nothing sits
  * above the loader (the corner controls show once it goes, #810). If the first
  * screen is not ready within `--site-loader-cap` it reveals anyway (the
- * rest keeps loading); without scripting it is never shown (the pictures'
+ * rest keeps loading, and a retry still waiting is handed to the picture
+ * instead of holding the loader); without scripting it is never shown (the pictures'
  * `<noscript>` copies show), and if the script never runs the CSS fades it
  * at the cap.
  *
@@ -53,6 +60,7 @@ interface Props {
 }
 
 const { art } = Astro.props;
+const loaderScript = siteLoaderInlineScript(retryRuntime);
 
 // Petals: horizontal start (% of the width), delay and speed (fractions of
 // --site-loader-petal-fall), size (rem). Colours cycle in site.css.
@@ -113,134 +121,4 @@ const petals = [
   </div>
 </div>
 
-<script is:inline>
-  (() => {
-    const loader = document.getElementById("site-loader");
-    if (!loader) return;
-    const root = document.documentElement;
-
-    // Back / Forward or an anchor (the head's gate): no loader, the
-    // pictures load straight into their places. Module scripts (the scene's
-    // time-of-day swap of data-src) have run by DOMContentLoaded.
-    if (root.hasAttribute("data-site-loader-skip")) {
-      loader.remove();
-      const show = () => {
-        for (const image of document.querySelectorAll("img[data-first-screen][data-src]")) image.src = image.dataset.src;
-      };
-      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", show, { once: true });
-      else show();
-      return;
-    }
-
-    // The illustration fades in over the wash once decoded (site.css).
-    const art = loader.querySelector("[data-loader-art]");
-    art?.decode().then(
-      () => art.setAttribute("data-ready", ""),
-      () => undefined,
-    );
-    // Hides 吟风 and the dialogue box until the reveal (site.css).
-    root.dataset.siteLoader = "loading";
-
-    // Keep the narrative still while the loader shows: wheel, touch, scroll
-    // keys and clicks stop here (capture on window runs before its handlers).
-    const SCROLL_KEYS = new Set([" ", "PageDown", "PageUp", "ArrowDown", "ArrowUp", "Home", "End"]);
-    const block = (event) => {
-      if (event.type === "keydown" && !SCROLL_KEYS.has(event.key)) return;
-      if (event.cancelable && event.type !== "touchstart" && event.type !== "touchend") event.preventDefault();
-      event.stopImmediatePropagation();
-    };
-    const guarded = [
-      ["wheel", { capture: true, passive: false }],
-      ["touchmove", { capture: true, passive: false }],
-      ["touchstart", { capture: true, passive: true }],
-      ["touchend", { capture: true, passive: true }],
-      ["keydown", { capture: true }],
-      ["click", { capture: true }],
-    ];
-    for (const [type, options] of guarded) window.addEventListener(type, block, options);
-
-    // Both fades end in the loader's own animation: then it leaves for good.
-    loader.addEventListener("animationend", (event) => {
-      if (event.target !== loader) return;
-      loader.remove();
-      delete root.dataset.siteLoader;
-      for (const [type, options] of guarded) window.removeEventListener(type, block, options);
-    });
-
-    let revealed = false;
-    const reveal = () => {
-      if (revealed) return;
-      revealed = true;
-      root.dataset.siteLoader = "revealing";
-      loader.setAttribute("data-leaving", "");
-    };
-
-    // The cap, from navigation start: `--site-loader-cap` (also the CSS fallback's delay).
-    const cap = getComputedStyle(loader).getPropertyValue("--site-loader-cap").trim();
-    const capMs = cap.endsWith("ms") ? parseFloat(cap) : parseFloat(cap) * 1000;
-    setTimeout(reveal, Math.max(0, capMs - performance.now()));
-
-    const percent = loader.querySelector("[data-loader-percent]");
-    let loaded = 0;
-    let total = 0;
-    const showProgress = () => {
-      const share = total > 0 ? Math.min(1, loaded / total) : 0;
-      loader.style.setProperty("--site-loader-progress", String(share));
-      if (percent) percent.textContent = `${Math.floor(share * 100)}%`;
-    };
-
-    // Download one picture, counting its bytes as they arrive, then hand it
-    // to its <img> and decode it. The weight is the response's Content-Length,
-    // the optimized file. A failed download leaves the <img> to load the URL
-    // itself; its share is counted once it settles either way.
-    const load = async (image, priority) => {
-      const url = image.dataset.src;
-      let weight = 0;
-      let counted = 0;
-      const count = (bytes) => {
-        if (weight <= 0) return;
-        const add = Math.min(bytes, weight - counted);
-        if (add <= 0) return;
-        counted += add;
-        loaded += add;
-        showProgress();
-      };
-      const setWeight = (next) => {
-        if (!next || next === weight) return;
-        total += next - weight;
-        weight = next;
-        showProgress();
-      };
-      try {
-        const response = await fetch(url, { priority });
-        if (!response.ok || !response.body) throw new Error(`${url}: ${response.status}`);
-        const length = Number(response.headers.get("content-length"));
-        // No length: one even share, filled in when the body finishes.
-        setWeight(length > 0 ? length : 1);
-        const reader = response.body.getReader();
-        const chunks = [];
-        for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
-          chunks.push(chunk.value);
-          count(chunk.value.byteLength);
-        }
-        image.src = URL.createObjectURL(new Blob(chunks, { type: response.headers.get("content-type") || "" }));
-      } catch {
-        image.src = url;
-        if (weight === 0) setWeight(1);
-      }
-      await image.decode().catch(() => undefined);
-      count(weight);
-    };
-
-    // The backdrop and her current face, nothing else. Module scripts (the
-    // scene's time-of-day swap of data-src) have run by DOMContentLoaded, so
-    // the URLs read then are the ones that will show.
-    const track = async () => {
-      const images = [...document.querySelectorAll("img[data-first-screen][data-src]")];
-      await Promise.all(images.map((image) => load(image, "high")));
-      reveal();
-    };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => void track(), { once: true });
-    else void track();
-  })();
-</script>
+<script is:inline set:html={loaderScript}></script>
